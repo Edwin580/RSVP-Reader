@@ -97,6 +97,32 @@ describe('misspellings and no results', () => {
     expect(search(index, 'wite rabit ').matches.map(phrase)).toEqual(['White Rabbit'])
   })
 
+  it('prefers a well-attested spelling over a lookalike word form', () => {
+    // "manderly" looks like a form of "mander" (→ Manders), but Manderley is far more common.
+    const w = 'Manderley was grey. Manderley again, Manderley, Manderley and Manderley. Manders ran.'.split(' ')
+    const r = search(buildSearchIndex(w), 'manderly ')
+    expect(r.correctedQuery).toBe('manderley')
+    expect(r.totalMatches).toBe(5)
+  })
+
+  it('splits a compound the book hyphenates', () => {
+    const w = 'half cottage, half boat-house, built of stone.'.split(' ')
+    expect(search(buildSearchIndex(w), 'boathouse ').matches.map((h) => w[h.start])).toEqual(['boat-house,'])
+  })
+
+  it('never guesses a word with a different first letter, except a swap', () => {
+    // kernel ≠ herself (the old prefix comparison allowed two slips here)
+    expect(search(index, 'kernel').correctedQuery).toBeUndefined()
+    expect(search(index, 'hwite ').correctedQuery).toBe('white')
+  })
+
+  it('returns one hit per passage even when a word holds several matches', () => {
+    const w = 'a well-well here and well there'.split(' ')
+    const r = search(buildSearchIndex(w), 'well ')
+    expect(r.matches.map((h) => [h.start, h.end])).toEqual([[1, 1], [4, 4]])
+    expect(r.totalMatches).toBe(2)
+  })
+
   it('returns nothing, without a correction, for words nowhere near the book', () => {
     for (const q of ['xyzzy', 'quantum physics', '', '   ', '!!!']) {
       const r = search(index, q)

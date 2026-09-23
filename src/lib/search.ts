@@ -213,10 +213,16 @@ function closestTerm(index: SearchIndex, word: string, unfinished: boolean): num
   let bestDist = max + 1
   for (let id = 0; id < index.terms.length; id++) {
     const t = index.terms[id]
+    // People rarely get the first letter wrong; allow it only as a swap (hwite → white).
+    if (t[0] !== word[0] && !(t[0] === word[1] && t[1] === word[0])) continue
     const lengthOk = Math.abs(t.length - word.length) <= max
     if (!lengthOk && !(unfinished && t.length > word.length)) continue
     let d = lengthOk ? editDistance(word, t, max) : max + 1
-    if (unfinished && t.length > word.length) d = Math.min(d, editDistance(word, t.slice(0, word.length), max))
+    // An unfinished word may be the start of a longer one, but only allow one slip there.
+    if (unfinished && t.length > word.length) {
+      const partial = editDistance(word, t.slice(0, word.length), 1)
+      if (partial <= 1) d = Math.min(d, partial)
+    }
     if (d < bestDist || (d === bestDist && best !== undefined && index.postings[id].length > index.postings[best].length)) {
       best = id
       bestDist = d
@@ -236,29 +242,70 @@ interface QueryTerm {
  * Resolve each query word to the book terms it should match. Returns null
  * when some word matches nothing, even approximately.
  */
-function resolve(index: SearchIndex, words: string[], typing: boolean): { terms: QueryTerm[]; corrected: boolean } | null {
+function resolve(index: SearchIndex, input: string[], typing: boolean): { terms: QueryTerm[]; corrected: boolean } | null {
+  const lastIndex = input.length - 1
+  // A finished word the book doesn't have may be a compound it hyphenates
+  // or spaces: "boathouse" → "boat house" (the book says "boat-house").
+  const words = input.flatMap((w, k) => {
+    const unfinished = typing && k === lastIndex
+    if (unfinished || index.termId.has(w) || index.byStem.has(stem(w))) return [w]
+    return splitCompound(index, w) ?? [w]
+  })
+
   let corrected = false
   const terms: QueryTerm[] = []
   for (let k = 0; k < words.length; k++) {
     const word = words[k]
-    const ids = new Set<number>(index.byStem.get(stem(word)) ?? [])
+    const unfinished = typing && k === words.length - 1
     const exact = index.termId.get(word)
+    let ids = new Set<number>(index.byStem.get(stem(word)) ?? [])
     if (exact !== undefined) ids.add(exact)
     // While typing, the last word may be unfinished: also match words it starts,
     // unless it's a short word that already exists ("the" shouldn't pull in "there").
-    if (typing && k === words.length - 1 && word.length >= 2 && (ids.size === 0 || word.length >= 4)) {
+    if (unfinished && word.length >= 2 && (ids.size === 0 || word.length >= 4)) {
       for (const id of prefixTerms(index, word)) ids.add(id)
     }
-    if (ids.size === 0) {
-      const near = closestTerm(index, word, typing && k === words.length - 1)
-      if (near === undefined) return null
-      corrected = true
-      for (const id of index.byStem.get(stem(index.terms[near])) ?? [near]) ids.add(id)
-      words[k] = index.terms[near]
+    // A word the book doesn't contain is probably misspelled. Its "forms" may
+    // only be a lookalike (manderly → Manders), so switch to the closest
+    // spelling when that is far better supported (→ Manderley).
+    if (exact === undefined) {
+      const near = closestTerm(index, word, unfinished)
+      if (near !== undefined) {
+        const nearIds = index.byStem.get(stem(index.terms[near])) ?? [near]
+        if (ids.size === 0 || occurrences(index, nearIds) > 4 * occurrences(index, ids)) {
+          ids = new Set(nearIds)
+          words[k] = index.terms[near]
+          corrected = true
+        }
+      }
+      if (ids.size === 0) return null
     }
     terms.push({ word: words[k], ids, stop: STOP_WORDS.has(word) })
   }
   return { terms, corrected }
+}
+
+function occurrences(index: SearchIndex, ids: Iterable<number>): number {
+  let n = 0
+  for (const id of ids) n += index.postings[id].length
+  return n
+}
+
+/** Split `word` into two words the book uses, preferring the best-attested split. */
+function splitCompound(index: SearchIndex, word: string): [string, string] | null {
+  let best: [string, string] | null = null
+  let bestCount = 0
+  for (let i = 2; i <= word.length - 2; i++) {
+    const a = index.termId.get(word.slice(0, i))
+    const b = index.termId.get(word.slice(i))
+    if (a === undefined || b === undefined) continue
+    const count = Math.min(index.postings[a].length, index.postings[b].length)
+    if (count > bestCount) {
+      best = [word.slice(0, i), word.slice(i)]
+      bestCount = count
+    }
+  }
+  return best
 }
 
 /** Ascending token positions where any of `ids` occurs. */
@@ -309,10 +356,16 @@ export function search(index: SearchIndex, query: string, limit = 50): SearchRes
     const wordsHit = [...new Set(tokens.map((t) => index.tokenWord[t]))].sort((a, b) => a - b)
     return { start: wordsHit[0], end: wordsHit[wordsHit.length - 1], highlights: wordsHit }
   }
+  // One hit per passage: a word can hold several matches ("well-well" for "well").
   const matches: SearchHit[] = []
+  let totalMatches = 0
+  let lastWords = ''
   for (const s of phraseStarts) {
-    if (matches.length >= limit) break
-    matches.push(toHit(Array.from({ length: terms.length }, (_, k) => s + k)))
+    const key = `${index.tokenWord[s]}-${index.tokenWord[s + terms.length - 1]}`
+    if (key === lastWords) continue
+    lastWords = key
+    totalMatches++
+    if (matches.length < limit) matches.push(toHit(Array.from({ length: terms.length }, (_, k) => s + k)))
   }
 
   // Related passages: the important words (not stop words) all within a short window.
@@ -354,7 +407,7 @@ export function search(index: SearchIndex, query: string, limit = 50): SearchRes
   return {
     matches,
     related,
-    totalMatches: phraseStarts.length,
+    totalMatches,
     totalRelated,
     correctedQuery: corrected ? terms.map((t) => t.word).join(' ') : undefined,
   }

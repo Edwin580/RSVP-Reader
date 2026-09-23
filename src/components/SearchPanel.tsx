@@ -51,13 +51,13 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
     return chapters.length > 1 ? title : ''
   }
 
-  const renderHit = (hit: SearchHit) => {
+  const renderHit = (group: string) => (hit: SearchHit, k: number) => {
     const from = Math.max(0, hit.start - CONTEXT_WORDS)
     const to = Math.min(words.length - 1, hit.end + CONTEXT_WORDS)
     const marked = new Set(hit.highlights)
     const where = chapterTitle(hit.start)
     return (
-      <li key={`${hit.start}-${hit.end}`}>
+      <li key={`${group}-${k}-${hit.start}-${hit.end}`}>
         <button type="button" onClick={() => onSelect(hit.start)}>
           <span className="search-snippet">
             {from > 0 && '… '}
@@ -145,7 +145,9 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
             </p>
           )}
 
-          {nothing && (
+          {nothing && asked.length < 2 && <p className="search-status">Keep typing to search…</p>}
+
+          {nothing && asked.length >= 2 && (
             <div className="search-empty">
               <p className="search-empty-title">No matches for “{shownQuery}”</p>
               <p className="muted">
@@ -162,7 +164,7 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
                 {result.totalMatches.toLocaleString()} {result.totalMatches === 1 ? 'match' : 'matches'}
               </h3>
               <ol className="search-results">
-                {result.matches.map(renderHit)}
+                {result.matches.map(renderHit('match'))}
                 {more(result.matches.length, result.totalMatches)}
               </ol>
             </section>
@@ -176,7 +178,7 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
                 <span className="muted"> — all your words, close together</span>
               </h3>
               <ol className="search-results">
-                {result.related.map(renderHit)}
+                {result.related.map(renderHit('related'))}
                 {more(result.related.length, result.totalRelated)}
               </ol>
             </section>
