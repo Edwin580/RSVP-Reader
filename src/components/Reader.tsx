@@ -25,8 +25,8 @@ const MAX_WPM = 1200
 const CONTEXT_WORDS = 40
 /** Controls fade out after this long without pointer or key activity while playing. */
 const IDLE_MS = 2000
-/** Pause before turning the page in page mode. */
-const PAGE_TURN_MS = 400
+/** Extra time on the first word of a new page in page mode, covering the turn animation. */
+const PAGE_TURN_MS = 450
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
@@ -35,9 +35,14 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
     () => buildTimeline(words, book.paragraphEnds, wordTiming),
     [words, book.paragraphEnds, wordTiming],
   )
-  // In page mode, hold the last word of a page a moment so the eye can move to the next page.
+  // In page mode, hold the first word of each new page a moment so the eye can
+  // move to the top of the page. The word after the visible page's end is the
+  // one that triggers the turn.
   const pageEnd = useRef(-1)
-  const pageTurnDelay = useCallback((i: number) => (mode === 'page' && i === pageEnd.current ? PAGE_TURN_MS : 0), [mode])
+  const pageTurnDelay = useCallback(
+    (i: number) => (mode === 'page' && i === pageEnd.current + 1 ? PAGE_TURN_MS : 0),
+    [mode],
+  )
   const onPage = useCallback((_start: number, end: number) => {
     pageEnd.current = end
   }, [])

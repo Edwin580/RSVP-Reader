@@ -22,6 +22,8 @@ export function splitAtOrp(word: string): [string, string, string] {
 }
 
 const SENTENCE_END = /[.!?…]["'”’)\]]*$/
+/** Words ending in a full stop that usually don't end a sentence: titles, initials, "e.g.", "U.S.". */
+const ABBREVIATION = /^["'“‘(]*(?:mr|mrs|ms|mx|dr|st|jr|sr|prof|rev|hon|capt|col|gen|lt|sgt|mt|vs|e\.g|i\.e|cf|[a-hj-z]|(?:[a-z]\.){1,}[a-z])\.$/i
 const CLAUSE_END = /[,;:—–]["'”’)\]]*$/
 
 export type WordTiming = 'natural' | 'even'
@@ -38,7 +40,7 @@ export function lengthFactor(letters: number): number {
 /** Extra time after punctuation, so sentence boundaries have room to land. */
 export function pauseFactor(word: string, paragraphEnd: boolean): number {
   if (paragraphEnd) return 1.5
-  if (SENTENCE_END.test(word)) return 1.2
+  if (isSentenceEnd(word)) return 1.2
   if (CLAUSE_END.test(word)) return 0.5
   return 0
 }
@@ -93,7 +95,7 @@ export function formatMinutes(minutes: number): string {
 }
 
 export function isSentenceEnd(word: string): boolean {
-  return SENTENCE_END.test(word)
+  return SENTENCE_END.test(word) && !ABBREVIATION.test(word)
 }
 
 /** Index of the first word of the sentence containing `index`. */

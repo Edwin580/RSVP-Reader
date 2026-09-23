@@ -313,8 +313,21 @@ h1, h2, p { margin: 0; }
   -webkit-tap-highlight-color: transparent;
 }
 .page-text p { margin: 0 0 0.9em; }
-.page-text { position: relative; animation: fade-in 0.25s ease; } /* positioned so text paints above the marker */
-.page.is-measuring .page-text { visibility: hidden; animation: none; }
+.page-text { position: relative; } /* positioned so text paints above the marker */
+.page.is-measuring .page-text { visibility: hidden; }
+
+/* Page turns: the old page (a copy in .page-ghost) slides out while the new
+   one slides in, so there's never a blank page. Reversed when going back. */
+.page-ghost { position: absolute; inset: 0; pointer-events: none; }
+.page-ghost:empty { display: none; }
+.page-text.entering-forward { animation: page-in-forward 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.page-text.entering-back { animation: page-in-back 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.page-ghost.leaving-forward { animation: page-out-forward 240ms cubic-bezier(0.4, 0, 0.6, 1) both; }
+.page-ghost.leaving-back { animation: page-out-back 240ms cubic-bezier(0.4, 0, 0.6, 1) both; }
+@keyframes page-in-forward { from { opacity: 0; transform: translateX(28px); } }
+@keyframes page-in-back { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes page-out-forward { to { opacity: 0; transform: translateX(-28px); } }
+@keyframes page-out-back { to { opacity: 0; transform: translateX(28px); } }
 .page-marker {
   position: absolute;
   top: 0;

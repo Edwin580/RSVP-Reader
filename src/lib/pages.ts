@@ -44,3 +44,31 @@ export function paragraphsBetween(paragraphEnds: Set<number>, from: number, to: 
   if (current.length) paragraphs.push(current)
   return paragraphs
 }
+
+/**
+ * Pick where a page ends. `fits` are the words that fully fit on the page,
+ * in order, with the y position of the line each sits on. Rather than
+ * cutting mid-sentence, end at the last sentence or paragraph boundary on
+ * the final `maxLines` lines, if there is one; otherwise use every word that
+ * fits.
+ */
+export function pageBreak(
+  fits: { index: number; top: number }[],
+  isBoundary: (index: number) => boolean,
+  maxLines = 2,
+): number {
+  if (fits.length === 0) return -1
+  const last = fits[fits.length - 1]
+  if (isBoundary(last.index)) return last.index
+  let lines = 1
+  let lineTop = last.top
+  for (let k = fits.length - 2; k >= 0; k--) {
+    if (fits[k].top < lineTop) {
+      if (++lines > maxLines) break
+      lineTop = fits[k].top
+    }
+    // Keep at least a word on the page.
+    if (k > 0 && isBoundary(fits[k].index)) return fits[k].index
+  }
+  return last.index
+}

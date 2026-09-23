@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTimeline,
   formatMinutes,
+  isSentenceEnd,
   lengthFactor,
   minutesBetween,
   nextSentence,
@@ -97,5 +98,15 @@ describe('sentence navigation', () => {
     expect(nextSentence(words, 0)).toBe(2)
     expect(nextSentence(words, 3)).toBe(5)
     expect(nextSentence(words, 6)).toBe(6)
+  })
+})
+
+describe('isSentenceEnd', () => {
+  it('recognises sentence endings, including inside quotes', () => {
+    for (const w of ['end.', 'what?', 'no!', 'said.”', 'wait…', 'No.', 'etc.', 'I.']) expect(isSentenceEnd(w)).toBe(true)
+  })
+
+  it('does not treat titles, initials or abbreviations as endings', () => {
+    for (const w of ['Mr.', 'Mrs.', '“Dr.', 'St.', 'e.g.', 'i.e.', 'U.S.', 'J.', 'vs.']) expect(isSentenceEnd(w)).toBe(false)
   })
 })
