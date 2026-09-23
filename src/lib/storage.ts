@@ -57,9 +57,13 @@ export interface Settings {
   textScale: number
   /** 'natural' gives longer words slightly more time; 'even' shows every word equally long. */
   wordTiming: WordTiming
+  /** 'word' flashes one word at a time; 'page' shows pages with a marker that follows along. */
+  mode: ReadingMode
 }
 
-export const DEFAULT_SETTINGS: Settings = { wpm: 300, textScale: 1, wordTiming: 'natural' }
+export type ReadingMode = 'word' | 'page'
+
+export const DEFAULT_SETTINGS: Settings = { wpm: 300, textScale: 1, wordTiming: 'natural', mode: 'word' }
 
 export function loadSettings(): Settings {
   try {
@@ -68,6 +72,7 @@ export function loadSettings(): Settings {
       wpm: typeof saved.wpm === 'number' ? saved.wpm : DEFAULT_SETTINGS.wpm,
       textScale: typeof saved.textScale === 'number' ? saved.textScale : DEFAULT_SETTINGS.textScale,
       wordTiming: saved.wordTiming === 'even' ? 'even' : DEFAULT_SETTINGS.wordTiming,
+      mode: saved.mode === 'page' ? 'page' : DEFAULT_SETTINGS.mode,
     }
   } catch {
     return DEFAULT_SETTINGS

@@ -7,6 +7,9 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser.
+- **Two reading modes**, switched in the Aa menu or with `M`:
+  - **Word**: RSVP, one word at a time in a fixed spot.
+  - **Page**: guided reading. The book is laid out as pages that fit your screen, a marker glides under each word at your chosen speed, and the page turns itself when you reach the end (with a short pause so your eyes can move to the top). Tap any word to jump there. Pages are measured to fit exactly and re-flow when you rotate or resize.
 - **Fixed focus point**: each word's *Optimal Recognition Point*, a letter a little left of centre, is highlighted and pinned to the centre, so your eyes never move.
 - **Natural word timing**: longer words stay on screen slightly longer, following a smooth curve (1 letter ≈ 0.75×, 5 letters = 1×, 12 letters ≈ 1.25×). Commas, sentence endings and paragraph breaks get pauses. All of this is balanced across the book, so the speed you choose is your real average speed and time-left estimates are accurate. Choose *Even* in the Aa menu to give every word the same time. The first few words after you press play are shown a bit slower.
 - **Steady rhythm**: words are scheduled against a clock rather than chained timers, so small delays don't add up into drift or stutter.
@@ -26,6 +29,8 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 | Shift + ← / → | Previous / next sentence |
 | ↑ / ↓ | Speed ±25 wpm |
 | / or Ctrl/⌘ + F | Search in book |
+| M | Switch word / page mode |
+| Page Up / Page Down | Previous / next page (page mode) |
 | Esc | Back to library |
 
 ## Stack
@@ -53,6 +58,7 @@ npm run build    # type-check and build for production
 src/
   lib/
     rsvp.ts            ORP, word timing and timeline, sentence navigation
+    pages.ts           page anchoring and paragraph grouping for page mode
     search.ts          phrase search over the book's words
     searchClient.ts    runs indexing and search in a Web Worker (main-thread fallback)
     text.ts            paragraph/word splitting, Markdown stripping, book assembly
@@ -60,7 +66,7 @@ src/
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts
-  components/          Library, Reader, SearchPanel, SettingsMenu, WordDisplay, Icon
+  components/          Library, Reader, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon
 ```
 
 ## Roadmap

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
 import { Icon } from './Icon'
+import { PageView, type PageNav } from './PageView'
 import { SearchPanel } from './SearchPanel'
 import { SettingsMenu } from './SettingsMenu'
 import { WordDisplay } from './WordDisplay'
@@ -24,15 +25,25 @@ const MAX_WPM = 1200
 const CONTEXT_WORDS = 40
 /** Controls fade out after this long without pointer or key activity while playing. */
 const IDLE_MS = 2000
+/** Pause before turning the page in page mode. */
+const PAGE_TURN_MS = 400
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
-  const { wpm, textScale, wordTiming } = settings
+  const { wpm, textScale, wordTiming, mode } = settings
   const timeline = useMemo(
     () => buildTimeline(words, book.paragraphEnds, wordTiming),
     [words, book.paragraphEnds, wordTiming],
   )
-  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex)
+  // In page mode, hold the last word of a page a moment so the eye can move to the next page.
+  const pageEnd = useRef(-1)
+  const pageTurnDelay = useCallback((i: number) => (mode === 'page' && i === pageEnd.current ? PAGE_TURN_MS : 0), [mode])
+  const onPage = useCallback((_start: number, end: number) => {
+    pageEnd.current = end
+  }, [])
+  const pageNav = useRef<PageNav | null>(null)
+
+  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageTurnDelay)
   const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
   const idle = useIdle(playing && !panel, IDLE_MS)
 
@@ -97,6 +108,16 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         pause()
         onClose()
         break
+      case 'm':
+      case 'M':
+        onSettings({ ...settings, mode: mode === 'page' ? 'word' : 'page' })
+        break
+      case 'PageDown':
+        pageNav.current?.next()
+        break
+      case 'PageUp':
+        pageNav.current?.previous()
+        break
       default:
         return
     }
@@ -124,10 +145,10 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const hasChapters = chapters.length > 1
 
   const context = useMemo(() => {
-    if (playing) return null
+    if (playing || mode === 'page') return null
     const start = Math.max(0, index - CONTEXT_WORDS)
     return words.slice(start, index + CONTEXT_WORDS).map((w, i) => ({ w, i: start + i }))
-  }, [playing, index, words])
+  }, [playing, index, words, mode])
 
   return (
     <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}`}>
@@ -176,20 +197,36 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         </div>
       </header>
 
-      <section className="stage">
-        <WordDisplay word={words[index] ?? ''} scale={textScale} onClick={toggle} />
-        <div className="context" aria-hidden={playing}>
-          {context && (
-            <p>
-              {context.map(({ w, i }) => (
-                <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
-                  {w}{' '}
-                </span>
-              ))}
-            </p>
-          )}
-        </div>
-      </section>
+      {mode === 'page' ? (
+        <section className="stage stage-page">
+          <PageView
+            words={words}
+            paragraphEnds={book.paragraphEnds}
+            index={index}
+            scale={textScale}
+            wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
+            onSeek={seek}
+            onToggle={toggle}
+            onPage={onPage}
+            navRef={pageNav}
+          />
+        </section>
+      ) : (
+        <section className="stage">
+          <WordDisplay word={words[index] ?? ''} scale={textScale} onClick={toggle} />
+          <div className="context" aria-hidden={playing}>
+            {context && (
+              <p>
+                {context.map(({ w, i }) => (
+                  <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
+                    {w}{' '}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <footer className="reader-bottom chrome">
         <input

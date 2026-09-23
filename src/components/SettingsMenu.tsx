@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { WordTiming } from '../lib/rsvp'
-import type { Settings } from '../lib/storage'
+import type { ReadingMode, Settings } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -17,12 +17,19 @@ const TIMINGS: { value: WordTiming; label: string; hint: string }[] = [
   { value: 'even', label: 'Even', hint: 'Every word gets the same time' },
 ]
 
+const MODES: { value: ReadingMode; label: string; hint: string }[] = [
+  { value: 'word', label: 'Word', hint: 'One word at a time in a fixed spot' },
+  { value: 'page', label: 'Page', hint: 'Full pages with a marker that follows along' },
+]
+
 const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'],
   ['← →', 'Word'],
   ['⇧ ← →', 'Sentence'],
   ['↑ ↓', 'Speed'],
   ['/', 'Search'],
+  ['M', 'Word / page mode'],
+  ['PgUp PgDn', 'Page (page mode)'],
   ['Esc', 'Library'],
 ]
 
@@ -49,6 +56,24 @@ export function SettingsMenu({ settings, onSettings, onClose }: Props) {
 
   return (
     <div className="popover" ref={ref} role="dialog" aria-label="Reading settings">
+      <div className="setting setting-stack">
+        <span className="setting-name">Reading mode</span>
+        <div className="segmented" role="radiogroup" aria-label="Reading mode">
+          {MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              role="radio"
+              aria-checked={settings.mode === m.value}
+              onClick={() => onSettings({ ...settings, mode: m.value })}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <span className="hint">{MODES.find((m) => m.value === settings.mode)?.hint}</span>
+      </div>
+
       <div className="setting">
         <span className="setting-name">Text size</span>
         <div className="stepper">

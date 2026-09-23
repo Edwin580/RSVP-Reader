@@ -296,6 +296,37 @@ h1, h2, p { margin: 0; }
 .speed-value { min-width: 5.5rem; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 .speed-value .muted { font-weight: 400; font-size: 0.85rem; }
 
+/* ——— Page mode ——— */
+.stage-page { display: block; padding: 1.25rem 1.25rem 0.5rem; }
+.page {
+  position: relative;
+  height: 100%;
+  max-width: 38rem;
+  margin: 0 auto;
+  overflow: hidden;
+  font-size: calc(var(--page-scale, 1) * clamp(1.0625rem, 0.95rem + 0.5vw, 1.3rem));
+  line-height: 1.75;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.page-text p { margin: 0 0 0.9em; }
+.page-text { position: relative; animation: fade-in 0.25s ease; } /* positioned so text paints above the marker */
+.page.is-measuring .page-text { visibility: hidden; animation: none; }
+.page-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  box-shadow: inset 0 -2.5px 0 var(--red);
+  margin: 0 -3px;
+  padding: 0 3px;
+  box-sizing: content-box;
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, width;
+}
+
 /* ——— Settings ——— */
 .popover {
   position: absolute;
