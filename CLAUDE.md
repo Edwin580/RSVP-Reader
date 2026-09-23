@@ -39,3 +39,8 @@ What was run and what it showed: unit tests added or changed, manual or browser 
 - Screenshots or short tables are welcome inside these sections when they help, especially for UI changes.
 - Do not include a Claude session link (`claude.ai/code/session_…`) in PR titles or descriptions.
 - Keep titles short and descriptive.
+
+## Commits
+
+- Do not add a `Claude-Session:` trailer or any session link to commit messages. A `Co-Authored-By` line is fine.
+- When squash-merging, write the final commit message explicitly so no session links come along from the individual commits.

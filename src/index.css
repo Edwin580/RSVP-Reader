@@ -140,6 +140,7 @@ h1, h2, p { margin: 0; }
   height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr); /* never wider than the screen, whatever the content */
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
   overflow: hidden;
 }
@@ -244,35 +245,72 @@ h1, h2, p { margin: 0; }
 .reader-bottom { width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
 
 .scrubber {
-  --progress: 0%;
-  appearance: none;
-  -webkit-appearance: none;
-  display: block;
-  width: 100%;
-  height: 28px;
-  margin: 0;
-  background: none;
+  position: relative;
+  height: 32px;
   cursor: pointer;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.scrubber::-webkit-slider-runnable-track {
+.scrubber-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
   height: 4px;
+  margin-top: -2px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--text) var(--progress), var(--separator) var(--progress));
+  background: var(--separator);
+  overflow: hidden;
 }
-.scrubber::-webkit-slider-thumb {
-  -webkit-appearance: none;
+.scrubber-fill { height: 100%; background: var(--text); }
+.scrubber-thumb {
+  position: absolute;
+  top: 50%;
   width: 18px;
   height: 18px;
-  margin-top: -7px;
+  margin: -9px 0 0 -9px;
   border-radius: 50%;
   background: var(--raised);
   border: 1px solid var(--separator);
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+  transition: transform 0.12s;
 }
-.scrubber::-moz-range-track { height: 4px; border-radius: 2px; background: var(--separator); }
-.scrubber::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--text); }
-.scrubber::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--raised); border: 1px solid var(--separator); box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); }
+/* A bigger handle on touch screens, since it's the only way to scrub there. */
+@media (pointer: coarse) {
+  .scrubber { cursor: default; }
+  .scrubber-thumb { width: 24px; height: 24px; margin: -12px 0 0 -12px; }
+}
+.scrubber.is-dragging .scrubber-thumb { transform: scale(1.15); }
+.scrubber-bubble {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.jump-back {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 auto 0.4rem;
+  padding: 0.4rem 0.85rem 0.4rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.85rem;
+  font-weight: 600;
+  animation: fade-in 0.2s ease;
+}
+.jump-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .deck {
   display: grid;
