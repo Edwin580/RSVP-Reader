@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
 import { nextSentence, previousSentence } from '../lib/rsvp'
 import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
+import { SearchPanel } from './SearchPanel'
 import { WordDisplay } from './WordDisplay'
 
 interface Props {
@@ -23,6 +24,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const { words, chapters } = book
   const { wpm, fontSize } = settings
   const { index, playing, toggle, pause, seek } = useRsvp(words, book.paragraphEnds, wpm, initialIndex)
+  const [searchOpen, setSearchOpen] = useState(false)
+
+  const openSearch = () => {
+    pause()
+    setSearchOpen(true)
+  }
 
   // Persist progress: whenever paused, and periodically while playing.
   const lastSaved = useRef(index)
@@ -44,6 +51,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   // Keep the key handler reading the latest state without re-binding every word.
   const keys = useRef<(e: KeyboardEvent) => void>(() => {})
   const onKey = (e: KeyboardEvent) => {
+    if (searchOpen) return
+    if ((e.key === 'f' && (e.ctrlKey || e.metaKey)) || e.key === '/') {
+      e.preventDefault()
+      openSearch()
+      return
+    }
     const t = e.target
     if (t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && e.key.startsWith('Arrow'))) return
     switch (e.key) {
@@ -119,6 +132,9 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           )}
         </div>
         <div className="font-controls">
+          <button type="button" className="icon-button" onClick={openSearch} title="Search (/ or Ctrl+F)">
+            Search
+          </button>
           <button type="button" className="icon-button" aria-label="Smaller text" onClick={() => setFontSize(fontSize - 4)}>
             A−
           </button>
@@ -199,8 +215,20 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             +
           </button>
         </div>
-        <p className="hint muted small">Space play/pause · ←/→ word · Shift+←/→ sentence · ↑/↓ speed · Esc library</p>
+        <p className="hint muted small">Space play/pause · ←/→ word · Shift+←/→ sentence · ↑/↓ speed · / search · Esc library</p>
       </footer>
+
+      {searchOpen && (
+        <SearchPanel
+          words={words}
+          chapters={chapters}
+          onSelect={(i) => {
+            seek(i)
+            setSearchOpen(false)
+          }}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
     </main>
   )
 }
