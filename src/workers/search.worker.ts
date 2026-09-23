@@ -15,6 +15,8 @@ self.onmessage = (e: MessageEvent<SearchRequest>) => {
     return
   }
   const result =
-    current?.id === msg.id ? search(current.index, msg.query, msg.limit) : { matches: [], total: 0 }
+    current?.id === msg.id
+      ? search(current.index, msg.query, msg.limit)
+      : { matches: [], related: [], totalMatches: 0, totalRelated: 0 }
   self.postMessage({ reqId: msg.reqId, result } satisfies SearchResponse)
 }
