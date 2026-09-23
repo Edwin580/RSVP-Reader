@@ -1,15 +1,21 @@
 /**
  * Phrase search over a book's words, ignoring case, punctuation and accents,
  * so "cold day in april" finds "cold day in April,".
+ *
+ * The index is one normalised string plus typed arrays mapping character
+ * offsets back to word indices. It is cheap to build (normalisation is
+ * memoised per distinct word, and books reuse a small vocabulary) and
+ * queries are a native substring scan, which also gives partial-word
+ * matching for free.
  */
 
 export interface SearchIndex {
   /** Normalised words joined by single spaces. */
   text: string
-  /** Character offset in `text` where each indexed word starts. */
-  offsets: number[]
+  /** Character offset in `text` where each indexed word starts (ascending). */
+  offsets: Int32Array
   /** Book word index for each entry in `offsets`. */
-  wordIndices: number[]
+  wordIndices: Int32Array
 }
 
 export interface SearchMatch {
@@ -17,6 +23,12 @@ export interface SearchMatch {
   start: number
   /** Index of the last matched word. */
   end: number
+}
+
+export interface SearchResult {
+  matches: SearchMatch[]
+  /** Total number of matches in the book (may exceed `matches.length`). */
+  total: number
 }
 
 export function normalize(s: string): string {
@@ -28,23 +40,35 @@ export function normalize(s: string): string {
 }
 
 export function buildSearchIndex(words: string[]): SearchIndex {
+  const cache = new Map<string, string>()
   const parts: string[] = []
-  const offsets: number[] = []
-  const wordIndices: number[] = []
+  const offsets = new Int32Array(words.length)
+  const wordIndices = new Int32Array(words.length)
+  let count = 0
   let pos = 0
-  words.forEach((word, i) => {
-    const norm = normalize(word)
-    if (!norm) return // punctuation-only tokens like "—"
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]
+    let norm = cache.get(word)
+    if (norm === undefined) {
+      norm = normalize(word)
+      cache.set(word, norm)
+    }
+    if (!norm) continue // punctuation-only tokens like "—"
     parts.push(norm)
-    offsets.push(pos)
-    wordIndices.push(i)
+    offsets[count] = pos
+    wordIndices[count] = i
+    count++
     pos += norm.length + 1
-  })
-  return { text: parts.join(' '), offsets, wordIndices }
+  }
+  return {
+    text: parts.join(' '),
+    offsets: offsets.slice(0, count),
+    wordIndices: wordIndices.slice(0, count),
+  }
 }
 
 /** Index into `offsets` of the word containing character `pos`. */
-function entryAt(offsets: number[], pos: number): number {
+function entryAt(offsets: Int32Array, pos: number): number {
   let lo = 0
   let hi = offsets.length - 1
   while (lo < hi) {
@@ -55,19 +79,18 @@ function entryAt(offsets: number[], pos: number): number {
   return lo
 }
 
-export function search(index: SearchIndex, query: string, limit = 200): SearchMatch[] {
+export function search(index: SearchIndex, query: string, limit = 200): SearchResult {
   const q = normalize(query).trim().replace(/\s+/g, ' ')
-  if (!q) return []
   const matches: SearchMatch[] = []
-  let from = 0
-  while (matches.length < limit) {
-    const pos = index.text.indexOf(q, from)
-    if (pos === -1) break
-    matches.push({
-      start: index.wordIndices[entryAt(index.offsets, pos)],
-      end: index.wordIndices[entryAt(index.offsets, pos + q.length - 1)],
-    })
-    from = pos + q.length
+  if (!q) return { matches, total: 0 }
+  let total = 0
+  for (let pos = index.text.indexOf(q); pos !== -1; pos = index.text.indexOf(q, pos + q.length)) {
+    if (total++ < limit) {
+      matches.push({
+        start: index.wordIndices[entryAt(index.offsets, pos)],
+        end: index.wordIndices[entryAt(index.offsets, pos + q.length - 1)],
+      })
+    }
   }
-  return matches
+  return { matches, total }
 }

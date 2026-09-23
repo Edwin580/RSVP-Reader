@@ -197,6 +197,7 @@ button:disabled { cursor: progress; }
 }
 .search-count { margin: 0; padding: 0.5rem 1rem 0; }
 .search-results { list-style: none; margin: 0; padding: 0.5rem; overflow-y: auto; flex: 1; }
+.search-results.stale { opacity: 0.6; }
 .search-results button {
   width: 100%;
   display: grid;
@@ -208,6 +209,7 @@ button:disabled { cursor: progress; }
   background: none;
 }
 .search-results button:hover { background: var(--surface); }
+.search-results .search-more { text-align: center; color: var(--accent); font-weight: 600; }
 .search-snippet { font-family: var(--reading); line-height: 1.5; }
 .search-results mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; border-radius: 3px; }
 

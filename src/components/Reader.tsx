@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
 import { nextSentence, previousSentence } from '../lib/rsvp'
+import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
 import { SearchPanel } from './SearchPanel'
@@ -25,6 +26,14 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const { wpm, fontSize } = settings
   const { index, playing, toggle, pause, seek } = useRsvp(words, book.paragraphEnds, wpm, initialIndex)
   const [searchOpen, setSearchOpen] = useState(false)
+
+  // Start indexing in the background as soon as the book opens.
+  const [bookSearch, setBookSearch] = useState<BookSearch | null>(null)
+  useEffect(() => {
+    const s = new BookSearch(book.id, words)
+    setBookSearch(s)
+    return () => s.dispose()
+  }, [book.id, words])
 
   const openSearch = () => {
     pause()
@@ -218,8 +227,9 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         <p className="hint muted small">Space play/pause · ←/→ word · Shift+←/→ sentence · ↑/↓ speed · / search · Esc library</p>
       </footer>
 
-      {searchOpen && (
+      {searchOpen && bookSearch && (
         <SearchPanel
+          bookSearch={bookSearch}
           words={words}
           chapters={chapters}
           onSelect={(i) => {

@@ -11,7 +11,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Natural pacing**: commas, sentence endings, paragraph breaks and long words get extra time. The first few words after you press play are also shown a bit slower.
 - **Navigation**: chapter picker (EPUB chapters and PDF pages), a position slider, and word- and sentence-level skipping.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
-- **Search**: find any word or phrase in the book. Case, punctuation and accents are ignored. Each result shows the surrounding text and which chapter it's in, and clicking one jumps there.
+- **Search**: find any word or phrase in the book. Case, punctuation and accents are ignored. Each result shows the surrounding text and which chapter it's in, and clicking one jumps there. The index is built in a background Web Worker when a book opens, so searching never freezes the UI, even for long books.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on.
 
 ### Keyboard shortcuts
@@ -50,10 +50,12 @@ src/
   lib/
     rsvp.ts            ORP, timing, sentence navigation
     search.ts          phrase search over the book's words
+    searchClient.ts    runs indexing and search in a Web Worker (main-thread fallback)
     text.ts            paragraph/word splitting, Markdown stripping, book assembly
     parsers/           epub.ts, pdf.ts, index.ts (dispatches by file extension)
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
+  workers/             search.worker.ts
   components/          Library, Reader, SearchPanel, WordDisplay
 ```
 
