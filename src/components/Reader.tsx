@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
-import { nextSentence, previousSentence } from '../lib/rsvp'
+import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
+import { Icon } from './Icon'
 import { SearchPanel } from './SearchPanel'
+import { SettingsMenu } from './SettingsMenu'
 import { WordDisplay } from './WordDisplay'
 
 interface Props {
@@ -20,12 +22,24 @@ const WPM_STEP = 25
 const MIN_WPM = 100
 const MAX_WPM = 1200
 const CONTEXT_WORDS = 40
+/** Controls fade out after this long without pointer or key activity while playing. */
+const IDLE_MS = 2000
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
-  const { wpm, fontSize } = settings
-  const { index, playing, toggle, pause, seek } = useRsvp(words, book.paragraphEnds, wpm, initialIndex)
-  const [searchOpen, setSearchOpen] = useState(false)
+  const { wpm, fontSize, wordTiming } = settings
+  const timeline = useMemo(
+    () => buildTimeline(words, book.paragraphEnds, wordTiming),
+    [words, book.paragraphEnds, wordTiming],
+  )
+  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex)
+  const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
+  const idle = useIdle(playing && !panel, IDLE_MS)
+
+  const openPanel = (which: 'search' | 'settings') => {
+    pause()
+    setPanel((p) => (p === which ? null : which))
+  }
 
   // Start indexing in the background as soon as the book opens.
   const [bookSearch, setBookSearch] = useState<BookSearch | null>(null)
@@ -34,11 +48,6 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
     setBookSearch(s)
     return () => s.dispose()
   }, [book.id, words])
-
-  const openSearch = () => {
-    pause()
-    setSearchOpen(true)
-  }
 
   // Persist progress: whenever paused, and periodically while playing.
   const lastSaved = useRef(index)
@@ -55,15 +64,14 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   useEffect(() => () => onProgress(current.current), [onProgress])
 
   const setWpm = (next: number) => onSettings({ ...settings, wpm: Math.max(MIN_WPM, Math.min(MAX_WPM, next)) })
-  const setFontSize = (next: number) => onSettings({ ...settings, fontSize: Math.max(24, Math.min(120, next)) })
 
   // Keep the key handler reading the latest state without re-binding every word.
   const keys = useRef<(e: KeyboardEvent) => void>(() => {})
   const onKey = (e: KeyboardEvent) => {
-    if (searchOpen) return
+    if (panel) return
     if ((e.key === 'f' && (e.ctrlKey || e.metaKey)) || e.key === '/') {
       e.preventDefault()
-      openSearch()
+      openPanel('search')
       return
     }
     const t = e.target
@@ -108,9 +116,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
     for (let i = 0; i < chapters.length; i++) if (chapters[i].start <= index) c = i
     return c
   }, [chapters, index])
+  const chapterEnd = chapters[chapterIndex + 1]?.start ?? words.length
 
-  const percent = words.length > 1 ? (index / (words.length - 1)) * 100 : 100
-  const minutesLeft = Math.ceil((words.length - index) / wpm)
+  const percent = words.length > 1 ? Math.round((index / (words.length - 1)) * 100) : 100
+  const bookLeft = formatMinutes(minutesBetween(timeline, index, words.length, wpm))
+  const chapterLeft = formatMinutes(minutesBetween(timeline, index, chapterEnd, wpm))
+  const hasChapters = chapters.length > 1
 
   const context = useMemo(() => {
     if (playing) return null
@@ -119,15 +130,20 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   }, [playing, index, words])
 
   return (
-    <main className="reader">
-      <header className="reader-header">
+    <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}`}>
+      <header className="reader-top chrome">
         <button type="button" className="text-button" onClick={onClose}>
-          ← Library
+          <Icon name="arrowLeft" size={18} />
+          <span className="label">Library</span>
         </button>
-        <div className="reader-title">
-          <strong title={book.title}>{book.title}</strong>
-          {chapters.length > 1 && (
+
+        <div className="running-head">
+          <span className="running-title" title={book.title}>
+            {book.title}
+          </span>
+          {hasChapters && (
             <select
+              className="chapter-select label"
               value={chapterIndex}
               onChange={(e) => seek(chapters[Number(e.target.value)].start)}
               aria-label="Jump to chapter"
@@ -140,23 +156,30 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             </select>
           )}
         </div>
-        <div className="font-controls">
-          <button type="button" className="icon-button" onClick={openSearch} title="Search (/ or Ctrl+F)">
+
+        <div className="top-actions">
+          <button type="button" className="text-button label" onClick={() => openPanel('search')} title="Search (/)">
             Search
           </button>
-          <button type="button" className="icon-button" aria-label="Smaller text" onClick={() => setFontSize(fontSize - 4)}>
-            A−
+          <button
+            type="button"
+            className="text-button aa"
+            onClick={() => openPanel('settings')}
+            aria-label="Reading settings"
+            aria-expanded={panel === 'settings'}
+          >
+            Aa
           </button>
-          <button type="button" className="icon-button" aria-label="Larger text" onClick={() => setFontSize(fontSize + 4)}>
-            A+
-          </button>
+          {panel === 'settings' && (
+            <SettingsMenu settings={settings} onSettings={onSettings} onClose={() => setPanel(null)} />
+          )}
         </div>
       </header>
 
       <section className="stage">
         <WordDisplay word={words[index] ?? ''} fontSize={fontSize} onClick={toggle} />
         <div className="context" aria-hidden={playing}>
-          {context ? (
+          {context && (
             <p>
               {context.map(({ w, i }) => (
                 <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
@@ -164,11 +187,11 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
                 </span>
               ))}
             </p>
-          ) : null}
+          )}
         </div>
       </section>
 
-      <footer className="controls">
+      <footer className="reader-bottom chrome">
         <input
           type="range"
           className="scrubber"
@@ -177,68 +200,84 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           value={index}
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Position in book"
+          style={{ '--fill': `${percent}%` } as React.CSSProperties}
         />
-        <div className="stats muted small">
-          <span>{percent.toFixed(1)}%</span>
-          <span>
-            {(index + 1).toLocaleString()} / {words.length.toLocaleString()}
-          </span>
-          <span>~{minutesLeft} min left</span>
-        </div>
 
-        <div className="buttons">
-          <button type="button" className="icon-button" title="Previous sentence (Shift+←)" onClick={() => seek(previousSentence(words, index))}>
-            ⏮
-          </button>
-          <button type="button" className="icon-button" title="Back one word (←)" onClick={() => seek(index - 1)}>
-            ◀
-          </button>
-          <button type="button" className="play-button" onClick={toggle} title="Play / pause (Space)">
-            {playing ? 'Pause' : 'Play'}
-          </button>
-          <button type="button" className="icon-button" title="Forward one word (→)" onClick={() => seek(index + 1)}>
-            ▶
-          </button>
-          <button type="button" className="icon-button" title="Next sentence (Shift+→)" onClick={() => seek(nextSentence(words, index))}>
-            ⏭
-          </button>
-        </div>
+        <div className="deck">
+          <p className="deck-meta label muted">
+            {hasChapters && <span>{chapterLeft} left in chapter</span>}
+            <span>
+              {bookLeft} left{hasChapters && ' in book'} · {percent}%
+            </span>
+          </p>
 
-        <div className="wpm">
-          <button type="button" className="icon-button" onClick={() => setWpm(wpm - WPM_STEP)} aria-label="Slower">
-            −
-          </button>
-          <label>
-            <input
-              type="range"
-              min={MIN_WPM}
-              max={MAX_WPM}
-              step={WPM_STEP}
-              value={wpm}
-              onChange={(e) => setWpm(Number(e.target.value))}
-              aria-label="Words per minute"
-            />
-            <span>{wpm} wpm</span>
-          </label>
-          <button type="button" className="icon-button" onClick={() => setWpm(wpm + WPM_STEP)} aria-label="Faster">
-            +
-          </button>
+          <div className="transport">
+            <button type="button" className="icon-button" title="Previous sentence (Shift+←)" aria-label="Previous sentence" onClick={() => seek(previousSentence(words, index))}>
+              <Icon name="sentenceBack" />
+            </button>
+            <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
+              <Icon name="back" />
+            </button>
+            <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
+              <Icon name={playing ? 'pause' : 'play'} size={22} />
+            </button>
+            <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
+              <Icon name="forward" />
+            </button>
+            <button type="button" className="icon-button" title="Next sentence (Shift+→)" aria-label="Next sentence" onClick={() => seek(nextSentence(words, index))}>
+              <Icon name="sentenceForward" />
+            </button>
+          </div>
+
+          <div className="speed" role="group" aria-label="Reading speed">
+            <button type="button" className="icon-button" onClick={() => setWpm(wpm - WPM_STEP)} aria-label="Slower" title="Slower (↓)">
+              −
+            </button>
+            <span className="speed-value">
+              {wpm}
+              <span className="label muted"> wpm</span>
+            </span>
+            <button type="button" className="icon-button" onClick={() => setWpm(wpm + WPM_STEP)} aria-label="Faster" title="Faster (↑)">
+              +
+            </button>
+          </div>
         </div>
-        <p className="hint muted small">Space play/pause · ←/→ word · Shift+←/→ sentence · ↑/↓ speed · / search · Esc library</p>
       </footer>
 
-      {searchOpen && bookSearch && (
+      {panel === 'search' && bookSearch && (
         <SearchPanel
           bookSearch={bookSearch}
           words={words}
           chapters={chapters}
           onSelect={(i) => {
             seek(i)
-            setSearchOpen(false)
+            setPanel(null)
           }}
-          onClose={() => setSearchOpen(false)}
+          onClose={() => setPanel(null)}
         />
       )}
     </main>
   )
+}
+
+/** True after `ms` without pointer/keyboard activity, while `active`. */
+function useIdle(active: boolean, ms: number): boolean {
+  const [idle, setIdle] = useState(false)
+  useEffect(() => {
+    if (!active) return
+    let timer = window.setTimeout(() => setIdle(true), ms)
+    const wake = () => {
+      setIdle(false)
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => setIdle(true), ms)
+    }
+    const events = ['pointermove', 'pointerdown', 'keydown'] as const
+    events.forEach((e) => window.addEventListener(e, wake))
+    return () => {
+      window.clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, wake))
+      setIdle(false)
+    }
+  }, [active, ms])
+  return idle
 }

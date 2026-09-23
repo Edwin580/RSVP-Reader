@@ -24,19 +24,72 @@ export function splitAtOrp(word: string): [string, string, string] {
 const SENTENCE_END = /[.!?…]["'”’)\]]*$/
 const CLAUSE_END = /[,;:—–]["'”’)\]]*$/
 
+export type WordTiming = 'natural' | 'even'
+
 /**
- * How long to show a word, as a multiple of the base interval (60000 / wpm).
- * Longer words and punctuation get extra time so the pace feels natural and
- * comprehension doesn't collapse at sentence boundaries.
+ * Relative display time for a word with `letters` letters/digits: 1 at five
+ * letters, rising with diminishing returns, like fixation times in natural
+ * reading (1 → 0.75, 3 → 0.9, 8 → 1.12, 12 → 1.25, capped at 1.6).
  */
-export function delayMultiplier(word: string, paragraphEnd: boolean): number {
-  let m = 1
+export function lengthFactor(letters: number): number {
+  return Math.min(0.55 + 0.45 * Math.sqrt(Math.max(letters, 1) / 5), 1.6)
+}
+
+/** Extra time after punctuation, so sentence boundaries have room to land. */
+export function pauseFactor(word: string, paragraphEnd: boolean): number {
+  if (paragraphEnd) return 1.5
+  if (SENTENCE_END.test(word)) return 1.2
+  if (CLAUSE_END.test(word)) return 0.5
+  return 0
+}
+
+/** Un-normalised display weight of one word. */
+export function wordWeight(word: string, paragraphEnd: boolean, timing: WordTiming = 'natural'): number {
   const letters = word.replace(/[^\p{L}\p{N}]/gu, '').length
-  if (letters > 7) m += Math.min((letters - 7) * 0.08, 0.6)
-  if (paragraphEnd) m += 1.5
-  else if (SENTENCE_END.test(word)) m += 1.2
-  else if (CLAUSE_END.test(word)) m += 0.5
-  return m
+  return (timing === 'natural' ? lengthFactor(letters) : 1) + pauseFactor(word, paragraphEnd)
+}
+
+/**
+ * Per-word display weights for a whole book, scaled so they average exactly
+ * 1. A word is shown for `weight × 60000 / wpm` ms, so the chosen wpm is the
+ * real average speed: long words and pauses borrow time from short words
+ * rather than slowing the whole read down.
+ */
+export interface Timeline {
+  weights: Float32Array
+  /** cumulative[i] = sum of weights before word i (length = words + 1). */
+  cumulative: Float64Array
+}
+
+export function buildTimeline(words: string[], paragraphEnds: number[], timing: WordTiming = 'natural'): Timeline {
+  const ends = new Set(paragraphEnds)
+  const raw = new Float64Array(words.length)
+  let total = 0
+  for (let i = 0; i < words.length; i++) {
+    raw[i] = wordWeight(words[i], ends.has(i), timing)
+    total += raw[i]
+  }
+  const scale = total > 0 ? words.length / total : 1
+  const weights = new Float32Array(words.length)
+  const cumulative = new Float64Array(words.length + 1)
+  for (let i = 0; i < words.length; i++) {
+    weights[i] = raw[i] * scale
+    cumulative[i + 1] = cumulative[i] + weights[i]
+  }
+  return { weights, cumulative }
+}
+
+/** Minutes needed to read words [from, to) at `wpm`. */
+export function minutesBetween(timeline: Timeline, from: number, to: number, wpm: number): number {
+  const end = Math.min(to, timeline.cumulative.length - 1)
+  return Math.max(0, timeline.cumulative[end] - timeline.cumulative[Math.max(from, 0)]) / wpm
+}
+
+export function formatMinutes(minutes: number): string {
+  if (minutes < 1) return '<1 min'
+  const m = Math.round(minutes)
+  if (m < 60) return `${m} min`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
 }
 
 export function isSentenceEnd(word: string): boolean {
