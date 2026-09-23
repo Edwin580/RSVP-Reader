@@ -2,6 +2,8 @@
 
 A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Upload a book and it shows the text one word at a time, always in the same spot on screen.
 
+**Live:** https://edwin580.github.io/RSVP-Reader/ (deployed to GitHub Pages on every push to `main`)
+
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser.
