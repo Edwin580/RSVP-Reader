@@ -61,7 +61,16 @@ src/
 
 ## Roadmap
 
-- Backend with accounts, so the library and progress sync across devices
+### Next up
+
+1. **Dynamic word length timing**: make pacing feel more like natural reading. Longer words stay on screen slightly longer, scaled to the reader's own pace rather than a fixed rule. A basic version exists today (long words get up to 60% extra time). This item is about tuning it so the read feels smoother.
+2. **Rename the app to "Chapter"**: a short, friendly name to use everywhere (page title, header, README, repo).
+3. **UI refresh**: polish the look and feel of the library and reader.
+4. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Open questions are whether to add export/import for moving a library between devices, and whether optional sync is ever worth adding.
+
+### Later
+
+- Backend with accounts, so the library and progress sync across devices. Optional, depending on the storage decision above.
 - Reading sessions and statistics (time spent, average wpm)
 - More formats (`.docx`, `.mobi`), plus OCR for scanned PDFs
 - Showing multiple words at a time and more display options
