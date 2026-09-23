@@ -53,16 +53,22 @@ const SETTINGS_KEY = 'rsvp-settings'
 
 export interface Settings {
   wpm: number
-  fontSize: number
+  /** Multiplier on the device-based word size (1 = default for this screen). */
+  textScale: number
   /** 'natural' gives longer words slightly more time; 'even' shows every word equally long. */
   wordTiming: WordTiming
 }
 
-export const DEFAULT_SETTINGS: Settings = { wpm: 300, fontSize: 56, wordTiming: 'natural' }
+export const DEFAULT_SETTINGS: Settings = { wpm: 300, textScale: 1, wordTiming: 'natural' }
 
 export function loadSettings(): Settings {
   try {
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') }
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}')
+    return {
+      wpm: typeof saved.wpm === 'number' ? saved.wpm : DEFAULT_SETTINGS.wpm,
+      textScale: typeof saved.textScale === 'number' ? saved.textScale : DEFAULT_SETTINGS.textScale,
+      wordTiming: saved.wordTiming === 'even' ? 'even' : DEFAULT_SETTINGS.wordTiming,
+    }
   } catch {
     return DEFAULT_SETTINGS
   }

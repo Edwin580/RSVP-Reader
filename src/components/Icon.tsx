@@ -6,7 +6,10 @@ const PATHS = {
   sentenceBack: 'M12 6 6 12l6 6M18 6l-6 6 6 6',
   sentenceForward: 'M6 6l6 6-6 6M12 6l6 6-6 6',
   close: 'M6 6l12 12M18 6 6 18',
-  arrowLeft: 'M19 12H5m6-6-6 6 6 6',
+  chevronLeft: 'M15 5l-7 7 7 7',
+  search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.8-4.8',
+  trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
+  upload: 'M12 16V4m-5 5 5-5 5 5M5 20h14',
 } as const
 
 export type IconName = keyof typeof PATHS

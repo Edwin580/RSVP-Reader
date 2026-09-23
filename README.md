@@ -11,6 +11,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Natural word timing**: longer words stay on screen slightly longer, following a smooth curve (1 letter ≈ 0.75×, 5 letters = 1×, 12 letters ≈ 1.25×). Commas, sentence endings and paragraph breaks get pauses. All of this is balanced across the book, so the speed you choose is your real average speed and time-left estimates are accurate. Choose *Even* in the Aa menu to give every word the same time. The first few words after you press play are shown a bit slower.
 - **Steady rhythm**: words are scheduled against a clock rather than chained timers, so small delays don't add up into drift or stutter.
 - **Navigation**: chapter picker (EPUB chapters and PDF pages), a position slider, word- and sentence-level skipping, and time left in the chapter and the book.
+- **Sized for your device**: the word size comes from your screen's width and height, and very long words slide slightly off-centre or shrink so they're never cut off. Safe areas around notches and home bars are respected, buttons are at least 44px, settings open as a bottom sheet on phones, and landscape phones get a compact layout.
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: find any word or phrase in the book. Case, punctuation and accents are ignored. Each result shows the surrounding text and which chapter it's in, and clicking one jumps there. The index is built in a background Web Worker when a book opens, so searching never freezes the UI, even for long books.
@@ -30,7 +31,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 ## Stack
 
 - **Vite + React + TypeScript**
-- **Literata** (reading and headings) and **IBM Plex Mono** (labels and numbers), bundled with `@fontsource`, so no external font requests
+- **System fonts** (San Francisco on Apple devices, Roboto on Android, Segoe UI on Windows), so the app feels native and loads no font files
 - **JSZip + DOMParser** for EPUB. We only need the text, so this avoids a full EPUB rendering engine.
 - **pdf.js** (`pdfjs-dist`, legacy build for broader browser support) for PDF text extraction
 - **idb-keyval** for IndexedDB storage (`src/lib/storage.ts`). All persistence goes through this one module, so it can later be replaced by or synced with a backend.

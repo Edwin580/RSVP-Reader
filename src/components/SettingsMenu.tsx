@@ -8,9 +8,9 @@ interface Props {
   onClose: () => void
 }
 
-const MIN_FONT = 28
-const MAX_FONT = 112
-const FONT_STEP = 4
+const MIN_SCALE = 0.6
+const MAX_SCALE = 1.6
+const SCALE_STEP = 0.1
 
 const TIMINGS: { value: WordTiming; label: string; hint: string }[] = [
   { value: 'natural', label: 'Natural', hint: 'Longer words stay a little longer' },
@@ -43,27 +43,27 @@ export function SettingsMenu({ settings, onSettings, onClose }: Props) {
     }
   }, [onClose])
 
-  const setFont = (fontSize: number) =>
-    onSettings({ ...settings, fontSize: Math.max(MIN_FONT, Math.min(MAX_FONT, fontSize)) })
+  const setScale = (textScale: number) =>
+    onSettings({ ...settings, textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const timingHint = TIMINGS.find((t) => t.value === settings.wordTiming)?.hint
 
   return (
     <div className="popover" ref={ref} role="dialog" aria-label="Reading settings">
       <div className="setting">
-        <span className="label muted">Text size</span>
+        <span className="setting-name">Text size</span>
         <div className="stepper">
-          <button type="button" className="icon-button" onClick={() => setFont(settings.fontSize - FONT_STEP)} aria-label="Smaller text">
+          <button type="button" className="icon-button" onClick={() => setScale(settings.textScale - SCALE_STEP)} aria-label="Smaller text">
             <span style={{ fontSize: '0.8em' }}>A</span>
           </button>
-          <span className="stepper-value">{settings.fontSize}</span>
-          <button type="button" className="icon-button" onClick={() => setFont(settings.fontSize + FONT_STEP)} aria-label="Larger text">
+          <span className="stepper-value">{Math.round(settings.textScale * 100)}%</span>
+          <button type="button" className="icon-button" onClick={() => setScale(settings.textScale + SCALE_STEP)} aria-label="Larger text">
             <span style={{ fontSize: '1.2em' }}>A</span>
           </button>
         </div>
       </div>
 
       <div className="setting setting-stack">
-        <span className="label muted">Word timing</span>
+        <span className="setting-name">Word timing</span>
         <div className="segmented" role="radiogroup" aria-label="Word timing">
           {TIMINGS.map((t) => (
             <button
