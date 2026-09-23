@@ -12,6 +12,8 @@ export interface Book {
   /** Indices of words that end a paragraph (used for longer pauses). */
   paragraphEnds: number[]
   chapters: Chapter[]
+  /** Word ranges (inclusive) that are chapter or section headings. Absent in books saved before headings were detected. */
+  headings?: { start: number; end: number }[]
 }
 
 export interface BookMeta {

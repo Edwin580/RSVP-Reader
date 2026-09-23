@@ -232,6 +232,7 @@ h1, h2, p { margin: 0; }
 }
 .word-before { text-align: right; }
 .word-pivot { color: var(--red); }
+.word.is-heading { font-weight: 700; }
 .word-after { text-align: left; }
 
 .context { width: 100%; max-width: 36rem; margin: 0 auto; min-height: 0; }
@@ -332,9 +333,8 @@ h1, h2, p { margin: 0; }
   position: absolute;
   top: 0;
   left: 0;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--red) 14%, transparent);
-  box-shadow: inset 0 -2.5px 0 var(--red);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--red) 13%, transparent);
   margin: 0 -3px;
   padding: 0 3px;
   box-sizing: content-box;
@@ -342,6 +342,30 @@ h1, h2, p { margin: 0; }
   opacity: 0;
   will-change: transform, width;
 }
+/* The pacer: a thin line whose end sweeps steadily along the current line. */
+.page-pacer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--red);
+  pointer-events: none;
+  opacity: 0;
+  will-change: transform, width;
+}
+
+/* Chapters open on a fresh page, set lower, with the title as a heading. */
+.page-text.opens-chapter { padding-top: min(14vh, 5rem); }
+.page-heading {
+  margin: 0 0 1.1em;
+  font-size: 1.45em;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.page-heading + .page-heading { margin-top: -0.7em; font-size: 1.15em; font-weight: 600; color: var(--text-2); }
 
 /* ——— Settings ——— */
 .popover {

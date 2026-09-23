@@ -110,3 +110,13 @@ describe('isSentenceEnd', () => {
     for (const w of ['Mr.', 'Mrs.', '“Dr.', 'St.', 'e.g.', 'i.e.', 'U.S.', 'J.', 'vs.']) expect(isSentenceEnd(w)).toBe(false)
   })
 })
+
+describe('buildTimeline headings', () => {
+  it('gives heading words a little extra time and still averages 1', () => {
+    const words = 'Chapter One It was a dark night.'.split(' ')
+    const plain = buildTimeline(words, [1, 6])
+    const withHeading = buildTimeline(words, [1, 6], 'natural', [{ start: 0, end: 1 }])
+    expect(withHeading.weights[0] / withHeading.weights[3]).toBeGreaterThan(plain.weights[0] / plain.weights[3])
+    expect(withHeading.weights.reduce((a, b) => a + b, 0) / words.length).toBeCloseTo(1, 5)
+  })
+})

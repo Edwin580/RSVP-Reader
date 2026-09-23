@@ -63,14 +63,21 @@ export interface Timeline {
   cumulative: Float64Array
 }
 
-export function buildTimeline(words: string[], paragraphEnds: number[], timing: WordTiming = 'natural'): Timeline {
+/** Extra weight on heading words, so a chapter title registers before the text starts. */
+const HEADING_EXTRA = 0.3
+
+export function buildTimeline(
+  words: string[],
+  paragraphEnds: number[],
+  timing: WordTiming = 'natural',
+  headings: { start: number; end: number }[] = [],
+): Timeline {
   const ends = new Set(paragraphEnds)
   const raw = new Float64Array(words.length)
+  for (let i = 0; i < words.length; i++) raw[i] = wordWeight(words[i], ends.has(i), timing)
+  for (const h of headings) for (let i = h.start; i <= h.end && i < words.length; i++) raw[i] += HEADING_EXTRA
   let total = 0
-  for (let i = 0; i < words.length; i++) {
-    raw[i] = wordWeight(words[i], ends.has(i), timing)
-    total += raw[i]
-  }
+  for (let i = 0; i < words.length; i++) total += raw[i]
   const scale = total > 0 ? words.length / total : 1
   const weights = new Float32Array(words.length)
   const cumulative = new Float64Array(words.length + 1)

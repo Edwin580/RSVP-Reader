@@ -27,28 +27,43 @@ const CONTEXT_WORDS = 40
 const IDLE_MS = 2000
 /** Extra time on the first word of a new page in page mode, covering the turn animation. */
 const PAGE_TURN_MS = 450
+/** Extra time on the first word of each line in page mode, as a fraction of a word. */
+const LINE_RETURN = 0.3
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode } = settings
+  const headings = useMemo(() => book.headings ?? [], [book.headings])
   const timeline = useMemo(
-    () => buildTimeline(words, book.paragraphEnds, wordTiming),
-    [words, book.paragraphEnds, wordTiming],
+    () => buildTimeline(words, book.paragraphEnds, wordTiming, headings),
+    [words, book.paragraphEnds, wordTiming, headings],
   )
-  // In page mode, hold the first word of each new page a moment so the eye can
-  // move to the top of the page. The word after the visible page's end is the
-  // one that triggers the turn.
+  const headingWords = useMemo(() => {
+    const set = new Set<number>()
+    for (const h of headings) for (let i = h.start; i <= h.end; i++) set.add(i)
+    return set
+  }, [headings])
+  const chapterStarts = useMemo(() => chapters.map((c) => c.start), [chapters])
+  // Page mode gives the eye time to travel: the first word of a new page (the
+  // word after the visible page's end) waits for the turn, and the first word
+  // of each line gets a beat for the sweep back to the left margin.
   const pageEnd = useRef(-1)
-  const pageTurnDelay = useCallback(
-    (i: number) => (mode === 'page' && i === pageEnd.current + 1 ? PAGE_TURN_MS : 0),
-    [mode],
+  const lineStarts = useRef<Set<number>>(new Set())
+  const pageDelay = useCallback(
+    (i: number) => {
+      if (mode !== 'page') return 0
+      if (i === pageEnd.current + 1) return PAGE_TURN_MS
+      return lineStarts.current.has(i) ? LINE_RETURN * (60000 / wpm) : 0
+    },
+    [mode, wpm],
   )
-  const onPage = useCallback((_start: number, end: number) => {
+  const onPage = useCallback((_start: number, end: number, lines: Set<number>) => {
     pageEnd.current = end
+    lineStarts.current = lines
   }, [])
   const pageNav = useRef<PageNav | null>(null)
 
-  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageTurnDelay)
+  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
   const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
   const idle = useIdle(playing && !panel, IDLE_MS)
 
@@ -207,9 +222,14 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           <PageView
             words={words}
             paragraphEnds={book.paragraphEnds}
+            chapterStarts={chapterStarts}
+            headings={headings}
             index={index}
+            playing={playing}
             scale={textScale}
             wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
+            lineReturnMs={LINE_RETURN * (60000 / wpm)}
+            turnMs={PAGE_TURN_MS}
             onSeek={seek}
             onToggle={toggle}
             onPage={onPage}
@@ -218,7 +238,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         </section>
       ) : (
         <section className="stage">
-          <WordDisplay word={words[index] ?? ''} scale={textScale} onClick={toggle} />
+          <WordDisplay word={words[index] ?? ''} scale={textScale} heading={headingWords.has(index)} onClick={toggle} />
           <div className="context" aria-hidden={playing}>
             {context && (
               <p>

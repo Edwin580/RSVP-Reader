@@ -1,18 +1,26 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
+import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
 
 interface Props {
   words: string[]
   paragraphEnds: number[]
+  /** First word of each chapter, ascending. Every chapter starts on a new page. */
+  chapterStarts: number[]
+  /** Word ranges set as headings (chapter titles). */
+  headings: { start: number; end: number }[]
   index: number
+  playing: boolean
   scale: number
-  /** How long the current word is shown, so the marker glides at reading pace. */
+  /** How long the current word is shown, so the marker moves at reading pace. */
   wordMs: number
+  /** Extra time the reader adds to the first word of a line, and of a new page. */
+  lineReturnMs: number
+  turnMs: number
   onSeek: (index: number) => void
   onToggle: () => void
-  /** Reports the visible page so the reader can pause briefly before turning it. */
-  onPage: (start: number, end: number) => void
+  /** Reports the visible page and the words that begin each line on it. */
+  onPage: (start: number, end: number, lineStarts: Set<number>) => void
   /** Filled with page navigation for the reader's keyboard shortcuts. */
   navRef?: React.RefObject<PageNav | null>
 }
@@ -28,25 +36,44 @@ const CHUNK = 700
 const TURN_MS = 240
 
 /**
- * Guided reading: the book shown as screen-sized pages, with a marker that
- * glides under each word at reading speed and turns the page at the end.
+ * Guided reading: the book shown as screen-sized pages, with the current word
+ * softly highlighted and a thin pacer line that sweeps along the line at
+ * reading speed, so the eye has something continuous to follow.
  *
  * Pages are measured, not estimated: a chunk of text is laid out invisibly
  * and the page ends at the last word that fully fits, or at a sentence end on
- * the last two lines so a turn doesn't split a thought. Measured pages are
- * remembered so paging back and forth is stable, and re-measured when the
- * size changes.
+ * the last two lines so a turn doesn't split a thought. Like an e-reader,
+ * every chapter starts on a new page with its title set as a heading.
+ * Measured pages are remembered so paging back and forth is stable, and
+ * re-measured when the size changes.
  *
  * Turning slides the old page out while the new one slides in (reversed when
- * going back), and the marker fades in on the new page's first word.
+ * going back), and the highlight fades in on the new page's first word.
  */
-export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, onToggle, onPage, navRef }: Props) {
+export function PageView({
+  words,
+  paragraphEnds,
+  chapterStarts,
+  headings,
+  index,
+  playing,
+  scale,
+  wordMs,
+  lineReturnMs,
+  turnMs,
+  onSeek,
+  onToggle,
+  onPage,
+  navRef,
+}: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
   const ghost = useRef<HTMLDivElement>(null)
   const marker = useRef<HTMLDivElement>(null)
+  const pacer = useRef<HTMLDivElement>(null)
   const ghostTimer = useRef<number | undefined>(undefined)
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
+  const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
   const known = useRef(new Map<number, number>())
   const [page, setPage] = useState<{ start: number; end: number | null; turn: 'forward' | 'back' | null }>(() => ({
     start: pageAnchor(words, paragraphEnds, index),
@@ -70,8 +97,8 @@ export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, o
       else hi = mid - 1
     }
     let end = Number(spans[lo]?.dataset.i ?? page.start)
-    // Unless this is the book's last page, prefer ending at a sentence.
-    if (end < words.length - 1) {
+    // Unless the page already ends its chapter, prefer ending at a sentence.
+    if (end < chapterLimit(chapterStarts, page.start, words.length)) {
       const fits = Array.from(spans)
         .slice(0, lo + 1)
         .map((s) => ({ index: Number(s.dataset.i), top: s.offsetTop }))
@@ -80,10 +107,20 @@ export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, o
     }
     known.current.set(page.start, end)
     setPage({ ...page, end })
-  }, [page, words, ends])
+  }, [page, words, ends, chapterStarts])
 
+  // Report the page and where its lines begin (the reader gives line starts a beat more).
   useLayoutEffect(() => {
-    if (page.end !== null) onPage(page.start, page.end)
+    if (page.end === null) return
+    const lineStarts = new Set<number>()
+    let top = -1
+    for (const s of text.current?.querySelectorAll<HTMLElement>('[data-i]') ?? []) {
+      if (s.offsetTop > top) {
+        if (top !== -1) lineStarts.add(Number(s.dataset.i))
+        top = s.offsetTop
+      }
+    }
+    onPage(page.start, page.end, lineStarts)
   }, [page, onPage])
 
   // Follow the reading position: next page when it runs off the end,
@@ -101,7 +138,7 @@ export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, o
     const g = ghost.current
     if (g && text.current && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
       const copy = text.current.cloneNode(true) as HTMLElement
-      copy.className = 'page-text' // drop its own entrance animation
+      copy.className = text.current.className.replace(/\s*entering-\w+/, '') // drop its own entrance animation
       g.replaceChildren(copy)
       g.className = `page-ghost leaving-${direction}`
       // Clear it when the slide ends; the timer is a backstop if no animationend fires.
@@ -149,51 +186,92 @@ export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, o
   })
 
   const measuring = page.end === null
-  const last = measuring ? Math.min(page.start + CHUNK, words.length - 1) : (page.end as number)
+  const last = measuring
+    ? Math.min(page.start + CHUNK, chapterLimit(chapterStarts, page.start, words.length))
+    : (page.end as number)
+  // Set the page lower only when it opens with a title, like a chapter's first page.
+  const opensChapter = headingStarts.has(page.start)
   const content = useMemo(
     () =>
-      paragraphsBetween(ends, page.start, last).map((para) => (
-        <p key={para[0]}>
-          {para.map((i) => (
-            <Fragment key={i}>
-              <span data-i={i}>{words[i]}</span>{' '}
-            </Fragment>
-          ))}
-        </p>
-      )),
-    [ends, page.start, last, words],
+      paragraphsBetween(ends, page.start, last).map((para) => {
+        const Tag = headingStarts.has(para[0]) ? 'h2' : 'p'
+        return (
+          <Tag key={para[0]} className={Tag === 'h2' ? 'page-heading' : undefined}>
+            {para.map((i) => (
+              <Fragment key={i}>
+                <span data-i={i}>{words[i]}</span>{' '}
+              </Fragment>
+            ))}
+          </Tag>
+        )
+      }),
+    [ends, headingStarts, page.start, last, words],
   )
 
-  // Glide the marker to the current word; jump without animating on a new line or page.
-  const prev = useRef<{ top: number; start: number } | null>(null)
+  // Move the highlight and pacer to the current word.
+  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number } | null>(null)
   useLayoutEffect(() => {
     const m = marker.current
-    if (!m || measuring) return
+    const p = pacer.current
+    if (!m || !p || measuring) return
     const span = text.current?.querySelector<HTMLElement>(`[data-i="${index}"]`)
     if (!span) {
-      m.style.opacity = '0'
+      m.style.opacity = p.style.opacity = '0'
       return
     }
     // Layout offsets, not screen rects: they ignore the page's slide-in
-    // transform, so the marker lands where the word will come to rest.
+    // transform, so both land where the word will come to rest.
     const top = span.offsetTop
     const left = span.offsetLeft
-    const newPage = !prev.current || prev.current.start !== page.start
-    const newLine = !newPage && prev.current!.top !== top
-    prev.current = { top, start: page.start }
-    const glide = Math.min(wordMs * 0.6, 140)
-    m.style.transition = newPage || newLine ? 'none' : `transform ${glide}ms ease-out, width ${glide}ms ease-out`
+    const width = Math.max(span.offsetWidth, 4)
+    const height = span.offsetHeight
+    const before = prev.current
+    const newPage = !before || before.start !== page.start
+    const newLine = !newPage && before.top !== top
+    // Anything but reading on to the next word on the same line restarts the pacer here.
+    const restart = newPage || newLine || before.index !== index - 1
+    const lineLeft = restart ? left : before.lineLeft
+    prev.current = { index, top, start: page.start, lineLeft }
+    // How long this word is actually on screen, including the reader's extra beats.
+    const shownMs = Math.max(wordMs + (newPage && before ? turnMs : newLine ? lineReturnMs : 0), 16)
+
+    // Highlight: a soft box that eases from word to word.
+    const glide = Math.min(wordMs * 0.5, 160)
+    m.style.transition = newPage || newLine ? 'none' : `transform ${glide}ms cubic-bezier(0.4, 0, 0.2, 1), width ${glide}ms cubic-bezier(0.4, 0, 0.2, 1)`
     m.style.transform = `translate(${left}px, ${top}px)`
-    m.style.width = `${Math.max(span.offsetWidth, 4)}px`
-    m.style.height = `${span.offsetHeight}px`
+    m.style.width = `${width}px`
+    m.style.height = `${height}px`
+
+    // Pacer: a line under the text whose end moves steadily through the
+    // current word over exactly the time it's shown, so it never stops
+    // while playing. It fills the line from where reading started on it.
+    const target = left + width - lineLeft
+    if (restart) {
+      p.style.transition = 'none'
+      p.style.transform = `translate(${lineLeft}px, ${top + height - 2}px)`
+      p.style.width = playing ? '0px' : `${target}px`
+      void p.offsetWidth
+    }
+    if (playing) {
+      p.style.transition = `width ${shownMs}ms linear`
+      p.style.width = `${target}px`
+    } else if (!restart) {
+      p.style.transition = 'none'
+      p.style.width = `${target}px`
+    }
+
     if (newPage) {
       // Appear once the new page has slid in, so the eye lands on it.
-      m.style.opacity = '0'
-      void m.offsetWidth
+      for (const el of [m, p]) {
+        el.style.opacity = '0'
+        void el.offsetWidth
+      }
       m.style.transition = `opacity 180ms ease-out ${TURN_MS - 60}ms`
+      p.style.transition = `opacity 180ms ease-out ${TURN_MS - 60}ms, width ${Math.max(shownMs - (TURN_MS - 60), 16)}ms linear ${TURN_MS - 60}ms`
     }
     m.style.opacity = '1'
-  }, [index, page.start, measuring, wordMs, content])
+    p.style.opacity = '1'
+  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing])
 
   return (
     <div
@@ -215,11 +293,21 @@ export function PageView({ words, paragraphEnds, index, scale, wordMs, onSeek, o
         }}
       />
       <div className="page-marker" ref={marker} aria-hidden="true" />
-      <div className={`page-text${page.turn ? ` entering-${page.turn}` : ''}`} key={page.start} ref={text}>
+      <div className="page-pacer" ref={pacer} aria-hidden="true" />
+      <div
+        className={`page-text${opensChapter ? ' opens-chapter' : ''}${page.turn ? ` entering-${page.turn}` : ''}`}
+        key={page.start}
+        ref={text}
+      >
         {content}
       </div>
     </div>
   )
+}
+
+/** Last word a page starting at `start` may show: the end of its chapter or of the book. */
+function chapterLimit(chapterStarts: number[], start: number, length: number): number {
+  return Math.min(nextChapterStart(chapterStarts, start, length) - 1, length - 1)
 }
 
 function clearGhost(g: HTMLElement) {

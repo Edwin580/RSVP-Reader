@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pageAnchor, pageBreak, paragraphStart, paragraphsBetween } from '../pages'
+import { nextChapterStart, pageAnchor, pageBreak, paragraphStart, paragraphsBetween } from '../pages'
 
 describe('paragraphStart', () => {
   const ends = [2, 5, 9]
@@ -47,5 +47,16 @@ describe('pageBreak', () => {
     expect(pageBreak(fits, () => false)).toBe(111)
     expect(pageBreak(fits, (i) => i === 111 || i === 109)).toBe(111)
     expect(pageBreak([], () => true)).toBe(-1)
+  })
+})
+
+describe('nextChapterStart', () => {
+  it('finds the next chapter boundary after an index', () => {
+    const starts = [0, 50, 120]
+    expect(nextChapterStart(starts, 0, 999)).toBe(50)
+    expect(nextChapterStart(starts, 49, 999)).toBe(50)
+    expect(nextChapterStart(starts, 50, 999)).toBe(120)
+    expect(nextChapterStart(starts, 130, 999)).toBe(999)
+    expect(nextChapterStart([], 5, 999)).toBe(999)
   })
 })

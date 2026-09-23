@@ -72,3 +72,15 @@ export function pageBreak(
   }
   return last.index
 }
+
+/** First chapter start after `index` (sorted `chapterStarts`), or `fallback` if none. */
+export function nextChapterStart(chapterStarts: number[], index: number, fallback: number): number {
+  let lo = 0
+  let hi = chapterStarts.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (chapterStarts[mid] <= index) lo = mid + 1
+    else hi = mid
+  }
+  return lo < chapterStarts.length ? chapterStarts[lo] : fallback
+}

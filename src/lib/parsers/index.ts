@@ -1,4 +1,4 @@
-import { buildBook, splitParagraphs, stripMarkdown, type Section } from '../text'
+import { buildBook, splitMarkdownChapters, splitParagraphs, splitTextChapters, type Section } from '../text'
 import type { Book } from '../types'
 
 export const ACCEPTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
@@ -40,9 +40,8 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
     case '.txt':
     case '.md':
     case '.markdown': {
-      let text = new TextDecoder().decode(data)
-      if (ext !== '.txt') text = stripMarkdown(text)
-      sections = [{ paragraphs: splitParagraphs(text) }]
+      const text = new TextDecoder().decode(data)
+      sections = ext === '.txt' ? splitTextChapters(splitParagraphs(text)) : splitMarkdownChapters(text)
       break
     }
     default:

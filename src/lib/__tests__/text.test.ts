@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildBook, splitParagraphs, splitWords, stripMarkdown } from '../text'
+import { buildBook, isChapterHeading, splitMarkdownChapters, splitParagraphs, splitTextChapters, splitWords, stripMarkdown } from '../text'
 
 describe('splitWords', () => {
   it('splits on whitespace and em dashes between words', () => {
@@ -34,5 +34,52 @@ describe('buildBook', () => {
       { title: 'One', start: 0 },
       { title: 'Section 3', start: 3 },
     ])
+  })
+})
+
+describe('isChapterHeading', () => {
+  it('recognises common heading styles', () => {
+    for (const h of ['CHAPTER I.', 'Chapter 12', 'Chapter Three: The Storm', 'PART II', 'Book the First'.replace('the ', ''), 'Prologue', 'EPILOGUE', 'Chapter XIV — Home'])
+      expect(isChapterHeading(h)).toBe(true)
+  })
+
+  it('ignores ordinary sentences that mention chapters', () => {
+    for (const p of ['In this chapter we learn a lot about ships and storms and more.', 'Chapter did not end well', 'Part of me wanted to leave.', 'The introduction was long and dull and full of footnotes, far too many.'])
+      expect(isChapterHeading(p)).toBe(false)
+  })
+})
+
+describe('splitTextChapters', () => {
+  it('splits at headings, keeps front matter, and picks up subtitles', () => {
+    const sections = splitTextChapters([
+      'A Novel',
+      'CHAPTER I.',
+      'Down the Rabbit-Hole',
+      'Alice was beginning to get very tired.',
+      'CHAPTER II.',
+      'So she was considering.',
+    ])
+    expect(sections.map((s) => s.title)).toEqual(['Beginning', 'CHAPTER I: Down the Rabbit-Hole', 'CHAPTER II'])
+    expect(sections[1].headings).toEqual([0, 1])
+    expect(sections[2].headings).toEqual([0])
+  })
+
+  it('leaves text without clear chapters as one section', () => {
+    expect(splitTextChapters(['Chapter 1', 'Just one heading here.'])).toEqual([{ paragraphs: ['Chapter 1', 'Just one heading here.'] }])
+  })
+})
+
+describe('splitMarkdownChapters', () => {
+  it('starts chapters at # and ## and keeps deeper headings inside', () => {
+    const sections = splitMarkdownChapters('Intro text.\n\n# One\nFirst **bold** para.\n\n### Detail\n\nMore.\n\n## Two\n\nLast.')
+    expect(sections.map((s) => s.title)).toEqual([undefined, 'One', 'Two'])
+    expect(sections[1]).toEqual({ title: 'One', paragraphs: ['One', 'First bold para.', 'Detail', 'More.'], headings: [0, 2] })
+  })
+})
+
+describe('buildBook headings', () => {
+  it('records heading word ranges', () => {
+    const book = buildBook('id', 'T', [{ title: 'Ch 1', paragraphs: ['Chapter One', 'Hello there.'], headings: [0] }])
+    expect(book.headings).toEqual([{ start: 0, end: 1 }])
   })
 })
