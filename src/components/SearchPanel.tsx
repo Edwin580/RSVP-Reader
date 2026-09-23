@@ -1,24 +1,42 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import { buildSearchIndex, search } from '../lib/search'
+import { useEffect, useRef, useState } from 'react'
+import type { SearchResult } from '../lib/search'
+import type { BookSearch } from '../lib/searchClient'
 import type { Chapter } from '../lib/types'
 
 interface Props {
+  bookSearch: BookSearch
   words: string[]
   chapters: Chapter[]
   onSelect: (index: number) => void
   onClose: () => void
 }
 
-const LIMIT = 200
+/** Results fetched and rendered per page; more are loaded on demand. */
+const PAGE = 50
 const SNIPPET_WORDS = 8
 
-export function SearchPanel({ words, chapters, onSelect, onClose }: Props) {
+export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: Props) {
   const [query, setQuery] = useState('')
-  const deferredQuery = useDeferredValue(query)
+  const [limit, setLimit] = useState(PAGE)
+  // The query the current results belong to, so stale results are never shown as fresh.
+  const [answered, setAnswered] = useState<{ query: string; result: SearchResult }>({
+    query: '',
+    result: { matches: [], total: 0 },
+  })
   const input = useRef<HTMLInputElement>(null)
 
-  const index = useMemo(() => buildSearchIndex(words), [words])
-  const matches = useMemo(() => search(index, deferredQuery, LIMIT), [index, deferredQuery])
+  useEffect(() => {
+    let cancelled = false
+    bookSearch.query(query, limit).then((result) => {
+      if (!cancelled) setAnswered({ query, result })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [bookSearch, query, limit])
+
+  const { matches, total } = answered.result
+  const searching = answered.query !== query
 
   useEffect(() => input.current?.focus(), [])
 
@@ -48,7 +66,10 @@ export function SearchPanel({ words, chapters, onSelect, onClose }: Props) {
             type="search"
             placeholder="Search for a word or phrase…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setLimit(PAGE)
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && matches[0]) onSelect(matches[0].start)
             }}
@@ -58,14 +79,16 @@ export function SearchPanel({ words, chapters, onSelect, onClose }: Props) {
             ✕
           </button>
         </div>
-        {deferredQuery.trim() && (
-          <p className="muted small search-count">
-            {matches.length === 0
-              ? 'No matches'
-              : `${matches.length >= LIMIT ? `${LIMIT}+` : matches.length} match${matches.length === 1 ? '' : 'es'}`}
+        {query.trim() && (
+          <p className="muted small search-count" aria-live="polite">
+            {searching && !answered.query.trim()
+              ? 'Searching…'
+              : total === 0
+                ? 'No matches'
+                : `${total.toLocaleString()} match${total === 1 ? '' : 'es'}`}
           </p>
         )}
-        <ol className="search-results">
+        <ol className={`search-results${searching ? ' stale' : ''}`}>
           {matches.map((m) => {
             const before = words.slice(Math.max(0, m.start - SNIPPET_WORDS), m.start).join(' ')
             const hit = words.slice(m.start, m.end + 1).join(' ')
@@ -87,6 +110,13 @@ export function SearchPanel({ words, chapters, onSelect, onClose }: Props) {
               </li>
             )
           })}
+          {total > matches.length && !searching && (
+            <li>
+              <button type="button" className="search-more" onClick={() => setLimit(limit + PAGE)}>
+                Show more ({(total - matches.length).toLocaleString()} left)
+              </button>
+            </li>
+          )}
         </ol>
       </aside>
     </div>
