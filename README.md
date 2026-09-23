@@ -10,6 +10,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
   - **Page**: guided reading. The book is laid out as pages that fit your screen, a marker glides under each word at your chosen speed, and the page turns itself when you reach the end (with a short pause so your eyes can move to the top). Tap any word to jump there. Pages are measured to fit exactly and re-flow when you rotate or resize.
+- **Warm paper and ink colors**: a beige page in light mode and a warm near-black in dark mode, following your system setting, with red only for the focus letter and the page-mode marker. All text meets WCAG AA contrast.
 - **Fixed focus point**: each word's *Optimal Recognition Point*, a letter a little left of centre, is highlighted and pinned to the centre, so your eyes never move.
 - **Natural word timing**: longer words stay on screen slightly longer, following a smooth curve (1 letter ≈ 0.75×, 5 letters = 1×, 12 letters ≈ 1.25×). Commas, sentence endings and paragraph breaks get pauses. All of this is balanced across the book, so the speed you choose is your real average speed and time-left estimates are accurate. Choose *Even* in the Aa menu to give every word the same time. The first few words after you press play are shown a bit slower.
 - **Steady rhythm**: words are scheduled against a clock rather than chained timers, so small delays don't add up into drift or stutter.

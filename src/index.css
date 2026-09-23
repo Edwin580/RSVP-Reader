@@ -1,14 +1,16 @@
-/* Colors follow the platform: plain white/black backgrounds, system greys,
-   and red reserved for the focus letter. */
+/* Warm paper and ink: a beige page in light mode, a warm near-black in dark
+   mode, with a single red for the focus letter and marker. Secondary text is
+   darkened from the classic paper grey so it stays readable (≥ 4.5:1). */
 :root {
-  --bg: #ffffff;
-  --bg-2: #f2f2f7;
-  --fill: #ececf0;
-  --text: #111111;
-  --text-2: #6e6e73;
-  --separator: #e3e3e8;
-  --red: #e5302a;
-  --shadow: 0 10px 30px rgb(0 0 0 / 0.12);
+  --bg: #f3efe6;
+  --bg-2: #ece6da;
+  --fill: #e4ddcf;
+  --raised: #fbf8f2;
+  --text: #1c1a17;
+  --text-2: #6b645a;
+  --separator: #d9d1c2;
+  --red: #c23b25;
+  --shadow: 0 12px 32px rgb(60 45 20 / 0.16);
 
   --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -26,14 +28,15 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --bg-2: #1c1c1e;
-    --fill: #2c2c2e;
-    --text: #f5f5f7;
-    --text-2: #98989f;
-    --separator: #2c2c2e;
-    --red: #ff453a;
-    --shadow: 0 10px 30px rgb(0 0 0 / 0.6);
+    --bg: #141311;
+    --bg-2: #1c1a17;
+    --fill: #2a2723;
+    --raised: #45403a;
+    --text: #ebe5d8;
+    --text-2: #a39c90;
+    --separator: #2f2c27;
+    --red: #e8674f;
+    --shadow: 0 12px 32px rgb(0 0 0 / 0.55);
   }
 }
 
@@ -262,13 +265,13 @@ h1, h2, p { margin: 0; }
   height: 18px;
   margin-top: -7px;
   border-radius: 50%;
-  background: var(--bg);
+  background: var(--raised);
   border: 1px solid var(--separator);
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
 }
 .scrubber::-moz-range-track { height: 4px; border-radius: 2px; background: var(--separator); }
 .scrubber::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--text); }
-.scrubber::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 1px solid var(--separator); box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); }
+.scrubber::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--raised); border: 1px solid var(--separator); box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); }
 
 .deck {
   display: grid;
@@ -350,7 +353,7 @@ h1, h2, p { margin: 0; }
 .stepper-value { min-width: 3.2rem; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
 .segmented { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; background: var(--fill); border-radius: 10px; }
 .segmented button { min-height: 36px; padding: 0.35rem; border: 0; border-radius: 8px; background: none; }
-.segmented button[aria-checked='true'] { background: var(--bg); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
+.segmented button[aria-checked='true'] { background: var(--raised); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
 .hint { font-size: 0.85rem; color: var(--text-2); }
 .shortcuts { display: grid; gap: 0.3rem; margin: 0; padding-top: 0.9rem; border-top: 1px solid var(--separator); }
 .shortcuts div { display: flex; justify-content: space-between; align-items: center; }
@@ -373,7 +376,7 @@ kbd {
   inset: 0;
   display: flex;
   justify-content: flex-end;
-  background: rgb(0 0 0 / 0.3);
+  background: rgb(28 22 12 / 0.35);
   z-index: 10;
   animation: fade-in 0.15s ease;
 }
