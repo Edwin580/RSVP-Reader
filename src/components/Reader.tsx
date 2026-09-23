@@ -6,6 +6,7 @@ import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
+import { Scrubber } from './Scrubber'
 import { SearchPanel } from './SearchPanel'
 import { SettingsMenu } from './SettingsMenu'
 import { WordDisplay } from './WordDisplay'
@@ -29,6 +30,9 @@ const IDLE_MS = 2000
 const PAGE_TURN_MS = 450
 /** Extra time on the first word of each line in page mode, as a fraction of a word. */
 const LINE_RETURN = 0.3
+/** Jumps further than this offer a "back" button, shown for JUMP_BACK_MS. */
+const JUMP_BACK_MIN_WORDS = 50
+const JUMP_BACK_MS = 8000
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
@@ -64,6 +68,19 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const pageNav = useRef<PageNav | null>(null)
 
   const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
+
+  // Big jumps (progress bar, chapter menu, search) offer a way back for a few
+  // seconds, so an accidental jump never costs your place.
+  const [jumpedFrom, setJumpedFrom] = useState<number | null>(null)
+  const jumpTo = (i: number) => {
+    if (Math.abs(i - index) > JUMP_BACK_MIN_WORDS) setJumpedFrom(index)
+    seek(i)
+  }
+  useEffect(() => {
+    if (jumpedFrom === null) return
+    const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
+    return () => window.clearTimeout(timer)
+  }, [jumpedFrom])
   const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
   const idle = useIdle(playing && !panel, IDLE_MS)
 
@@ -163,6 +180,13 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const bookLeft = formatMinutes(minutesBetween(timeline, index, words.length, wpm))
   const chapterLeft = formatMinutes(minutesBetween(timeline, index, chapterEnd, wpm))
   const hasChapters = chapters.length > 1
+  const describePosition = (i: number) => {
+    const pct = `${words.length > 1 ? Math.round((i / (words.length - 1)) * 100) : 100}%`
+    if (!hasChapters) return pct
+    let title = chapters[0].title
+    for (const c of chapters) if (c.start <= i) title = c.title
+    return `${pct} · ${title}`
+  }
 
   const context = useMemo(() => {
     if (playing || mode === 'page') return null
@@ -186,7 +210,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             <select
               className="chapter-select"
               value={chapterIndex}
-              onChange={(e) => seek(chapters[Number(e.target.value)].start)}
+              onChange={(e) => jumpTo(chapters[Number(e.target.value)].start)}
               aria-label="Jump to chapter"
             >
               {chapters.map((c, i) => (
@@ -254,16 +278,20 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
       )}
 
       <footer className="reader-bottom chrome">
-        <input
-          type="range"
-          className="scrubber"
-          min={0}
-          max={Math.max(words.length - 1, 0)}
-          value={index}
-          onChange={(e) => seek(Number(e.target.value))}
-          aria-label="Position in book"
-          style={{ '--progress': `${percent}%` } as React.CSSProperties}
-        />
+        {jumpedFrom !== null && (
+          <button
+            type="button"
+            className="jump-back"
+            onClick={() => {
+              seek(jumpedFrom)
+              setJumpedFrom(null)
+            }}
+          >
+            <Icon name="chevronLeft" size={16} />
+            <span>Back to {describePosition(jumpedFrom)}</span>
+          </button>
+        )}
+        <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
 
         <div className="deck">
           <p className="deck-meta muted">
@@ -312,7 +340,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           words={words}
           chapters={chapters}
           onSelect={(i) => {
-            seek(i)
+            jumpTo(i)
             setPanel(null)
           }}
           onClose={() => setPanel(null)}
