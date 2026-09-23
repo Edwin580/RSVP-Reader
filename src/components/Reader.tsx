@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book } from '../lib/types'
 import { Icon } from './Icon'
+import { PageView, type PageNav } from './PageView'
 import { SearchPanel } from './SearchPanel'
 import { SettingsMenu } from './SettingsMenu'
 import { WordDisplay } from './WordDisplay'
@@ -24,15 +25,25 @@ const MAX_WPM = 1200
 const CONTEXT_WORDS = 40
 /** Controls fade out after this long without pointer or key activity while playing. */
 const IDLE_MS = 2000
+/** Pause before turning the page in page mode. */
+const PAGE_TURN_MS = 400
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
-  const { wpm, fontSize, wordTiming } = settings
+  const { wpm, textScale, wordTiming, mode } = settings
   const timeline = useMemo(
     () => buildTimeline(words, book.paragraphEnds, wordTiming),
     [words, book.paragraphEnds, wordTiming],
   )
-  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex)
+  // In page mode, hold the last word of a page a moment so the eye can move to the next page.
+  const pageEnd = useRef(-1)
+  const pageTurnDelay = useCallback((i: number) => (mode === 'page' && i === pageEnd.current ? PAGE_TURN_MS : 0), [mode])
+  const onPage = useCallback((_start: number, end: number) => {
+    pageEnd.current = end
+  }, [])
+  const pageNav = useRef<PageNav | null>(null)
+
+  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageTurnDelay)
   const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
   const idle = useIdle(playing && !panel, IDLE_MS)
 
@@ -97,6 +108,16 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         pause()
         onClose()
         break
+      case 'm':
+      case 'M':
+        onSettings({ ...settings, mode: mode === 'page' ? 'word' : 'page' })
+        break
+      case 'PageDown':
+        pageNav.current?.next()
+        break
+      case 'PageUp':
+        pageNav.current?.previous()
+        break
       default:
         return
     }
@@ -124,17 +145,17 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   const hasChapters = chapters.length > 1
 
   const context = useMemo(() => {
-    if (playing) return null
+    if (playing || mode === 'page') return null
     const start = Math.max(0, index - CONTEXT_WORDS)
     return words.slice(start, index + CONTEXT_WORDS).map((w, i) => ({ w, i: start + i }))
-  }, [playing, index, words])
+  }, [playing, index, words, mode])
 
   return (
     <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}`}>
       <header className="reader-top chrome">
-        <button type="button" className="text-button" onClick={onClose}>
-          <Icon name="arrowLeft" size={18} />
-          <span className="label">Library</span>
+        <button type="button" className="nav-button" onClick={onClose}>
+          <Icon name="chevronLeft" size={22} />
+          <span className="nav-label">Library</span>
         </button>
 
         <div className="running-head">
@@ -143,7 +164,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           </span>
           {hasChapters && (
             <select
-              className="chapter-select label"
+              className="chapter-select"
               value={chapterIndex}
               onChange={(e) => seek(chapters[Number(e.target.value)].start)}
               aria-label="Jump to chapter"
@@ -158,12 +179,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         </div>
 
         <div className="top-actions">
-          <button type="button" className="text-button label" onClick={() => openPanel('search')} title="Search (/)">
-            Search
+          <button type="button" className="icon-button" onClick={() => openPanel('search')} title="Search (/)" aria-label="Search">
+            <Icon name="search" size={21} />
           </button>
           <button
             type="button"
-            className="text-button aa"
+            className="icon-button aa"
             onClick={() => openPanel('settings')}
             aria-label="Reading settings"
             aria-expanded={panel === 'settings'}
@@ -176,20 +197,36 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         </div>
       </header>
 
-      <section className="stage">
-        <WordDisplay word={words[index] ?? ''} fontSize={fontSize} onClick={toggle} />
-        <div className="context" aria-hidden={playing}>
-          {context && (
-            <p>
-              {context.map(({ w, i }) => (
-                <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
-                  {w}{' '}
-                </span>
-              ))}
-            </p>
-          )}
-        </div>
-      </section>
+      {mode === 'page' ? (
+        <section className="stage stage-page">
+          <PageView
+            words={words}
+            paragraphEnds={book.paragraphEnds}
+            index={index}
+            scale={textScale}
+            wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
+            onSeek={seek}
+            onToggle={toggle}
+            onPage={onPage}
+            navRef={pageNav}
+          />
+        </section>
+      ) : (
+        <section className="stage">
+          <WordDisplay word={words[index] ?? ''} scale={textScale} onClick={toggle} />
+          <div className="context" aria-hidden={playing}>
+            {context && (
+              <p>
+                {context.map(({ w, i }) => (
+                  <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
+                    {w}{' '}
+                  </span>
+                ))}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       <footer className="reader-bottom chrome">
         <input
@@ -200,11 +237,11 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           value={index}
           onChange={(e) => seek(Number(e.target.value))}
           aria-label="Position in book"
-          style={{ '--fill': `${percent}%` } as React.CSSProperties}
+          style={{ '--progress': `${percent}%` } as React.CSSProperties}
         />
 
         <div className="deck">
-          <p className="deck-meta label muted">
+          <p className="deck-meta muted">
             {hasChapters && <span>{chapterLeft} left in chapter</span>}
             <span>
               {bookLeft} left{hasChapters && ' in book'} · {percent}%
@@ -235,7 +272,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             </button>
             <span className="speed-value">
               {wpm}
-              <span className="label muted"> wpm</span>
+              <span className="muted"> wpm</span>
             </span>
             <button type="button" className="icon-button" onClick={() => setWpm(wpm + WPM_STEP)} aria-label="Faster" title="Faster (↑)">
               +

@@ -14,7 +14,13 @@ const MAX_LAG_MS = 1000
  * "now + delay", so timer and render latency don't pile up into drift and
  * uneven rhythm.
  */
-export function useRsvp(weights: Float32Array, wpm: number, initialIndex = 0) {
+export function useRsvp(
+  weights: Float32Array,
+  wpm: number,
+  initialIndex = 0,
+  /** Extra milliseconds to hold word i, e.g. before a page turn. */
+  extraDelay?: (i: number) => number,
+) {
   const count = weights.length
   const [index, setIndexState] = useState(() => clamp(initialIndex, count))
   const [playing, setPlaying] = useState(false)
@@ -31,7 +37,8 @@ export function useRsvp(weights: Float32Array, wpm: number, initialIndex = 0) {
     if (!clock.current || clock.current.index !== index || now - clock.current.at > MAX_LAG_MS) {
       clock.current = { index, at: now }
     }
-    const duration = (60000 / wpm) * (weights[index] ?? 1) * (RAMP_UP[sincePlay.current] ?? 1)
+    const duration =
+      (60000 / wpm) * (weights[index] ?? 1) * (RAMP_UP[sincePlay.current] ?? 1) + (extraDelay?.(index) ?? 0)
     const due = clock.current.at + duration
     const timer = window.setTimeout(() => {
       sincePlay.current++
@@ -43,7 +50,7 @@ export function useRsvp(weights: Float32Array, wpm: number, initialIndex = 0) {
       setIndexState(index + 1)
     }, Math.max(0, due - performance.now()))
     return () => window.clearTimeout(timer)
-  }, [playing, index, wpm, weights, count])
+  }, [playing, index, wpm, weights, count, extraDelay])
 
   const play = useCallback(() => {
     sincePlay.current = 0

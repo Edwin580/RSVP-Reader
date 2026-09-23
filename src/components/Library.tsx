@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
 import { formatMinutes } from '../lib/rsvp'
 import type { BookMeta, Progress } from '../lib/types'
+import { Icon } from './Icon'
 
 interface Props {
   books: BookMeta[]
@@ -14,9 +15,7 @@ interface Props {
   onDelete: (id: string) => void
 }
 
-const FORMATS = ACCEPTED_EXTENSIONS.filter((e) => e !== '.markdown')
-  .map((e) => e.slice(1).toUpperCase())
-  .join(', ')
+const FORMATS = 'EPUB, PDF, TXT or Markdown'
 
 export function Library({ books, progress, wpm, busy, error, onUpload, onOpen, onDelete }: Props) {
   const input = useRef<HTMLInputElement>(null)
@@ -36,15 +35,34 @@ export function Library({ books, progress, wpm, busy, error, onUpload, onOpen, o
 
   return (
     <main className="library">
-      <header className="masthead">
-        <h1 className="wordmark">RSVP Reader</h1>
-        {books.length > 0 && (
-          <button type="button" className="button" onClick={choose} disabled={!!busy}>
-            Add a book
-          </button>
-        )}
+      <header className="library-header">
+        <h1>Library</h1>
+        <p className="muted">Speed-read your books one word at a time. Files stay on this device.</p>
       </header>
 
+      <button
+        type="button"
+        className={`dropzone${dragging ? ' dragging' : ''}`}
+        onClick={choose}
+        disabled={!!busy}
+      >
+        <Icon name="upload" size={26} />
+        {busy ? (
+          <span className="dropzone-title">{busy}</span>
+        ) : (
+          <>
+            <span className="dropzone-title">{dragging ? (
+                'Drop to add it'
+              ) : (
+                <>
+                  Drop a book here or <span className="on-touch">tap</span>
+                  <span className="on-mouse">click</span> to choose
+                </>
+              )}</span>
+            <span className="muted">{FORMATS}</span>
+          </>
+        )}
+      </button>
       <input
         ref={input}
         type="file"
@@ -57,65 +75,50 @@ export function Library({ books, progress, wpm, busy, error, onUpload, onOpen, o
         }}
       />
 
-      {busy && <p className="notice label">{busy}</p>}
       {error && (
-        <p className="notice error" role="alert">
+        <p className="error" role="alert">
           {error}
         </p>
       )}
 
-      {books.length === 0 ? (
-        <section className="empty">
-          <p className="empty-lead">Read a book one word at a time, without moving your eyes.</p>
-          <p className="muted">
-            Add an EPUB, PDF or text file. It stays on this device. Nothing is uploaded, and no account is needed.
-          </p>
-          <button type="button" className="button button-primary" onClick={choose} disabled={!!busy}>
-            Choose a file
-          </button>
-          <p className="label muted">or drop it anywhere on this page · {FORMATS}</p>
+      {sorted.length > 0 && (
+        <section>
+          <h2>Your books</h2>
+          <ul className="shelf">
+            {sorted.map((book) => {
+              const at = progress[book.id]?.index ?? 0
+              const fraction = book.wordCount > 1 ? at / (book.wordCount - 1) : 0
+              const percent = Math.round(fraction * 100)
+              const format = book.fileName.split('.').pop()?.toUpperCase()
+              const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
+              const status = percent === 0 ? `${left} to read` : percent === 100 ? 'Finished' : `${percent}% · ${left} left`
+              return (
+                <li key={book.id} className="shelf-item">
+                  <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
+                    <span className="shelf-title">{book.title}</span>
+                    <span className="shelf-meta muted">
+                      {format} · {book.wordCount.toLocaleString()} words · {status}
+                    </span>
+                    <span className="bar" aria-hidden="true">
+                      <span style={{ width: `${percent}%` }} />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button shelf-remove"
+                    aria-label={`Remove ${book.title}`}
+                    title="Remove"
+                    onClick={() => {
+                      if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
+                    }}
+                  >
+                    <Icon name="trash" size={19} />
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </section>
-      ) : (
-        <ol className="shelf">
-          {sorted.map((book) => {
-            const at = progress[book.id]?.index ?? 0
-            const fraction = book.wordCount > 1 ? at / (book.wordCount - 1) : 0
-            const percent = Math.round(fraction * 100)
-            const format = book.fileName.split('.').pop()?.toUpperCase()
-            const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
-            return (
-              <li key={book.id} className="shelf-item">
-                <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
-                  <span className="shelf-title">{book.title}</span>
-                  <span className="label muted">
-                    {format} · {book.wordCount.toLocaleString()} words ·{' '}
-                    {percent === 0 ? `${left} to read` : percent === 100 ? 'finished' : `${left} left`}
-                  </span>
-                  <span className="shelf-percent label">{percent}%</span>
-                  <span className="rule" aria-hidden="true">
-                    <span style={{ width: `${percent}%` }} />
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="shelf-remove label"
-                  aria-label={`Remove ${book.title}`}
-                  onClick={() => {
-                    if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
-                  }}
-                >
-                  Remove
-                </button>
-              </li>
-            )
-          })}
-        </ol>
-      )}
-
-      {dragging && (
-        <div className="drop-overlay" aria-hidden="true">
-          <p>Drop to add to your library</p>
-        </div>
       )}
     </main>
   )
