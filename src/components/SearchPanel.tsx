@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { SearchResult } from '../lib/search'
 import type { BookSearch } from '../lib/searchClient'
 import type { Chapter } from '../lib/types'
+import { Icon } from './Icon'
 
 interface Props {
   bookSearch: BookSearch
@@ -76,7 +77,7 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
             aria-label="Search text"
           />
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close search">
-            ✕
+            <Icon name="close" size={18} />
           </button>
         </div>
         {query.trim() && (

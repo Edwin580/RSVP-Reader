@@ -97,6 +97,7 @@ export default function App() {
     <Library
       books={books}
       progress={progress}
+      wpm={settings.wpm}
       busy={busy}
       error={error}
       onUpload={handleUpload}

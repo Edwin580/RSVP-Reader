@@ -1,4 +1,5 @@
 import { createStore, del, get, set } from 'idb-keyval'
+import type { WordTiming } from './rsvp'
 import type { Book, BookMeta, Progress } from './types'
 
 /**
@@ -53,9 +54,11 @@ const SETTINGS_KEY = 'rsvp-settings'
 export interface Settings {
   wpm: number
   fontSize: number
+  /** 'natural' gives longer words slightly more time; 'even' shows every word equally long. */
+  wordTiming: WordTiming
 }
 
-export const DEFAULT_SETTINGS: Settings = { wpm: 300, fontSize: 56 }
+export const DEFAULT_SETTINGS: Settings = { wpm: 300, fontSize: 56, wordTiming: 'natural' }
 
 export function loadSettings(): Settings {
   try {
