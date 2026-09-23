@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildTimeline,
   formatMinutes,
+  isSentenceEnd,
   lengthFactor,
   minutesBetween,
   nextSentence,
@@ -97,5 +98,25 @@ describe('sentence navigation', () => {
     expect(nextSentence(words, 0)).toBe(2)
     expect(nextSentence(words, 3)).toBe(5)
     expect(nextSentence(words, 6)).toBe(6)
+  })
+})
+
+describe('isSentenceEnd', () => {
+  it('recognises sentence endings, including inside quotes', () => {
+    for (const w of ['end.', 'what?', 'no!', 'said.”', 'wait…', 'No.', 'etc.', 'I.']) expect(isSentenceEnd(w)).toBe(true)
+  })
+
+  it('does not treat titles, initials or abbreviations as endings', () => {
+    for (const w of ['Mr.', 'Mrs.', '“Dr.', 'St.', 'e.g.', 'i.e.', 'U.S.', 'J.', 'vs.']) expect(isSentenceEnd(w)).toBe(false)
+  })
+})
+
+describe('buildTimeline headings', () => {
+  it('gives heading words a little extra time and still averages 1', () => {
+    const words = 'Chapter One It was a dark night.'.split(' ')
+    const plain = buildTimeline(words, [1, 6])
+    const withHeading = buildTimeline(words, [1, 6], 'natural', [{ start: 0, end: 1 }])
+    expect(withHeading.weights[0] / withHeading.weights[3]).toBeGreaterThan(plain.weights[0] / plain.weights[3])
+    expect(withHeading.weights.reduce((a, b) => a + b, 0) / words.length).toBeCloseTo(1, 5)
   })
 })

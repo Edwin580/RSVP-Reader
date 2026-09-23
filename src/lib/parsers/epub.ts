@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import type { Section } from '../text'
+import { isChapterHeading, type Section } from '../text'
 
 const BLOCK_TAGS = new Set([
   'address', 'article', 'aside', 'blockquote', 'dd', 'div', 'dl', 'dt',
@@ -27,13 +27,23 @@ function resolvePath(base: string, href: string): string {
   return parts.join('/')
 }
 
-/** Walk the DOM collecting text, emitting a paragraph break around block elements. */
-function extractParagraphs(root: Element): string[] {
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+
+/**
+ * Walk the DOM collecting text, emitting a paragraph break around block
+ * elements, and noting which paragraphs came from heading elements.
+ */
+function extractParagraphs(root: Element): { paragraphs: string[]; headings: number[] } {
   const paragraphs: string[] = []
+  const headings: number[] = []
   let current = ''
+  let inHeading = 0
   const flush = () => {
     const text = current.replace(/\s+/g, ' ').trim()
-    if (text) paragraphs.push(text)
+    if (text) {
+      if (inHeading > 0) headings.push(paragraphs.length)
+      paragraphs.push(text)
+    }
     current = ''
   }
   const walk = (node: Node) => {
@@ -48,14 +58,19 @@ function extractParagraphs(root: Element): string[] {
       current += ' '
       return
     }
-    const block = BLOCK_TAGS.has(tag)
+    const heading = HEADING_TAGS.has(tag)
+    const block = heading || BLOCK_TAGS.has(tag)
     if (block) flush()
+    if (heading) inHeading++
     node.childNodes.forEach(walk)
     if (block) flush()
+    if (heading) inHeading--
   }
   walk(root)
   flush()
-  return paragraphs
+  // Some books style headings as ordinary paragraphs ("<p class=ct>CHAPTER I</p>").
+  if (headings.length === 0 && paragraphs.length > 1 && isChapterHeading(paragraphs[0])) headings.push(0)
+  return { paragraphs, headings }
 }
 
 export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; sections: Section[] }> {
@@ -91,11 +106,13 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
 
     const doc = parseXml(await read(path), 'application/xhtml+xml')
     const body = doc.getElementsByTagName('body')[0] ?? doc.documentElement
-    const paragraphs = extractParagraphs(body)
+    const { paragraphs, headings } = extractParagraphs(body)
     if (paragraphs.length === 0) continue
 
-    const heading = body.querySelector('h1, h2, h3')?.textContent?.replace(/\s+/g, ' ').trim()
-    sections.push({ title: heading || doc.querySelector('title')?.textContent?.trim(), paragraphs })
+    // Title from the opening heading(s): "Chapter 1" + "The Beginning" → "Chapter 1: The Beginning".
+    const lead = headings[0] === 0 ? (headings[1] === 1 ? [0, 1] : [0]) : []
+    const title = lead.map((i) => paragraphs[i].replace(/[.:]$/, '')).join(': ')
+    sections.push({ title: title || doc.querySelector('title')?.textContent?.trim(), paragraphs, headings })
   }
 
   if (sections.length === 0) throw new Error('No readable text found in this EPUB')
