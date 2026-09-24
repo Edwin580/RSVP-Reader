@@ -7,6 +7,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser.
+- **Demo for first-time visitors**: while the library is empty, a "Try the demo" card opens a short sample (tips plus the opening of *Alice's Adventures in Wonderland*, public domain) to try both reading modes, chapters and search. The sample is never saved and the card disappears once you add a book.
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
   - **Page**: guided reading. The book is laid out as pages that fit your screen. The current word is softly highlighted and a thin pacer line sweeps steadily along each line at your chosen speed (the first word of each line gets a beat more for the return sweep), and the page turns itself when you reach the end: the old page slides out as the new one slides in, the marker fades in on the first word, and that word gets a little extra time so your eyes can move to the top. Pages end at a sentence when one falls on the last two lines. Tap any word to jump there. Pages are measured to fit exactly and re-flow when you rotate or resize.
@@ -59,6 +60,7 @@ npm run build    # type-check and build for production
 ```
 src/
   lib/
+    demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
     pages.ts           page anchoring and paragraph grouping for page mode
     search.ts          full-text search: word index, word forms, related passages, typo fallback
