@@ -9,10 +9,15 @@ import type { Book, BookMeta, Progress } from './lib/types'
 interface OpenBook {
   book: Book
   startIndex: number
+  /** The built-in sample: not in the library, and its progress isn't saved. */
+  demo?: boolean
 }
 
 export default function App() {
   const [books, setBooks] = useState<BookMeta[]>([])
+  // The demo is offered only once we know the library is empty, so it never
+  // flashes up while a returning reader's books are still loading.
+  const [libraryLoaded, setLibraryLoaded] = useState(false)
   const [progress, setProgress] = useState<Record<string, Progress | undefined>>({})
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -24,6 +29,7 @@ export default function App() {
     const entries = await Promise.all(list.map(async (b) => [b.id, await storage.loadProgress(b.id)] as const))
     setBooks(list)
     setProgress(Object.fromEntries(entries))
+    setLibraryLoaded(true)
   }, [])
 
   useEffect(() => {
@@ -58,12 +64,18 @@ export default function App() {
     else setError('That book is no longer stored. Please upload it again.')
   }
 
+  const handleDemo = async () => {
+    setError(null)
+    const { createDemoBook } = await import('./lib/demo')
+    setOpen({ book: createDemoBook(), startIndex: 0, demo: true })
+  }
+
   const handleDelete = async (id: string) => {
     await storage.deleteBook(id)
     await refreshLibrary()
   }
 
-  const bookId = open?.book.id
+  const bookId = open?.demo ? undefined : open?.book.id
   const handleProgress = useCallback(
     (index: number) => {
       if (bookId) storage.saveProgress(bookId, index).catch(() => {})
@@ -100,6 +112,8 @@ export default function App() {
       wpm={settings.wpm}
       busy={busy}
       error={error}
+      showDemo={libraryLoaded && books.length === 0 && !busy}
+      onDemo={handleDemo}
       onUpload={handleUpload}
       onOpen={handleOpen}
       onDelete={handleDelete}

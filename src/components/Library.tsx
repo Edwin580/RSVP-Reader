@@ -10,6 +10,9 @@ interface Props {
   wpm: number
   busy: string | null
   error: string | null
+  /** Offer the built-in sample (only while the library is empty). */
+  showDemo: boolean
+  onDemo: () => void
   onUpload: (file: File) => void
   onOpen: (id: string) => void
   onDelete: (id: string) => void
@@ -17,7 +20,7 @@ interface Props {
 
 const FORMATS = 'EPUB, PDF, TXT or Markdown'
 
-export function Library({ books, progress, wpm, busy, error, onUpload, onOpen, onDelete }: Props) {
+export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, onUpload, onOpen, onDelete }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const dragging = useWindowFileDrag((file) => !busy && onUpload(file))
 
@@ -74,6 +77,22 @@ export function Library({ books, progress, wpm, busy, error, onUpload, onOpen, o
           e.target.value = ''
         }}
       />
+
+      {showDemo && (
+        <section className="demo">
+          <div>
+            <h2>No book handy?</h2>
+            <p className="muted">
+              Try a short sample from <em>Alice’s Adventures in Wonderland</em>. It takes a few minutes and shows both
+              reading modes, chapters and search. Nothing is added to your library.
+            </p>
+          </div>
+          <button type="button" className="demo-button" onClick={onDemo}>
+            <Icon name="play" size={18} />
+            Try the demo
+          </button>
+        </section>
+      )}
 
       {error && (
         <p className="error" role="alert">
