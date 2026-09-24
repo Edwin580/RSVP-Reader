@@ -421,6 +421,7 @@ h1, h2, p { margin: 0; }
   z-index: 20;
   animation: fade-in 0.15s ease;
 }
+.popover-backdrop { position: fixed; inset: 0; z-index: 19; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .setting-stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
 .setting-name { font-weight: 600; }
@@ -533,7 +534,8 @@ kbd {
   .deck-meta { grid-row: 2; }
   .speed { grid-row: 2; }
 
-  /* Settings become a bottom sheet within thumb reach. */
+  /* Settings become a bottom sheet within thumb reach, over a dimmed page. */
+  .popover-backdrop { background: rgb(28 22 12 / 0.25); animation: fade-in 0.2s ease; }
   .popover {
     position: fixed;
     top: auto;
