@@ -43,7 +43,10 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const { request } = event
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return
+  const url = new URL(request.url)
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return
+  // Pull request previews live under this app's path but are separate apps; leave them alone.
+  if (url.pathname.startsWith(new URL('pr-preview/', self.registration.scope).pathname)) return
   event.respondWith(request.mode === 'navigate' ? navigation(request) : cacheFirst(request))
 })
 
