@@ -17,6 +17,8 @@ interface Props {
   settings: Settings
   onSettings: (settings: Settings) => void
   onProgress: (index: number) => void
+  /** Reports reading time (while playing) and words read, for statistics. */
+  onReadingTime: (ms: number, words: number) => void
   onClose: () => void
 }
 
@@ -34,7 +36,7 @@ const LINE_RETURN = 0.3
 const JUMP_BACK_MIN_WORDS = 50
 const JUMP_BACK_MS = 8000
 
-export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
+export function Reader({ book, initialIndex, settings, onSettings, onProgress, onReadingTime, onClose }: Props) {
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode } = settings
   const headings = useMemo(() => book.headings ?? [], [book.headings])
@@ -109,6 +111,8 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
   useEffect(() => {
     current.current = index
   }, [index])
+
+  useReadingTime(playing, index, wpm, onReadingTime)
   useEffect(() => () => onProgress(current.current), [onProgress])
 
   const setWpm = (next: number) => onSettings({ ...settings, wpm: Math.max(MIN_WPM, Math.min(MAX_WPM, next)) })
@@ -348,6 +352,46 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
       )}
     </main>
   )
+}
+
+/** Report reading while playing: every 30s, on pause, and when the reader closes. */
+const STATS_FLUSH_MS = 30_000
+
+/**
+ * Counts time spent playing and the words the clock moved through (not
+ * jumps), and reports them periodically. Time is capped at twice what the
+ * words should have taken, so a phone asleep or a background tab mid-play
+ * doesn't count as hours of reading.
+ */
+function useReadingTime(playing: boolean, index: number, wpm: number, report: (ms: number, words: number) => void) {
+  const session = useRef<{ at: number; words: number } | null>(null)
+  const previous = useRef(index)
+  const pace = useRef(wpm)
+  useEffect(() => {
+    pace.current = wpm
+  }, [wpm])
+  useEffect(() => {
+    if (playing && session.current && index === previous.current + 1) session.current.words++
+    previous.current = index
+  }, [index, playing])
+  useEffect(() => {
+    if (!playing) return
+    session.current = { at: performance.now(), words: 0 }
+    const flush = () => {
+      const s = session.current
+      if (!s) return
+      const now = performance.now()
+      const ms = Math.min(now - s.at, ((s.words * 60000) / pace.current) * 2)
+      if (s.words > 0) report(ms, s.words)
+      session.current = { at: now, words: 0 }
+    }
+    const timer = window.setInterval(flush, STATS_FLUSH_MS)
+    return () => {
+      window.clearInterval(timer)
+      flush()
+      session.current = null
+    }
+  }, [playing, report])
 }
 
 /** True after `ms` without pointer/keyboard activity, while `active`. */

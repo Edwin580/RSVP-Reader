@@ -1,5 +1,6 @@
-import { createStore, del, get, set } from 'idb-keyval'
+import { createStore, del, get, set, update } from 'idb-keyval'
 import type { WordTiming } from './rsvp'
+import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
 import type { Book, BookMeta, Progress } from './types'
 
 /**
@@ -47,6 +48,17 @@ export function loadProgress(id: string): Promise<Progress | undefined> {
 
 export function saveProgress(id: string, index: number): Promise<void> {
   return set(progressKey(id), { index, updatedAt: Date.now() } satisfies Progress, store)
+}
+
+const STATS_KEY = 'stats'
+
+export async function loadStats(): Promise<ReadingStats> {
+  return (await get<ReadingStats>(STATS_KEY, store)) ?? EMPTY_STATS
+}
+
+/** Add a stretch of reading to today's totals. */
+export function recordReading(ms: number, words: number): Promise<void> {
+  return update<ReadingStats>(STATS_KEY, (stats) => addReading(stats ?? EMPTY_STATS, new Date(), ms, words), store)
 }
 
 const SETTINGS_KEY = 'rsvp-settings'
