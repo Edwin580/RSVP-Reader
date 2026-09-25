@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
 import { navigate } from './components/transition'
+import { applyAppearance } from './lib/appearance'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import * as storage from './lib/storage'
@@ -87,6 +88,7 @@ export default function App() {
   )
 
   const handleSettings = (next: storage.Settings) => {
+    applyAppearance(next)
     setSettings(next)
     storage.saveSettings(next)
   }

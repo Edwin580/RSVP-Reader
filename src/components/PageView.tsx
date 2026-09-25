@@ -12,6 +12,8 @@ interface Props {
   index: number
   playing: boolean
   scale: number
+  /** The reading font setting; pages are re-measured when it changes. */
+  font?: string
   /** How long the current word is shown, so the marker moves at reading pace. */
   wordMs: number
   /** Extra time the reader adds to the first word of a line, and of a new page. */
@@ -58,6 +60,7 @@ export function PageView({
   index,
   playing,
   scale,
+  font,
   wordMs,
   lineReturnMs,
   turnMs,
@@ -162,13 +165,14 @@ export function PageView({
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
-  const firstScale = useRef(scale)
+  const layout = `${scale} ${font}`
+  const firstLayout = useRef(layout)
   useLayoutEffect(() => {
-    if (firstScale.current === scale) return
-    firstScale.current = scale
+    if (firstLayout.current === layout) return
+    firstLayout.current = layout
     known.current.clear()
     setPage((p) => ({ start: p.start, end: null, turn: null }))
-  }, [scale])
+  }, [layout])
 
   useLayoutEffect(() => {
     if (!navRef) return

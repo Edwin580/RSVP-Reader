@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { WordTiming } from '../lib/rsvp'
-import type { ReadingMode, Settings } from '../lib/storage'
+import type { Accent, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -22,6 +22,26 @@ const TIMINGS: { value: WordTiming; label: string; hint: string }[] = [
 const MODES: { value: ReadingMode; label: string; hint: string }[] = [
   { value: 'word', label: 'Word', hint: 'One word at a time in a fixed spot' },
   { value: 'page', label: 'Page', hint: 'Full pages with a marker that follows along' },
+]
+
+const THEME_OPTIONS: { value: Theme; label: string }[] = [
+  { value: 'system', label: 'Auto' },
+  { value: 'light', label: 'Light' },
+  { value: 'sepia', label: 'Sepia' },
+  { value: 'dark', label: 'Dark' },
+]
+
+const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
+  { value: 'sans', label: 'Sans' },
+  { value: 'serif', label: 'Serif' },
+]
+
+/** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
+const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
+  { value: 'red', label: 'Red', color: '#c23b25' },
+  { value: 'blue', label: 'Blue', color: '#2d5bb5' },
+  { value: 'green', label: 'Green', color: '#2f7a45' },
+  { value: 'purple', label: 'Purple', color: '#7a45b8' },
 ]
 
 const SHORTCUTS: [string, string][] = [
@@ -99,6 +119,61 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
             ))}
           </div>
           <span className="hint">{timingHint}</span>
+        </div>
+
+        <div className="setting setting-stack">
+          <span className="setting-name">Theme</span>
+          <div className="segmented" role="radiogroup" aria-label="Theme">
+            {THEME_OPTIONS.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                role="radio"
+                aria-checked={settings.theme === t.value}
+                onClick={() => onSettings({ ...settings, theme: t.value })}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {settings.theme === 'system' && <span className="hint">Follows your device’s light or dark setting</span>}
+        </div>
+
+        <div className="setting">
+          <span className="setting-name">Font</span>
+          <div className="segmented" role="radiogroup" aria-label="Font">
+            {FONT_OPTIONS.map((f) => (
+              <button
+                key={f.value}
+                type="button"
+                role="radio"
+                className={f.value === 'serif' ? 'serif' : undefined}
+                aria-checked={settings.font === f.value}
+                onClick={() => onSettings({ ...settings, font: f.value })}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setting">
+          <span className="setting-name">Focus color</span>
+          <div className="swatches" role="radiogroup" aria-label="Focus color">
+            {ACCENT_OPTIONS.map((a) => (
+              <button
+                key={a.value}
+                type="button"
+                role="radio"
+                className="swatch"
+                aria-checked={settings.accent === a.value}
+                aria-label={a.label}
+                title={a.label}
+                style={{ '--swatch': a.color } as React.CSSProperties}
+                onClick={() => onSettings({ ...settings, accent: a.value })}
+              />
+            ))}
+          </div>
         </div>
 
         <dl className="shortcuts">
