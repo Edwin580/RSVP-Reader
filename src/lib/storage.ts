@@ -1,4 +1,5 @@
 import { createStore, del, get, set } from 'idb-keyval'
+import { storageName } from './preview'
 import type { WordTiming } from './rsvp'
 import type { Book, BookMeta, Progress } from './types'
 
@@ -6,7 +7,7 @@ import type { Book, BookMeta, Progress } from './types'
  * Local-first persistence in IndexedDB. Keeping all access behind these
  * functions means they can later be swapped for (or synced with) a backend.
  */
-const store = createStore('rsvp-reader', 'kv')
+const store = createStore(storageName('rsvp-reader'), 'kv')
 
 const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
@@ -49,7 +50,7 @@ export function saveProgress(id: string, index: number): Promise<void> {
   return set(progressKey(id), { index, updatedAt: Date.now() } satisfies Progress, store)
 }
 
-const SETTINGS_KEY = 'rsvp-settings'
+const SETTINGS_KEY = storageName('rsvp-settings')
 
 export interface Settings {
   wpm: number

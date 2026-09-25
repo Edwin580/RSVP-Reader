@@ -8,6 +8,8 @@ interface Props {
   bookSearch: BookSearch
   words: string[]
   chapters: Chapter[]
+  /** Animating out; the reader unmounts it shortly after. */
+  closing?: boolean
   onSelect: (index: number) => void
   onClose: () => void
 }
@@ -17,7 +19,7 @@ const PAGE = 30
 const CONTEXT_WORDS = 7
 const NO_RESULT: SearchResult = { matches: [], related: [], totalMatches: 0, totalRelated: 0 }
 
-export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: Props) {
+export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   // The query the current results belong to, so stale results are never shown as fresh.
@@ -88,7 +90,7 @@ export function SearchPanel({ bookSearch, words, chapters, onSelect, onClose }: 
     )
 
   return (
-    <div className="search-backdrop" onClick={onClose}>
+    <div className={`search-backdrop${closing ? ' is-closing' : ''}`} onClick={onClose}>
       <aside
         className="search-panel"
         role="dialog"
