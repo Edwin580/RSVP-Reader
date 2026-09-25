@@ -7,6 +7,7 @@ import { applyAppearance } from './lib/appearance'
 import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
+import { EMPTY_STATS } from './lib/stats'
 import * as storage from './lib/storage'
 import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
 
@@ -23,6 +24,7 @@ export default function App() {
   // flashes up while a returning reader's books are still loading.
   const [libraryLoaded, setLibraryLoaded] = useState(false)
   const [progress, setProgress] = useState<Record<string, Progress | undefined>>({})
+  const [stats, setStats] = useState(EMPTY_STATS)
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [busy, setBusy] = useState<string | null>(null)
@@ -38,6 +40,7 @@ export default function App() {
     const entries = await Promise.all(list.map(async (b) => [b.id, await storage.loadProgress(b.id)] as const))
     setBooks(list)
     setProgress(Object.fromEntries(entries))
+    setStats(await storage.loadStats())
     setLibraryLoaded(true)
   }, [])
 
@@ -154,6 +157,14 @@ export default function App() {
     if (bookId) storage.saveBookmarks(bookId, next).catch(() => {})
   }
 
+  const demo = !!open?.demo
+  const handleReadingTime = useCallback(
+    (ms: number, words: number) => {
+      if (!demo) storage.recordReading(ms, words).catch(() => {})
+    },
+    [demo],
+  )
+
   const handleSettings = (next: storage.Settings) => {
     applyAppearance(next)
     setSettings(next)
@@ -171,6 +182,7 @@ export default function App() {
         onProgress={handleProgress}
         bookmarks={bookmarks}
         onBookmarks={handleBookmarks}
+        onReadingTime={handleReadingTime}
         onClose={() => {
           navigate('back', () => setOpen(null))
           refreshLibrary().catch(() => {})
@@ -184,6 +196,7 @@ export default function App() {
       <Library
         books={books}
         progress={progress}
+        stats={stats}
         wpm={settings.wpm}
         busy={busy}
         error={error}

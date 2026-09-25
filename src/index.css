@@ -158,6 +158,66 @@ h1, h2, p { margin: 0; }
 .library-header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; }
 .library-header p { margin-top: 0.3rem; }
 
+/* Reading stats: one quiet line under the title that opens a small card. */
+.reading-stats { margin-top: 0.6rem; }
+.stats-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 32px;
+  margin-left: -0.5rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.18s ease-out;
+}
+.stats-toggle svg { transition: transform 0.2s ease; }
+.reading-stats.is-open .stats-toggle svg { transform: rotate(90deg); }
+.stats-toggle:active { background: var(--fill); transition-duration: 0.05s; }
+@media (hover: hover) {
+  .stats-toggle:hover { background: var(--fill); color: var(--text); }
+}
+.stats-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1rem 1.5rem;
+  align-items: end;
+  margin-top: 0.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  animation: stats-open 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes stats-open { from { opacity: 0; transform: translateY(-4px); } }
+.stats-week { display: flex; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.stats-week li { display: grid; justify-items: center; gap: 0.3rem; }
+.stats-bar-track { display: flex; align-items: flex-end; width: 14px; height: 56px; }
+.stats-bar { width: 100%; border-radius: 4px; background: color-mix(in srgb, var(--text-2) 45%, transparent); }
+.stats-bar.is-empty { height: 4px; background: var(--fill); }
+.stats-week .is-today .stats-bar:not(.is-empty) { background: var(--accent); }
+.stats-day { font-size: 0.7rem; color: var(--text-2); }
+.stats-week .is-today .stats-day { color: var(--text); font-weight: 700; }
+.stats-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem 1rem; margin: 0; }
+.stats-figures dt { font-size: 0.75rem; color: var(--text-2); }
+.stats-figures dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) {
+  .stats-card { grid-template-columns: 1fr; }
+  .stats-week { justify-content: space-between; }
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .dropzone {
   width: 100%;
   display: flex;

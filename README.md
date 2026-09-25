@@ -25,6 +25,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
+- **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with a bar for each of the last 7 days, time read, your real average speed, streak and words read. Only time with the words moving counts, the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
 - **Book covers**: the library shows each EPUB's cover image and a PDF's first page as its cover; other books get a plain cloth cover with the title. (Books added before covers were supported get the plain cover; add the file again to pick up its cover.)
 - **Works offline**: after your first visit the whole app is cached on the device, so it opens and reads without a connection (handy once it's added to your Home Screen). When you're online, new versions load as soon as they're deployed.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on. The app asks the browser to keep this data permanently (Safari otherwise clears site data that goes unused for about a week).
@@ -85,10 +86,11 @@ src/
     assemble.ts        text → words, paragraphs, chapters (runs in the parse worker)
     parseClient.ts     runs assembly in a Web Worker (main-thread fallback)
     preview.ts         pull request preview builds: separate storage, preview label
+    stats.ts           reading time per day, average speed and streak
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts, parse.worker.ts
-  components/          Library, Reader, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
+  components/          Library, ReadingStats, Reader, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
 ```
 
 ## Roadmap

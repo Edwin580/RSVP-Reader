@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
 import { IS_PREVIEW, PREVIEW_PR } from '../lib/preview'
 import { formatMinutes } from '../lib/rsvp'
+import type { ReadingStats as Stats } from '../lib/stats'
 import type { BookMeta, Progress } from '../lib/types'
 import { Icon } from './Icon'
+import { ReadingStats } from './ReadingStats'
 
 interface Props {
   books: BookMeta[]
   progress: Record<string, Progress | undefined>
+  stats: Stats
   wpm: number
   busy: string | null
   error: string | null
@@ -40,6 +43,7 @@ function formatDate(at: number, now: number): string {
 export function Library({
   books,
   progress,
+  stats,
   wpm,
   busy,
   error,
@@ -83,6 +87,7 @@ export function Library({
         )}
         <h1>Library</h1>
         <p className="muted">Speed-read your books one word at a time. Files stay on this device.</p>
+        <ReadingStats stats={stats} />
       </header>
 
       <button
