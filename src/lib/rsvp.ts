@@ -40,6 +40,8 @@ export function lengthFactor(letters: number): number {
 /** Extra time after punctuation, so sentence boundaries have room to land. */
 export function pauseFactor(word: string, paragraphEnd: boolean): number {
   if (paragraphEnd) return 1.5
+  // Most words end in a letter or digit and can't end a sentence or clause.
+  if (isAsciiAlnum(word.charCodeAt(word.length - 1))) return 0
   if (isSentenceEnd(word)) return 1.2
   if (CLAUSE_END.test(word)) return 0.5
   return 0
@@ -47,8 +49,30 @@ export function pauseFactor(word: string, paragraphEnd: boolean): number {
 
 /** Un-normalised display weight of one word. */
 export function wordWeight(word: string, paragraphEnd: boolean, timing: WordTiming = 'natural'): number {
-  const letters = word.replace(/[^\p{L}\p{N}]/gu, '').length
-  return (timing === 'natural' ? lengthFactor(letters) : 1) + pauseFactor(word, paragraphEnd)
+  return (timing === 'natural' ? lengthFactor(countLetters(word)) : 1) + pauseFactor(word, paragraphEnd)
+}
+
+const isAsciiAlnum = (c: number) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57)
+const LETTER_OR_DIGIT = /^[\p{L}\p{N}]$/u
+
+/**
+ * Letters and digits in a word, counted in UTF-16 units like
+ * `word.replace(/[^\p{L}\p{N}]/gu, '').length`, but without a regex for
+ * plain ASCII. This runs for every word of the book when it opens.
+ */
+export function countLetters(word: string): number {
+  let n = 0
+  for (let i = 0; i < word.length; i++) {
+    const c = word.charCodeAt(i)
+    if (isAsciiAlnum(c)) n++
+    else if (c > 127) {
+      const astral = c >= 0xd800 && c <= 0xdbff && i + 1 < word.length
+      const ch = astral ? word.slice(i, i + 2) : word[i]
+      if (LETTER_OR_DIGIT.test(ch)) n += ch.length
+      if (astral) i++
+    }
+  }
+  return n
 }
 
 /**
@@ -72,9 +96,11 @@ export function buildTimeline(
   timing: WordTiming = 'natural',
   headings: { start: number; end: number }[] = [],
 ): Timeline {
-  const ends = new Set(paragraphEnds)
+  // A flag per word is much faster to check than a Set, and this runs for every word.
+  const ends = new Uint8Array(words.length)
+  for (const i of paragraphEnds) if (i >= 0 && i < words.length) ends[i] = 1
   const raw = new Float64Array(words.length)
-  for (let i = 0; i < words.length; i++) raw[i] = wordWeight(words[i], ends.has(i), timing)
+  for (let i = 0; i < words.length; i++) raw[i] = wordWeight(words[i], ends[i] === 1, timing)
   for (const h of headings) for (let i = h.start; i <= h.end && i < words.length; i++) raw[i] += HEADING_EXTRA
   let total = 0
   for (let i = 0; i < words.length; i++) total += raw[i]
