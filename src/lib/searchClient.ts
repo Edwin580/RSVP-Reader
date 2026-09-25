@@ -22,6 +22,7 @@ export class BookSearch {
   private pending = new Map<number, { query: string; limit: number; resolve: (r: SearchResult) => void }>()
   private readonly id: string
   private readonly words: string[]
+  private indexTimer: ReturnType<typeof setTimeout> | undefined
 
   constructor(id: string, words: string[]) {
     this.id = id
@@ -36,10 +37,20 @@ export class BookSearch {
       this.pending.delete(e.data.reqId)
     }
     this.worker.onerror = () => this.useFallback()
-    this.post({ type: 'index', id, text: words.join('\n') })
+    // Copying a long book to the worker takes a moment, so do it in its own
+    // task after the reader has shown the first word, not while it opens.
+    this.indexTimer = setTimeout(() => this.sendIndex(), 0)
+  }
+
+  private sendIndex() {
+    if (this.indexTimer === undefined) return
+    clearTimeout(this.indexTimer)
+    this.indexTimer = undefined
+    this.post({ type: 'index', id: this.id, text: this.words.join('\n') })
   }
 
   query(query: string, limit = 200): Promise<SearchResult> {
+    this.sendIndex()
     if (!this.worker) {
       this.fallback ??= buildSearchIndex(this.words)
       return Promise.resolve(search(this.fallback, query, limit))
@@ -52,6 +63,8 @@ export class BookSearch {
   }
 
   dispose(): void {
+    clearTimeout(this.indexTimer)
+    this.indexTimer = undefined
     this.worker?.terminate()
     this.worker = null
     this.pending.clear()
