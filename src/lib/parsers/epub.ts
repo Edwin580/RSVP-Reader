@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import { pickCoverItem, thumbnail, type ManifestItem } from '../covers'
 import { isChapterHeading, type Section } from '../text'
 
 const BLOCK_TAGS = new Set([
@@ -73,7 +74,7 @@ function extractParagraphs(root: Element): { paragraphs: string[]; headings: num
   return { paragraphs, headings }
 }
 
-export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; sections: Section[] }> {
+export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; sections: Section[]; cover?: string }> {
   const zip = await JSZip.loadAsync(data)
   const read = async (path: string) => {
     const file = zip.file(path)
@@ -88,11 +89,14 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
 
   const title = opf.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() || undefined
 
-  const manifest = new Map<string, { href: string; type: string }>()
+  const manifest = new Map<string, ManifestItem>()
   for (const item of Array.from(opf.getElementsByTagNameNS('*', 'item'))) {
-    manifest.set(item.getAttribute('id') ?? '', {
+    const id = item.getAttribute('id') ?? ''
+    manifest.set(id, {
+      id,
       href: item.getAttribute('href') ?? '',
       type: item.getAttribute('media-type') ?? '',
+      properties: item.getAttribute('properties') ?? '',
     })
   }
 
@@ -116,5 +120,15 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
   }
 
   if (sections.length === 0) throw new Error('No readable text found in this EPUB')
-  return { title, sections }
+  return { title, sections, cover: await epubCover(zip, opf, opfPath, manifest) }
+}
+
+async function epubCover(zip: JSZip, opf: Document, opfPath: string, manifest: Map<string, ManifestItem>) {
+  const metaCover = Array.from(opf.getElementsByTagNameNS('*', 'meta'))
+    .find((m) => m.getAttribute('name') === 'cover')
+    ?.getAttribute('content')
+  const item = pickCoverItem([...manifest.values()], metaCover)
+  const file = item && zip.file(resolvePath(opfPath, item.href))
+  if (!item || !file) return undefined
+  return thumbnail(new Blob([await file.async('arraybuffer')], { type: item.type }))
 }

@@ -14,6 +14,8 @@ export interface Book {
   chapters: Chapter[]
   /** Word ranges (inclusive) that are chapter or section headings. Absent in books saved before headings were detected. */
   headings?: { start: number; end: number }[]
+  /** Cover thumbnail (data URL) found while parsing; saved with the library entry, not the book. */
+  cover?: string
 }
 
 export interface BookMeta {
@@ -22,6 +24,8 @@ export interface BookMeta {
   fileName: string
   wordCount: number
   addedAt: number
+  /** Cover thumbnail as a data URL, for EPUBs with a cover image and PDFs (first page). */
+  cover?: string
 }
 
 export interface Progress {
