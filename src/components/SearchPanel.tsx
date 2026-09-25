@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import type { SearchHit, SearchResult } from '../lib/search'
 import type { BookSearch } from '../lib/searchClient'
 import type { Chapter } from '../lib/types'
+import { useVisualViewport } from '../hooks/useVisualViewport'
 import { Icon } from './Icon'
 
 interface Props {
@@ -25,6 +26,7 @@ export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, on
   // The query the current results belong to, so stale results are never shown as fresh.
   const [answered, setAnswered] = useState<{ query: string; result: SearchResult } | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  const viewport = useVisualViewport()
 
   useEffect(() => {
     let cancelled = false
@@ -90,7 +92,11 @@ export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, on
     )
 
   return (
-    <div className={`search-backdrop${closing ? ' is-closing' : ''}`} onClick={onClose}>
+    <div
+      className={`search-backdrop${closing ? ' is-closing' : ''}`}
+      style={viewport ? { top: viewport.top, height: viewport.height, bottom: 'auto' } : undefined}
+      onClick={onClose}
+    >
       <aside
         className="search-panel"
         role="dialog"
@@ -127,7 +133,11 @@ export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, on
           </button>
         </div>
 
-        <div className={`search-body${searching && asked ? ' stale' : ''}`} aria-live="polite">
+        {/* Nothing to scroll until there are results, so the empty panel stays put while typing. */}
+        <div
+          className={`search-body${searching && asked ? ' stale' : ''}${query.trim() ? '' : ' is-idle'}`}
+          aria-live="polite"
+        >
           {!query.trim() && (
             <p className="search-hint">
               Find a word, a phrase, or a passage you half remember. Different forms of a word count too

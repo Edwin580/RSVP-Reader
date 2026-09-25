@@ -40,7 +40,7 @@ export function BookmarksPanel({
   }
 
   return (
-    <div className={`search-backdrop${closing ? ' is-closing' : ''}`} onClick={onClose}>
+    <div className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`} onClick={onClose}>
       <aside
         className="search-panel"
         role="dialog"
@@ -68,8 +68,8 @@ export function BookmarksPanel({
 
           {bookmarks.length === 0 ? (
             <p className="search-hint">
-              Bookmarks save the sentence you’re on so you can come back to it. Press <kbd>B</kbd> to add one while
-              reading.
+              Bookmarks save the sentence you’re on so you can come back to it.
+              <span className="on-mouse"> Press <kbd>B</kbd> to add one while reading.</span>
             </p>
           ) : (
             <ol className="search-results">

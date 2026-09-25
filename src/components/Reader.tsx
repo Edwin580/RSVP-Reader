@@ -257,18 +257,24 @@ export function Reader({
             {book.title}
           </span>
           {hasChapters && (
-            <select
-              className="chapter-select"
-              value={chapterIndex}
-              onChange={(e) => jumpTo(chapters[Number(e.target.value)].start)}
-              aria-label="Jump to chapter"
-            >
-              {chapters.map((c, i) => (
-                <option key={i} value={i}>
-                  {c.title}
-                </option>
-              ))}
-            </select>
+            // The chapter name with its arrow right beside it; the real (invisible)
+            // select sits on top, so tapping opens the system chapter picker.
+            <span className="chapter-picker">
+              <span className="chapter-name">{chapters[chapterIndex].title}</span>
+              <Icon name="chevronDown" size={14} />
+              <select
+                className="chapter-select"
+                value={chapterIndex}
+                onChange={(e) => jumpTo(chapters[Number(e.target.value)].start)}
+                aria-label="Jump to chapter"
+              >
+                {chapters.map((c, i) => (
+                  <option key={i} value={i}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </span>
           )}
         </div>
 
@@ -301,7 +307,9 @@ export function Reader({
       </header>
 
       {mode === 'page' ? (
-        <section className="stage stage-page">
+        <section
+          className={`stage stage-page${settings.pageHighlight ? '' : ' no-highlight'}${settings.pacer ? '' : ' no-pacer'}`}
+        >
           <PageView
             words={words}
             paragraphEnds={book.paragraphEnds}

@@ -90,3 +90,17 @@ test('unsupported files show a clear error', async ({ page }) => {
   await page.locator('input[type=file]').first().setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') })
   await expect(page.getByRole('alert')).toContainText('Unsupported file type')
 })
+
+test('page mode highlight and pacer can be switched off', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('switch', { name: 'Highlight the current word' }).uncheck()
+  await page.getByRole('switch', { name: 'Pacer line' }).uncheck()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.page-marker')).toBeHidden()
+  await expect(page.locator('.page-pacer')).toBeHidden()
+  await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field.')
+})
