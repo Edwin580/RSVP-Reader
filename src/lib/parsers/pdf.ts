@@ -3,6 +3,7 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { COVER_RENDER_WIDTH } from '../covers'
 import type { Section } from '../text'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -23,7 +24,7 @@ function pageText(items: TextItem[]): string {
 export async function parsePdf(
   data: ArrayBuffer,
   onProgress?: (fraction: number) => void,
-): Promise<{ title?: string; sections: Section[] }> {
+): Promise<{ title?: string; sections: Section[]; cover?: string }> {
   const task = pdfjs.getDocument({ data })
   const doc = await task.promise
   try {
@@ -44,13 +45,26 @@ export async function parsePdf(
       throw new Error('No text found in this PDF (it may be scanned images)')
     }
     const outline = await outlineChapters(doc).catch(() => [])
-    return { title: info?.Title?.trim() || undefined, sections: groupPages(pages, outline) }
+    const cover = await firstPageImage(doc).catch(() => undefined)
+    return { title: info?.Title?.trim() || undefined, sections: groupPages(pages, outline), cover }
   } finally {
     await task.destroy()
   }
 }
 
 type PdfDocument = Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>
+
+/** The first page, rendered small, as the book's cover. */
+async function firstPageImage(doc: PdfDocument): Promise<string | undefined> {
+  const page = await doc.getPage(1)
+  const viewport = page.getViewport({ scale: COVER_RENDER_WIDTH / page.getViewport({ scale: 1 }).width })
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(viewport.width)
+  canvas.height = Math.round(viewport.height)
+  await page.render({ canvas, viewport }).promise
+  page.cleanup()
+  return canvas.toDataURL('image/jpeg', 0.82)
+}
 
 /** Top-level bookmarks as { title, page } (1-based), in page order. */
 async function outlineChapters(doc: PdfDocument): Promise<{ title: string; page: number }[]> {

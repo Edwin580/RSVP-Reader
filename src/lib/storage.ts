@@ -16,7 +16,7 @@ export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
 }
 
-export async function saveBook(book: Book, fileName: string): Promise<BookMeta> {
+export async function saveBook({ cover, ...book }: Book, fileName: string): Promise<BookMeta> {
   const library = await listBooks()
   const meta: BookMeta = {
     id: book.id,
@@ -24,6 +24,7 @@ export async function saveBook(book: Book, fileName: string): Promise<BookMeta> 
     fileName,
     wordCount: book.words.length,
     addedAt: library.find((b) => b.id === book.id)?.addedAt ?? Date.now(),
+    ...(cover && { cover }),
   }
   await set(bookKey(book.id), book, store)
   await set(LIBRARY_KEY, [meta, ...library.filter((b) => b.id !== book.id)], store)

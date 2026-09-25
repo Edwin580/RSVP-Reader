@@ -114,12 +114,15 @@ export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, o
               return (
                 <li key={book.id} className="shelf-item">
                   <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
-                    <span className="shelf-title">{book.title}</span>
-                    <span className="shelf-meta muted">
-                      {format} · {book.wordCount.toLocaleString()} words · {status}
-                    </span>
-                    <span className="bar" aria-hidden="true">
-                      <span style={{ width: `${percent}%` }} />
+                    <Cover book={book} />
+                    <span className="shelf-text">
+                      <span className="shelf-title">{book.title}</span>
+                      <span className="shelf-meta muted">
+                        {format} · {book.wordCount.toLocaleString()} words · {status}
+                      </span>
+                      <span className="bar" aria-hidden="true">
+                        <span style={{ width: `${percent}%` }} />
+                      </span>
                     </span>
                   </button>
                   <button
@@ -140,6 +143,20 @@ export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, o
         </section>
       )}
     </main>
+  )
+}
+
+/** Muted cloth colours for books without a cover image, picked from the book id. */
+const COVER_TONES = ['#8a5a44', '#4f6b5a', '#5a6480', '#7a6a4a', '#6b4f6b', '#4a6a73']
+
+function Cover({ book }: { book: BookMeta }) {
+  if (book.cover) return <img className="cover" src={book.cover} alt="" loading="lazy" />
+  let hash = 0
+  for (const ch of book.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return (
+    <span className="cover cover-plain" style={{ background: COVER_TONES[hash % COVER_TONES.length] }} aria-hidden="true">
+      <span>{book.title}</span>
+    </span>
   )
 }
 
