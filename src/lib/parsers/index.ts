@@ -25,16 +25,17 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
 
   let title: string | undefined
   let sections: Section[]
+  let cover: string | undefined
 
   switch (ext) {
     case '.epub': {
       const { parseEpub } = await import('./epub')
-      ;({ title, sections } = await parseEpub(data))
+      ;({ title, sections, cover } = await parseEpub(data))
       break
     }
     case '.pdf': {
       const { parsePdf } = await import('./pdf')
-      ;({ title, sections } = await parsePdf(data, onProgress))
+      ;({ title, sections, cover } = await parsePdf(data, onProgress))
       break
     }
     case '.txt':
@@ -50,5 +51,5 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
 
   const book = buildBook(id, title || fallbackTitle, sections)
   if (book.words.length === 0) throw new Error('No readable text found in this file')
-  return book
+  return cover ? { ...book, cover } : book
 }
