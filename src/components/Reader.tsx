@@ -9,6 +9,7 @@ import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
 import { SearchPanel } from './SearchPanel'
 import { SettingsMenu } from './SettingsMenu'
+import { reducedMotion } from './transition'
 import { WordDisplay } from './WordDisplay'
 
 interface Props {
@@ -30,6 +31,8 @@ const IDLE_MS = 2000
 const PAGE_TURN_MS = 450
 /** Extra time on the first word of each line in page mode, as a fraction of a word. */
 const LINE_RETURN = 0.3
+/** Length of the panels' closing animation; keep in sync with index.css. */
+const PANEL_CLOSE_MS = 200
 /** Jumps further than this offer a "back" button, shown for JUMP_BACK_MS. */
 const JUMP_BACK_MIN_WORDS = 50
 const JUMP_BACK_MS = 8000
@@ -82,11 +85,34 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
   const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
+  // A closing panel stays mounted briefly so it can animate out.
+  const [closing, setClosing] = useState(false)
+  const closeTimer = useRef<number | undefined>(undefined)
   const idle = useIdle(playing && !panel, IDLE_MS)
+
+  const closePanel = useCallback(() => {
+    window.clearTimeout(closeTimer.current)
+    if (reducedMotion()) {
+      setPanel(null)
+      return
+    }
+    setClosing(true)
+    closeTimer.current = window.setTimeout(() => {
+      setPanel(null)
+      setClosing(false)
+    }, PANEL_CLOSE_MS)
+  }, [])
+  useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
   const openPanel = (which: 'search' | 'settings') => {
     pause()
-    setPanel((p) => (p === which ? null : which))
+    if (panel === which && !closing) {
+      closePanel()
+      return
+    }
+    window.clearTimeout(closeTimer.current)
+    setClosing(false)
+    setPanel(which)
   }
 
   // Start indexing in the background as soon as the book opens.
@@ -236,7 +262,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             Aa
           </button>
           {panel === 'settings' && (
-            <SettingsMenu settings={settings} onSettings={onSettings} onClose={() => setPanel(null)} />
+            <SettingsMenu settings={settings} onSettings={onSettings} closing={closing} onClose={closePanel} />
           )}
         </div>
       </header>
@@ -339,11 +365,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           bookSearch={bookSearch}
           words={words}
           chapters={chapters}
+          closing={closing}
           onSelect={(i) => {
             jumpTo(i)
-            setPanel(null)
+            closePanel()
           }}
-          onClose={() => setPanel(null)}
+          onClose={closePanel}
         />
       )}
     </main>

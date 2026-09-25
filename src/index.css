@@ -41,12 +41,17 @@
 }
 
 * { box-sizing: border-box; }
+/* The reader fills the screen: don't let a swipe rubber-band the whole page. */
+html:has(.reader), body:has(.reader) { overscroll-behavior: none; }
 body { margin: 0; background: var(--bg); }
 button, input, select { font: inherit; color: inherit; }
 button {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 button:disabled { cursor: progress; opacity: 0.6; }
 :focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
@@ -77,6 +82,18 @@ h1, h2, p { margin: 0; }
 @media (hover: hover) {
   .icon-button:hover { background: var(--fill); }
 }
+
+/* Press feedback. Phones have no hover, so without this a tap gives no sign
+   it registered. It's quick on press and eases out on release. (iOS only applies
+   :active with a touch listener on the page; see main.tsx.) */
+.icon-button, .nav-button, .demo-button, .dropzone, .shelf-open, .segmented button, .search-results button, .jump-back {
+  transition: transform 0.18s ease-out, background-color 0.18s ease-out, opacity 0.18s ease-out;
+}
+.icon-button:active, .nav-button:active { background: var(--fill); transform: scale(0.92); transition-duration: 0.05s; }
+.demo-button:active, .jump-back:active { transform: scale(0.96); transition-duration: 0.05s; }
+.dropzone:active { transform: scale(0.99); background: var(--fill); transition-duration: 0.05s; }
+.shelf-open:active, .segmented button:active { opacity: 0.55; transition-duration: 0.05s; }
+.search-results button:active { background: var(--fill); transition-duration: 0.05s; }
 
 /* ——— Library ——— */
 .library {
@@ -280,6 +297,7 @@ h1, h2, p { margin: 0; }
 .context span { cursor: pointer; }
 .context .current { color: var(--text); background: var(--fill); border-radius: 4px; box-shadow: 0 0 0 2px var(--fill); }
 @keyframes fade-in { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
 
 .reader-bottom { width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
 
@@ -503,7 +521,15 @@ kbd {
   padding: var(--safe-top) var(--safe-right) 0 0;
   background: var(--bg);
   box-shadow: var(--shadow);
+  animation: panel-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+@keyframes panel-in { from { transform: translateX(100%); } }
+@keyframes panel-out { to { transform: translateX(100%); } }
+/* Panels and menus animate out too, instead of vanishing (see useClosing in Reader). */
+.search-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
+.search-backdrop.is-closing .search-panel { animation: panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.popover-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
+.popover.is-closing { animation: fade-out 0.14s ease-in forwards; pointer-events: none; }
 .search-bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.75rem 0.5rem 0.5rem 1rem; }
 .search-bar input {
   flex: 1;
@@ -585,10 +611,12 @@ kbd {
     padding: 1.25rem calc(1.25rem + var(--safe-right)) calc(1.25rem + var(--safe-bottom)) calc(1.25rem + var(--safe-left));
     border: 0;
     border-radius: 16px 16px 0 0;
-    animation: sheet-in 0.2s ease;
+    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
+  .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 @keyframes sheet-in { from { transform: translateY(100%); } }
+@keyframes sheet-out { to { transform: translateY(100%); } }
 
 /* Phones in landscape: little height, so drop the extras. */
 @media (max-height: 500px) {
@@ -603,6 +631,23 @@ kbd {
   .play-button { width: 48px; height: 48px; }
 }
 
+/* Moving between the library and a book: the new screen slides in a little
+   and fades up while the old one recedes, like a push on iOS. Reversed going
+   back. Browsers without view transitions just switch instantly. */
+::view-transition-old(root), ::view-transition-new(root) {
+  animation-duration: 0.3s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+:root[data-nav='forward']::view-transition-old(root) { animation-name: screen-out-forward; }
+:root[data-nav='forward']::view-transition-new(root) { animation-name: screen-in-forward; }
+:root[data-nav='back']::view-transition-old(root) { animation-name: screen-out-back; }
+:root[data-nav='back']::view-transition-new(root) { animation-name: screen-in-back; }
+@keyframes screen-in-forward { from { opacity: 0; transform: translateX(40px); } }
+@keyframes screen-out-forward { to { opacity: 0; transform: translateX(-20px); } }
+@keyframes screen-in-back { from { opacity: 0; transform: translateX(-40px); } }
+@keyframes screen-out-back { to { opacity: 0; transform: translateX(20px); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
