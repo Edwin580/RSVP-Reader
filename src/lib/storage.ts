@@ -6,6 +6,7 @@ import type { Book, BookMeta, Progress } from './types'
  * Local-first persistence in IndexedDB. Keeping all access behind these
  * functions means they can later be swapped for (or synced with) a backend.
  */
+// Named from the app's old name (RSVP Reader); renaming it would lose everyone's saved books.
 const store = createStore('rsvp-reader', 'kv')
 
 const LIBRARY_KEY = 'library'
@@ -49,7 +50,7 @@ export function saveProgress(id: string, index: number): Promise<void> {
   return set(progressKey(id), { index, updatedAt: Date.now() } satisfies Progress, store)
 }
 
-const SETTINGS_KEY = 'rsvp-settings'
+const SETTINGS_KEY = 'rsvp-settings' // old name kept, like the database, so settings carry over
 
 export interface Settings {
   wpm: number

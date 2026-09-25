@@ -1,6 +1,6 @@
-# RSVP Reader
+# Chapter
 
-A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Upload a book and it shows the text one word at a time, always in the same spot on screen.
+Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Upload a book and it shows the text one word at a time, always in the same spot on screen.
 
 **Live:** https://edwin580.github.io/RSVP-Reader/ (deployed to GitHub Pages on every push to `main`)
 
@@ -77,14 +77,14 @@ src/
 
 ### Next up
 
-1. **Rename the app to "Chapter"**: a short, friendly name to use everywhere (page title, header, README, repo).
-2. **Themes and customization**: light, dark and other color themes, plus reader settings such as font, focus-letter color and word position, so each reader can make it their own.
-3. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Open questions are whether to add export/import for moving a library between devices, and whether optional sync is ever worth adding.
+1. **Themes and customization**: light, dark and other color themes, plus reader settings such as font, focus-letter color and word position, so each reader can make it their own.
+2. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Open questions are whether to add export/import for moving a library between devices, and whether optional sync is ever worth adding.
 
 ### Done
 
 - Dynamic word length timing, balanced to the chosen speed
 - UI refresh
+- Renamed the app to "Chapter" (the GitHub repo and Pages address keep the old name for now)
 
 ### Later
 
