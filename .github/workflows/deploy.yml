@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
       # Serve files as-is, without GitHub's Jekyll processing.
       - run: touch dist/.nojekyll
       - uses: JamesIves/github-pages-deploy-action@v4

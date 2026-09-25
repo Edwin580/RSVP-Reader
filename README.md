@@ -54,6 +54,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 npm install
 npm run dev      # start the dev server
 npm test         # run unit tests
+npm run test:e2e # build, then run browser tests (desktop and phone) with Playwright
 npm run lint
 npm run build    # type-check and build for production
 ```
@@ -61,6 +62,7 @@ npm run build    # type-check and build for production
 ## Project layout
 
 ```
+e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings
 src/
   lib/
     demo.ts            built-in sample book offered while the library is empty
