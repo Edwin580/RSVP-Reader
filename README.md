@@ -24,6 +24,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
+- **Works offline**: after your first visit the whole app is cached on the device, so it opens and reads without a connection (handy once it's added to your Home Screen). When you're online, new versions load as soon as they're deployed.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on.
 
 ### Keyboard shortcuts
@@ -63,6 +64,7 @@ npm run build    # type-check and build for production
 
 ```
 e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings
+service-worker/sw.js   offline cache; the build fills in the file list (vite.config.ts)
 src/
   lib/
     demo.ts            built-in sample book offered while the library is empty

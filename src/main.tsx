@@ -14,3 +14,12 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Cache the app so it opens offline (see service-worker/sw.js). Production
+// only: in development it would serve stale files. Pull request previews
+// (see lib/preview.ts) skip it too, so they never cache over the real app.
+if (import.meta.env.PROD && !IS_PREVIEW && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {})
+  })
+}
