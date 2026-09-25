@@ -128,11 +128,13 @@ h1, h2, p { margin: 0; }
 /* Press feedback. Phones have no hover, so without this a tap gives no sign
    it registered. It's quick on press and eases out on release. (iOS only applies
    :active with a touch listener on the page; see main.tsx.) */
-.icon-button, .nav-button, .demo-button, .dropzone, .shelf-open, .segmented button, .search-results button, .jump-back {
+.icon-button, .nav-button, .demo-button, .dropzone, .shelf-open, .segmented button, .search-results button, .jump-back,
+.bookmark-here {
   transition: transform 0.18s ease-out, background-color 0.18s ease-out, opacity 0.18s ease-out;
 }
 .icon-button:active, .nav-button:active { background: var(--fill); transform: scale(0.92); transition-duration: 0.05s; }
 .demo-button:active, .jump-back:active { transform: scale(0.96); transition-duration: 0.05s; }
+.bookmark-here:active { transform: scale(0.97); background: var(--fill); transition-duration: 0.05s; }
 .dropzone:active { transform: scale(0.99); background: var(--fill); transition-duration: 0.05s; }
 .shelf-open:active, .segmented button:active { opacity: 0.55; transition-duration: 0.05s; }
 .search-results button:active { background: var(--fill); transition-duration: 0.05s; }
@@ -729,6 +731,31 @@ kbd {
 .search-results .muted.small { font-size: 0.8rem; }
 .search-results .search-more { text-align: center; font-weight: 600; }
 .search-snippet { line-height: 1.5; }
+
+/* ——— Bookmarks (reuses the search panel) ——— */
+.panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
+.panel-title { font-size: 1.15rem; font-weight: 700; }
+.bookmark-here {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: calc(100% - 2rem);
+  min-height: 44px;
+  margin: 0.5rem 1rem 0.75rem;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: none;
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .bookmark-here:hover { background: var(--fill); }
+}
+.search-results .bookmark-item { display: flex; align-items: center; }
+.search-results .bookmark-item > button:first-child { flex: 1; min-width: 0; }
+.search-results .bookmark-remove { width: 44px; flex-shrink: 0; display: grid; padding: 0; margin-right: 0.5rem; color: var(--text-2); }
+.top-actions .is-marked { color: var(--accent); }
+
 .search-results mark { background: color-mix(in srgb, var(--accent) 18%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* ——— Phones ——— */

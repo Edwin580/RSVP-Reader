@@ -1,7 +1,7 @@
 import { createStore, del, entries, get, set, setMany } from 'idb-keyval'
 import { storageName } from './preview'
 import type { WordTiming } from './rsvp'
-import type { Book, BookMeta, Progress } from './types'
+import type { Book, BookMeta, Bookmark, Progress } from './types'
 
 /**
  * Local-first persistence in IndexedDB. Keeping all access behind these
@@ -12,6 +12,7 @@ const store = createStore(storageName('rsvp-reader'), 'kv')
 const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
 const progressKey = (id: string) => `progress:${id}`
+const bookmarksKey = (id: string) => `bookmarks:${id}`
 
 export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
@@ -41,6 +42,7 @@ export async function deleteBook(id: string): Promise<void> {
   await set(LIBRARY_KEY, library.filter((b) => b.id !== id), store)
   await del(bookKey(id), store)
   await del(progressKey(id), store)
+  await del(bookmarksKey(id), store)
 }
 
 export function loadProgress(id: string): Promise<Progress | undefined> {
@@ -49,6 +51,14 @@ export function loadProgress(id: string): Promise<Progress | undefined> {
 
 export function saveProgress(id: string, index: number): Promise<void> {
   return set(progressKey(id), { index, updatedAt: Date.now() } satisfies Progress, store)
+}
+
+export async function loadBookmarks(id: string): Promise<Bookmark[]> {
+  return (await get<Bookmark[]>(bookmarksKey(id), store)) ?? []
+}
+
+export function saveBookmarks(id: string, bookmarks: Bookmark[]): Promise<void> {
+  return set(bookmarksKey(id), bookmarks, store)
 }
 
 /** Every stored entry, for backups. */

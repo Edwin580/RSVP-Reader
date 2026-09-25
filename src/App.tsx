@@ -8,7 +8,7 @@ import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary 
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import * as storage from './lib/storage'
-import type { Book, BookMeta, Progress } from './lib/types'
+import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
 
 interface OpenBook {
   book: Book
@@ -24,6 +24,7 @@ export default function App() {
   const [libraryLoaded, setLibraryLoaded] = useState(false)
   const [progress, setProgress] = useState<Record<string, Progress | undefined>>({})
   const [open, setOpen] = useState<OpenBook | null>(null)
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -50,6 +51,7 @@ export default function App() {
 
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
+    setBookmarks(await storage.loadBookmarks(book.id))
     // Resume from the start of the sentence so there's context to pick up from.
     const startIndex = saved ? sentenceStart(book.words, saved.index) : 0
     navigate('forward', () => setOpen({ book, startIndex }))
@@ -83,6 +85,7 @@ export default function App() {
     setError(null)
     const { createDemoBook } = await import('./lib/demo')
     const book = createDemoBook()
+    setBookmarks([])
     navigate('forward', () => setOpen({ book, startIndex: 0, demo: true }))
   }
 
@@ -146,6 +149,11 @@ export default function App() {
     [bookId],
   )
 
+  const handleBookmarks = (next: Bookmark[]) => {
+    setBookmarks(next)
+    if (bookId) storage.saveBookmarks(bookId, next).catch(() => {})
+  }
+
   const handleSettings = (next: storage.Settings) => {
     applyAppearance(next)
     setSettings(next)
@@ -161,6 +169,8 @@ export default function App() {
         settings={settings}
         onSettings={handleSettings}
         onProgress={handleProgress}
+        bookmarks={bookmarks}
+        onBookmarks={handleBookmarks}
         onClose={() => {
           navigate('back', () => setOpen(null))
           refreshLibrary().catch(() => {})
