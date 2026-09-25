@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRsvp } from '../hooks/useRsvp'
+import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
-import type { Book } from '../lib/types'
+import type { Book, Bookmark } from '../lib/types'
+import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
@@ -17,6 +19,8 @@ interface Props {
   settings: Settings
   onSettings: (settings: Settings) => void
   onProgress: (index: number) => void
+  bookmarks: Bookmark[]
+  onBookmarks: (bookmarks: Bookmark[]) => void
   onClose: () => void
 }
 
@@ -34,7 +38,16 @@ const LINE_RETURN = 0.3
 const JUMP_BACK_MIN_WORDS = 50
 const JUMP_BACK_MS = 8000
 
-export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
+export function Reader({
+  book,
+  initialIndex,
+  settings,
+  onSettings,
+  onProgress,
+  bookmarks,
+  onBookmarks,
+  onClose,
+}: Props) {
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode } = settings
   const headings = useMemo(() => book.headings ?? [], [book.headings])
@@ -81,10 +94,12 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | null>(null)
   const idle = useIdle(playing && !panel, IDLE_MS)
+  const marked = isBookmarked(bookmarks, words, index)
+  const toggleMark = () => onBookmarks(toggleBookmark(bookmarks, words, index))
 
-  const openPanel = (which: 'search' | 'settings') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks') => {
     pause()
     setPanel((p) => (p === which ? null : which))
   }
@@ -144,6 +159,10 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
       case 'Escape':
         pause()
         onClose()
+        break
+      case 'b':
+      case 'B':
+        toggleMark()
         break
       case 'm':
       case 'M':
@@ -225,6 +244,15 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         <div className="top-actions">
           <button type="button" className="icon-button" onClick={() => openPanel('search')} title="Search (/)" aria-label="Search">
             <Icon name="search" size={21} />
+          </button>
+          <button
+            type="button"
+            className={`icon-button${marked ? ' is-marked' : ''}`}
+            onClick={() => openPanel('bookmarks')}
+            title="Bookmarks (B adds one here)"
+            aria-label={marked ? 'Bookmarks (this spot is bookmarked)' : 'Bookmarks'}
+          >
+            <Icon name={marked ? 'bookmarkFilled' : 'bookmark'} size={21} />
           </button>
           <button
             type="button"
@@ -333,6 +361,22 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
           </div>
         </div>
       </footer>
+
+      {panel === 'bookmarks' && (
+        <BookmarksPanel
+          bookmarks={bookmarks}
+          words={words}
+          chapters={chapters}
+          here={marked}
+          onToggleHere={toggleMark}
+          onSelect={(i) => {
+            jumpTo(i)
+            setPanel(null)
+          }}
+          onRemove={(i) => onBookmarks(bookmarks.filter((b) => b.index !== i))}
+          onClose={() => setPanel(null)}
+        />
+      )}
 
       {panel === 'search' && bookSearch && (
         <SearchPanel

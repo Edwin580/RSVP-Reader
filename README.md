@@ -19,6 +19,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Navigation**: chapter picker (EPUB chapters and PDF pages), a position slider, word- and sentence-level skipping, and time left in the chapter and the book.
 - **Sized for your device**: the word size comes from your screen's width and height, and very long words slide slightly off-centre or shrink so they're never cut off. Safe areas around notches and home bars are respected, buttons are at least 44px, settings open as a bottom sheet on phones, and landscape phones get a compact layout.
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
+- **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on.
@@ -32,6 +33,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 | Shift + ← / → | Previous / next sentence |
 | ↑ / ↓ | Speed ±25 wpm |
 | / or Ctrl/⌘ + F | Search in book |
+| B | Bookmark this spot (again to remove) |
 | M | Switch word / page mode |
 | Page Up / Page Down | Previous / next page (page mode) |
 | Esc | Back to library |
@@ -60,6 +62,7 @@ npm run build    # type-check and build for production
 ```
 src/
   lib/
+    bookmarks.ts       adding and removing bookmarks (saved per sentence)
     demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
     pages.ts           page anchoring and paragraph grouping for page mode
@@ -70,7 +73,7 @@ src/
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts
-  components/          Library, Reader, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon
+  components/          Library, Reader, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon
 ```
 
 ## Roadmap

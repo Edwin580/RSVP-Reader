@@ -10,11 +10,13 @@ const PATHS = {
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.8-4.8',
   trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
   upload: 'M12 16V4m-5 5 5-5 5 5M5 20h14',
+  bookmark: 'M7 4.5h10v15l-5-3.8-5 3.8z',
+  bookmarkFilled: 'M7 4.5h10v15l-5-3.8-5 3.8z',
 } as const
 
 export type IconName = keyof typeof PATHS
 
-const FILLED = new Set<IconName>(['play', 'pause'])
+const FILLED = new Set<IconName>(['play', 'pause', 'bookmarkFilled'])
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const filled = FILLED.has(name)

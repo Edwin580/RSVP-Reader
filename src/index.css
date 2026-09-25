@@ -554,6 +554,31 @@ kbd {
 .search-results .muted.small { font-size: 0.8rem; }
 .search-results .search-more { text-align: center; font-weight: 600; }
 .search-snippet { line-height: 1.5; }
+
+/* ——— Bookmarks (reuses the search panel) ——— */
+.panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
+.panel-title { font-size: 1.15rem; font-weight: 700; }
+.bookmark-here {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: calc(100% - 2rem);
+  min-height: 44px;
+  margin: 0.5rem 1rem 0.75rem;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: none;
+  font-weight: 600;
+}
+@media (hover: hover) {
+  .bookmark-here:hover { background: var(--fill); }
+}
+.search-results .bookmark-item { display: flex; align-items: center; }
+.search-results .bookmark-item > button:first-child { flex: 1; min-width: 0; }
+.search-results .bookmark-remove { width: 44px; flex-shrink: 0; display: grid; padding: 0; margin-right: 0.5rem; color: var(--text-2); }
+.top-actions .is-marked { color: var(--red); }
+
 .search-results mark { background: color-mix(in srgb, var(--red) 18%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* ——— Phones ——— */

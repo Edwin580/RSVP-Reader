@@ -28,6 +28,7 @@ const SHORTCUTS: [string, string][] = [
   ['⇧ ← →', 'Sentence'],
   ['↑ ↓', 'Speed'],
   ['/', 'Search'],
+  ['B', 'Bookmark this spot'],
   ['M', 'Word / page mode'],
   ['PgUp PgDn', 'Page (page mode)'],
   ['Esc', 'Library'],
