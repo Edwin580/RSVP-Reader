@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
 import { IS_PREVIEW, PREVIEW_PR } from '../lib/preview'
 import { formatMinutes } from '../lib/rsvp'
-import { summarize, type ReadingStats } from '../lib/stats'
+import type { ReadingStats as Stats } from '../lib/stats'
 import type { BookMeta, Progress } from '../lib/types'
 import { Icon } from './Icon'
+import { ReadingStats } from './ReadingStats'
 
 interface Props {
   books: BookMeta[]
   progress: Record<string, Progress | undefined>
-  stats: ReadingStats
+  stats: Stats
   wpm: number
   busy: string | null
   error: string | null
@@ -38,7 +39,6 @@ export function Library({ books, progress, stats, wpm, busy, error, showDemo, on
   )
 
   const choose = () => input.current?.click()
-  const summary = useMemo(() => summarize(stats, new Date()), [stats])
 
   return (
     <main className="library">
@@ -50,30 +50,8 @@ export function Library({ books, progress, stats, wpm, busy, error, showDemo, on
         )}
         <h1>Library</h1>
         <p className="muted">Speed-read your books one word at a time. Files stay on this device.</p>
+        <ReadingStats stats={stats} />
       </header>
-
-      {summary.totalWords > 0 && (
-        <section className="stats" aria-label="Your reading">
-          <div>
-            <span className="stat-value">{summary.todayMs ? formatMinutes(summary.todayMs / 60000) : '—'}</span>
-            <span className="stat-label">Today</span>
-          </div>
-          <div>
-            <span className="stat-value">{summary.weekMs ? formatMinutes(summary.weekMs / 60000) : '—'}</span>
-            <span className="stat-label">Last 7 days</span>
-          </div>
-          <div>
-            <span className="stat-value">{summary.weekWpm ?? '—'}</span>
-            <span className="stat-label">Avg wpm</span>
-          </div>
-          <div>
-            <span className="stat-value">
-              {summary.streak} {summary.streak === 1 ? 'day' : 'days'}
-            </span>
-            <span className="stat-label">Streak</span>
-          </div>
-        </section>
-      )}
 
       <button
         type="button"

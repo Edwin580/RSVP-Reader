@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addReading, dayKey, EMPTY_STATS, summarize } from '../stats'
+import { addReading, dayKey, EMPTY_STATS, lastDays, summarize } from '../stats'
 
 const day = (d: number) => new Date(2026, 8, d, 12) // September 2026, local noon
 const MIN = 60_000
@@ -38,5 +38,15 @@ describe('reading stats', () => {
 
   it('has no average speed with too little reading', () => {
     expect(summarize(addReading(EMPTY_STATS, day(2), 20_000, 100), day(2)).weekWpm).toBeNull()
+  })
+})
+
+describe('lastDays', () => {
+  it('lists the last 7 days oldest first, filling days without reading', () => {
+    const s = addReading(addReading(EMPTY_STATS, day(10), 5 * MIN, 900), day(8), MIN, 200)
+    const days = lastDays(s, day(10))
+    expect(days).toHaveLength(7)
+    expect(days.map((d) => d.date.getDate())).toEqual([4, 5, 6, 7, 8, 9, 10])
+    expect(days.map((d) => d.words)).toEqual([0, 0, 0, 0, 200, 0, 900])
   })
 })

@@ -66,3 +66,20 @@ export function summarize(stats: ReadingStats, today: Date): StatsSummary {
     totalWords,
   }
 }
+
+export interface DayPoint {
+  date: Date
+  ms: number
+  words: number
+}
+
+/** The last `count` days up to and including `today`, oldest first, with no gaps. */
+export function lastDays(stats: ReadingStats, today: Date, count = 7): DayPoint[] {
+  const days: DayPoint[] = []
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - offset)
+    const day = stats.days[dayKey(date)]
+    days.push({ date, ms: day?.ms ?? 0, words: day?.words ?? 0 })
+  }
+  return days
+}
