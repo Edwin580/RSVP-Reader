@@ -156,6 +156,24 @@ h1, h2, p { margin: 0; }
 .library-header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; }
 .library-header p { margin-top: 0.3rem; }
 
+/* Reading stats: a row of four figures (two by two on narrow phones). */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background: var(--separator);
+  overflow: hidden;
+}
+.stats > div { display: grid; gap: 0.1rem; padding: 0.7rem 0.8rem; background: var(--bg); }
+.stat-value { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.stat-label { font-size: 0.8rem; color: var(--text-2); }
+@media (max-width: 420px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .dropzone {
   width: 100%;
   display: flex;
