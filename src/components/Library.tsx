@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
+import { IS_PREVIEW, PREVIEW_PR } from '../lib/preview'
 import { formatMinutes } from '../lib/rsvp'
 import type { BookMeta, Progress } from '../lib/types'
 import { Icon } from './Icon'
@@ -39,6 +40,11 @@ export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, o
   return (
     <main className="library">
       <header className="library-header">
+        {IS_PREVIEW && (
+          <p className="preview-note">
+            Preview of pull request #{PREVIEW_PR}. It keeps its own books and settings, separate from the real app.
+          </p>
+        )}
         <h1>Library</h1>
         <p className="muted">Speed-read your books one word at a time. Files stay on this device.</p>
       </header>

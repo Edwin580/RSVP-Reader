@@ -86,6 +86,14 @@ h1, h2, p { margin: 0; }
     calc(1.25rem + var(--safe-left));
 }
 .library-header { margin-bottom: 1.5rem; }
+.preview-note {
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--text-2);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
 .library-header h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.02em; }
 .library-header p { margin-top: 0.3rem; }
 

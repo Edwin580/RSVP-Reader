@@ -1,6 +1,6 @@
 # RSVP Reader
 
-Speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown) and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main`.
+Speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown) and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main` (via the `gh-pages` branch), and every pull request gets a preview at `/pr-preview/pr-<number>/` with its own separate storage.
 
 ## Stack and layout
 
