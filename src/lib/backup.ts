@@ -4,6 +4,7 @@ import type { BookMeta, Progress } from './types'
  * A backup is every stored entry (library list, books, progress, …) as
  * key/value pairs, so anything added to storage later is backed up too.
  */
+// From the app's old name; kept so older backup files still restore.
 export const BACKUP_FORMAT = 'rsvp-reader-backup'
 
 export interface Backup {
@@ -76,10 +77,10 @@ export function mergeBackup(
   return { writes, added, updated }
 }
 
-/** File name for a backup made on `date`, e.g. rsvp-reader-backup-2026-09-25.json. */
+/** File name for a backup made on `date`, e.g. chapter-backup-2026-09-25.json. */
 export function backupFileName(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `rsvp-reader-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.json`
+  return `chapter-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.json`
 }
 
 /** A short summary of what a restore did, for the confirmation message. */
