@@ -17,9 +17,10 @@ npm test          # unit tests (Vitest)
 npx tsc -b        # type-check
 npm run lint      # oxlint
 npm run build     # production build
+npm run test:e2e  # browser tests (Playwright); set PW_CHROMIUM_PATH to use an installed Chromium
 ```
 
-Run all four before pushing. For UI changes, also check the app in a browser at phone and desktop sizes.
+Run the first four before pushing, and the browser tests too for UI changes. CI runs all five on every pull request. For UI changes, also check the app in a browser at phone and desktop sizes.
 
 ## Pull requests
 
