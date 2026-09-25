@@ -4,6 +4,8 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 
 **Live:** https://edwin580.github.io/RSVP-Reader/ (deployed to GitHub Pages on every push to `main`)
 
+**Previews:** every pull request gets its own copy of the app at `https://edwin580.github.io/RSVP-Reader/pr-preview/pr-<number>/`, linked (with a QR code) in a comment on the PR and removed when the PR closes. Previews keep their own books and settings, separate from the real app.
+
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser.
@@ -67,6 +69,7 @@ src/
     searchClient.ts    runs indexing and search in a Web Worker (main-thread fallback)
     text.ts            paragraph/word splitting, Markdown stripping, book assembly
     parsers/           epub.ts, pdf.ts, index.ts (dispatches by file extension)
+    preview.ts         pull request preview builds: separate storage, preview label
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts
