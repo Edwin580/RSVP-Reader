@@ -13,6 +13,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>RSVP Reader</title>
+    <script>
+      // Apply a chosen theme before the first paint (see src/lib/appearance.ts).
+      try {
+        var theme = JSON.parse(localStorage.getItem('rsvp-settings') || '{}').theme
+        if (theme === 'light' || theme === 'sepia' || theme === 'dark') document.documentElement.dataset.theme = theme
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

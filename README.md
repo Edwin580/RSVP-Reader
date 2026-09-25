@@ -11,7 +11,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
   - **Page**: guided reading. The book is laid out as pages that fit your screen. The current word is softly highlighted and a thin pacer line sweeps steadily along each line at your chosen speed (the first word of each line gets a beat more for the return sweep), and the page turns itself when you reach the end: the old page slides out as the new one slides in, the marker fades in on the first word, and that word gets a little extra time so your eyes can move to the top. Pages end at a sentence when one falls on the last two lines. Tap any word to jump there. Pages are measured to fit exactly and re-flow when you rotate or resize.
-- **Warm paper and ink colors**: a beige page in light mode and a warm near-black in dark mode, following your system setting, with red only for the focus letter and the page-mode marker. All text meets WCAG AA contrast.
+- **Themes and customization** (Aa menu): Auto (follows your system), Light, Sepia and Dark themes; a sans or serif reading font; and a red, blue, green or purple focus color for the focus letter and page-mode marker. The default is warm paper and ink: a beige page in light mode and a warm near-black in dark mode. All text meets WCAG AA contrast in every theme.
 - **Fixed focus point**: each word's *Optimal Recognition Point*, a letter a little left of centre, is highlighted and pinned to the centre, so your eyes never move.
 - **Natural word timing**: longer words stay on screen slightly longer, following a smooth curve (1 letter ≈ 0.75×, 5 letters = 1×, 12 letters ≈ 1.25×). Commas, sentence endings and paragraph breaks get pauses. All of this is balanced across the book, so the speed you choose is your real average speed and time-left estimates are accurate. Choose *Even* in the Aa menu to give every word the same time. The first few words after you press play are shown a bit slower.
 - **Steady rhythm**: words are scheduled against a clock rather than chained timers, so small delays don't add up into drift or stutter.
@@ -60,6 +60,7 @@ npm run build    # type-check and build for production
 ```
 src/
   lib/
+    appearance.ts      applies theme, reading font and focus color to the page
     demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
     pages.ts           page anchoring and paragraph grouping for page mode

@@ -7,6 +7,8 @@ interface Props {
   scale: number
   /** Part of a chapter title: shown bold. */
   heading?: boolean
+  /** The reading font setting; the word is re-measured when it changes. */
+  font?: string
   onClick?: () => void
 }
 
@@ -23,7 +25,7 @@ const MAX_SIZE = 76
  * width) and otherwise shrinks, so nothing is ever clipped, long words stay
  * readable on phones, and the eye barely has to move.
  */
-export function WordDisplay({ word, scale, heading, onClick }: Props) {
+export function WordDisplay({ word, scale, heading, font, onClick }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<{ width: number; height: number; font: string } | null>(null)
 
@@ -46,7 +48,7 @@ export function WordDisplay({ word, scale, heading, onClick }: Props) {
       observer.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [])
+  }, [font])
 
   const [before, pivot, after] = splitAtOrp(word)
   let size = MIN_SIZE
