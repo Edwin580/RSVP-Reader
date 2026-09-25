@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
+import { navigate } from './components/transition'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import * as storage from './lib/storage'
@@ -39,7 +40,8 @@ export default function App() {
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
     // Resume from the start of the sentence so there's context to pick up from.
-    setOpen({ book, startIndex: saved ? sentenceStart(book.words, saved.index) : 0 })
+    const startIndex = saved ? sentenceStart(book.words, saved.index) : 0
+    navigate('forward', () => setOpen({ book, startIndex }))
   }, [])
 
   const handleUpload = async (file: File) => {
@@ -67,7 +69,8 @@ export default function App() {
   const handleDemo = async () => {
     setError(null)
     const { createDemoBook } = await import('./lib/demo')
-    setOpen({ book: createDemoBook(), startIndex: 0, demo: true })
+    const book = createDemoBook()
+    navigate('forward', () => setOpen({ book, startIndex: 0, demo: true }))
   }
 
   const handleDelete = async (id: string) => {
@@ -98,7 +101,7 @@ export default function App() {
         onSettings={handleSettings}
         onProgress={handleProgress}
         onClose={() => {
-          setOpen(null)
+          navigate('back', () => setOpen(null))
           refreshLibrary().catch(() => {})
         }}
       />

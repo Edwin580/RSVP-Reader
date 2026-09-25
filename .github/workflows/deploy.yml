@@ -1,21 +1,22 @@
 name: Deploy to GitHub Pages
 
+# Publishes main to the gh-pages branch, which GitHub Pages serves
+# (Settings → Pages → Deploy from a branch → gh-pages / root). Pull request
+# previews live alongside it in gh-pages/pr-preview/ (see preview.yml).
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: deploy
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,19 +27,16 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/configure-pages@v5
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      # Serve files as-is, without GitHub's Jekyll processing.
+      - run: touch dist/.nojekyll
+      - uses: JamesIves/github-pages-deploy-action@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          folder: dist
+          branch: gh-pages
+          # Replace the old build but keep the pull request previews.
+          clean-exclude: pr-preview/
+          # Rebase rather than overwrite, so a preview deployed at the same moment isn't lost.
+          force: false
+          attempt-limit: 10
