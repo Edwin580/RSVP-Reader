@@ -10,18 +10,39 @@ interface Props {
   wpm: number
   busy: string | null
   error: string | null
+  notice: string | null
+  /** Whether the browser has promised to keep our storage (null = unknown). */
+  storageKept: boolean | null
   /** Offer the built-in sample (only while the library is empty). */
   showDemo: boolean
   onDemo: () => void
   onUpload: (file: File) => void
   onOpen: (id: string) => void
   onDelete: (id: string) => void
+  onBackup: () => void
+  onRestore: (file: File) => void
 }
 
 const FORMATS = 'EPUB, PDF, TXT or Markdown'
 
-export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, onUpload, onOpen, onDelete }: Props) {
+export function Library({
+  books,
+  progress,
+  wpm,
+  busy,
+  error,
+  notice,
+  storageKept,
+  showDemo,
+  onDemo,
+  onUpload,
+  onOpen,
+  onDelete,
+  onBackup,
+  onRestore,
+}: Props) {
   const input = useRef<HTMLInputElement>(null)
+  const restoreInput = useRef<HTMLInputElement>(null)
   const dragging = useWindowFileDrag((file) => !busy && onUpload(file))
 
   // Most recently read (or added) first.
@@ -99,6 +120,11 @@ export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, o
           {error}
         </p>
       )}
+      {notice && (
+        <p className="notice" role="status">
+          {notice}
+        </p>
+      )}
 
       {sorted.length > 0 && (
         <section>
@@ -139,6 +165,42 @@ export function Library({ books, progress, wpm, busy, error, showDemo, onDemo, o
           </ul>
         </section>
       )}
+
+      <section className="backup">
+        <h2>Backup</h2>
+        {sorted.length > 0 ? (
+          <p className="muted">
+            Your books and reading progress are saved in this browser. Save a backup file to keep them safe or to move
+            them to another device.
+            {storageKept === false && (
+              <> The browser may clear them if you don’t open the app for a while, so a backup is a good idea.</>
+            )}
+          </p>
+        ) : (
+          <p className="muted">Moving from another device? Restore your books and reading progress from a backup file.</p>
+        )}
+        <div className="backup-actions">
+          {sorted.length > 0 && (
+            <button type="button" className="pill-button" onClick={onBackup}>
+              Save backup
+            </button>
+          )}
+          <button type="button" className="pill-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
+            Restore backup
+          </button>
+        </div>
+        <input
+          ref={restoreInput}
+          type="file"
+          hidden
+          accept=".json,application/json"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onRestore(file)
+            e.target.value = ''
+          }}
+        />
+      </section>
     </main>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
+import { createBackup, mergeBackup, parseBackup } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import * as storage from './lib/storage'
@@ -22,6 +23,9 @@ export default function App() {
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  // Whether the browser has promised not to clear our storage (null = unknown).
+  const [storageKept, setStorageKept] = useState<boolean | null>(null)
   const [settings, setSettings] = useState(storage.loadSettings)
 
   const refreshLibrary = useCallback(async () => {
@@ -36,6 +40,10 @@ export default function App() {
     refreshLibrary().catch((e) => setError(`Could not load library: ${message(e)}`))
   }, [refreshLibrary])
 
+  useEffect(() => {
+    navigator.storage?.persisted?.().then(setStorageKept, () => {})
+  }, [])
+
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
     // Resume from the start of the sentence so there's context to pick up from.
@@ -44,10 +52,13 @@ export default function App() {
 
   const handleUpload = async (file: File) => {
     setError(null)
+    setNotice(null)
     setBusy(`Reading ${file.name}…`)
     try {
       const book = await parseFile(file, (f) => setBusy(`Reading ${file.name}… ${Math.round(f * 100)}%`))
       await storage.saveBook(book, file.name)
+      // Now there's something worth keeping, ask the browser not to clear it.
+      storage.requestPersistence().then(setStorageKept, () => {})
       await refreshLibrary()
       await openBook(book)
     } catch (e) {
@@ -68,6 +79,38 @@ export default function App() {
     setError(null)
     const { createDemoBook } = await import('./lib/demo')
     setOpen({ book: createDemoBook(), startIndex: 0, demo: true })
+  }
+
+  const handleBackup = async () => {
+    setError(null)
+    const backup = createBackup(await storage.allEntries())
+    const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `rsvp-reader-backup-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+
+  const handleRestore = async (file: File) => {
+    setError(null)
+    setNotice(null)
+    try {
+      const backup = parseBackup(await file.text())
+      const current = new Map(await storage.allEntries())
+      const { writes, added } = mergeBackup(current, backup)
+      await storage.writeEntries(writes)
+      storage.requestPersistence().then(setStorageKept, () => {})
+      await refreshLibrary()
+      setNotice(
+        added > 0
+          ? `Restored ${added} ${added === 1 ? 'book' : 'books'} from the backup.`
+          : 'Everything in the backup was already here. Reading positions are up to date.',
+      )
+    } catch (e) {
+      setError(`Couldn't restore ${file.name}: ${message(e)}`)
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -112,11 +155,15 @@ export default function App() {
       wpm={settings.wpm}
       busy={busy}
       error={error}
+      notice={notice}
+      storageKept={storageKept}
       showDemo={libraryLoaded && books.length === 0 && !busy}
       onDemo={handleDemo}
       onUpload={handleUpload}
       onOpen={handleOpen}
       onDelete={handleDelete}
+      onBackup={handleBackup}
+      onRestore={handleRestore}
     />
   )
 }
