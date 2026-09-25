@@ -1,6 +1,6 @@
-# RSVP Reader
+# Chapter
 
-A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Upload a book and it shows the text one word at a time, always in the same spot on screen.
+Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Upload a book and it shows the text one word at a time, always in the same spot on screen.
 
 **Live:** https://edwin580.github.io/RSVP-Reader/ (deployed to GitHub Pages on every push to `main`)
 
@@ -97,18 +97,24 @@ src/
 
 ### Next up
 
-1. **Rename the app to "Chapter"**: a short, friendly name to use everywhere (page title, header, README, repo).
-2. **Themes and customization**: light, dark and other color themes, plus reader settings such as font, focus-letter color and word position, so each reader can make it their own.
-3. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Backup and restore now covers moving a library between devices; the open question is whether optional sync is ever worth adding.
+1. **Storage decision, local vs. account-based**: the app stays local, with no account needed. Books and progress live on the device (IndexedDB), the browser is asked to keep them, and backup and restore moves a library between devices. The open question is whether optional sync is ever worth adding.
+2. **Rename the repo and Pages address** to match the new name, when convenient. Saved books survive (they're stored per domain), but Home Screen installs would need re-adding.
 
 ### Done
 
 - Dynamic word length timing, balanced to the chosen speed
-- UI refresh
+- UI refresh, then smoother motion and tap feedback
+- Themes and customization: sepia and explicit light/dark themes, reading font, focus color
+- Works offline, and asks the browser to keep your library
+- Backup and restore
+- Book covers, bookmarks and reading stats
+- Long books load without freezing the page
+- Browser tests in CI and a preview for every pull request
+- Renamed the app to "Chapter"
 
 ### Later
 
 - Backend with accounts, so the library and progress sync across devices. Optional, depending on the storage decision above.
-- Reading sessions and statistics (time spent, average wpm)
 - More formats (`.docx`, `.mobi`), plus OCR for scanned PDFs
 - Showing multiple words at a time
+- An App Store version, most cheaply by wrapping this web app (e.g. Capacitor), or React Native/Expo if native-only features become worth a rewrite
