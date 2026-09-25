@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildTimeline,
+  countLetters,
   formatMinutes,
   isSentenceEnd,
   lengthFactor,
@@ -118,5 +119,22 @@ describe('buildTimeline headings', () => {
     const withHeading = buildTimeline(words, [1, 6], 'natural', [{ start: 0, end: 1 }])
     expect(withHeading.weights[0] / withHeading.weights[3]).toBeGreaterThan(plain.weights[0] / plain.weights[3])
     expect(withHeading.weights.reduce((a, b) => a + b, 0) / words.length).toBeCloseTo(1, 5)
+  })
+})
+
+describe('countLetters', () => {
+  it('matches the regex definition for all kinds of words', () => {
+    const reference = (w: string) => w.replace(/[^\p{L}\p{N}]/gu, '').length
+    const samples = ['hello', '“Hello,”', "don't", 'naïve', 'Ærø—', '42%', '…', '', 'déjà-vu!', '日本語', '𝔘𝔫𝔦', '(x)', 'Straße.']
+    for (const w of samples) expect(countLetters(w), w).toBe(reference(w))
+  })
+})
+
+describe('pauseFactor fast path', () => {
+  it('gives the same pauses as the full checks', () => {
+    for (const w of ['end.', 'Mr.', 'word', 'clause,', 'dash—', 'quote.”', 'why?', '42']) {
+      const expected = isSentenceEnd(w) ? 1.2 : /[,;:—–]["'”’)\]]*$/.test(w) ? 0.5 : 0
+      expect(pauseFactor(w, false), w).toBe(expected)
+    }
   })
 })

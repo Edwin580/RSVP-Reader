@@ -6,7 +6,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 
 ## Features
 
-- **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser.
+- **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser, and splitting a book into words runs in a background Web Worker so the page stays responsive while a long book loads.
 - **Demo for first-time visitors**: while the library is empty, a "Try the demo" card opens a short sample (tips plus the opening of *Alice's Adventures in Wonderland*, public domain) to try both reading modes, chapters and search. The sample is never saved and the card disappears once you add a book.
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
@@ -67,9 +67,11 @@ src/
     searchClient.ts    runs indexing and search in a Web Worker (main-thread fallback)
     text.ts            paragraph/word splitting, Markdown stripping, book assembly
     parsers/           epub.ts, pdf.ts, index.ts (dispatches by file extension)
+    assemble.ts        text → words, paragraphs, chapters (runs in the parse worker)
+    parseClient.ts     runs assembly in a Web Worker (main-thread fallback)
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
-  workers/             search.worker.ts
+  workers/             search.worker.ts, parse.worker.ts
   components/          Library, Reader, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon
 ```
 

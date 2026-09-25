@@ -1,4 +1,5 @@
-import { buildBook, splitMarkdownChapters, splitParagraphs, splitTextChapters, type Section } from '../text'
+import type { AssembleRequest } from '../assemble'
+import { assembleInBackground } from '../parseClient'
 import type { Book } from '../types'
 
 export const ACCEPTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
@@ -23,32 +24,32 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
   const id = await fileId(data, file)
   const fallbackTitle = file.name.replace(/\.[^.]+$/, '')
 
-  let title: string | undefined
-  let sections: Section[]
-
+  // EPUB and PDF text is extracted here (it needs the DOM and pdf.js); the
+  // heavy work of splitting it into words happens in a background worker.
+  let request: AssembleRequest
   switch (ext) {
     case '.epub': {
       const { parseEpub } = await import('./epub')
-      ;({ title, sections } = await parseEpub(data))
+      const { title, sections } = await parseEpub(data)
+      request = { kind: 'sections', id, title: title || fallbackTitle, sections }
       break
     }
     case '.pdf': {
       const { parsePdf } = await import('./pdf')
-      ;({ title, sections } = await parsePdf(data, onProgress))
+      const { title, sections } = await parsePdf(data, onProgress)
+      request = { kind: 'sections', id, title: title || fallbackTitle, sections }
       break
     }
     case '.txt':
     case '.md':
-    case '.markdown': {
-      const text = new TextDecoder().decode(data)
-      sections = ext === '.txt' ? splitTextChapters(splitParagraphs(text)) : splitMarkdownChapters(text)
+    case '.markdown':
+      request = { kind: ext === '.txt' ? 'text' : 'markdown', id, title: fallbackTitle, data }
       break
-    }
     default:
       throw new Error(`Unsupported file type "${ext || file.name}". Try ${ACCEPTED_EXTENSIONS.join(', ')}.`)
   }
 
-  const book = buildBook(id, title || fallbackTitle, sections)
+  const book = await assembleInBackground(request)
   if (book.words.length === 0) throw new Error('No readable text found in this file')
   return book
 }
