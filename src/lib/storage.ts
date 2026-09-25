@@ -60,11 +60,35 @@ export interface Settings {
   wordTiming: WordTiming
   /** 'word' flashes one word at a time; 'page' shows pages with a marker that follows along. */
   mode: ReadingMode
+  /** 'system' follows the device's light/dark setting. */
+  theme: Theme
+  /** Typeface for the book's text; the controls always use the system font. */
+  font: ReadingFont
+  /** Colour of the focus letter, page marker and pacer. */
+  accent: Accent
 }
 
 export type ReadingMode = 'word' | 'page'
+export type Theme = 'system' | 'light' | 'sepia' | 'dark'
+export type ReadingFont = 'sans' | 'serif'
+export type Accent = 'red' | 'blue' | 'green' | 'purple'
 
-export const DEFAULT_SETTINGS: Settings = { wpm: 300, textScale: 1, wordTiming: 'natural', mode: 'word' }
+export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
+export const FONTS: ReadingFont[] = ['sans', 'serif']
+export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+
+export const DEFAULT_SETTINGS: Settings = {
+  wpm: 300,
+  textScale: 1,
+  wordTiming: 'natural',
+  mode: 'word',
+  theme: 'system',
+  font: 'sans',
+  accent: 'red',
+}
+
+const oneOf = <T,>(options: readonly T[], value: unknown, fallback: T): T =>
+  options.includes(value as T) ? (value as T) : fallback
 
 export function loadSettings(): Settings {
   try {
@@ -74,6 +98,9 @@ export function loadSettings(): Settings {
       textScale: typeof saved.textScale === 'number' ? saved.textScale : DEFAULT_SETTINGS.textScale,
       wordTiming: saved.wordTiming === 'even' ? 'even' : DEFAULT_SETTINGS.wordTiming,
       mode: saved.mode === 'page' ? 'page' : DEFAULT_SETTINGS.mode,
+      theme: oneOf(THEMES, saved.theme, DEFAULT_SETTINGS.theme),
+      font: oneOf(FONTS, saved.font, DEFAULT_SETTINGS.font),
+      accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
     }
   } catch {
     return DEFAULT_SETTINGS

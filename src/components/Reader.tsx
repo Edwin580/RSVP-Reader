@@ -39,7 +39,7 @@ const JUMP_BACK_MS = 8000
 
 export function Reader({ book, initialIndex, settings, onSettings, onProgress, onClose }: Props) {
   const { words, chapters } = book
-  const { wpm, textScale, wordTiming, mode } = settings
+  const { wpm, textScale, wordTiming, mode, font } = settings
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   const timeline = useMemo(
     () => buildTimeline(words, book.paragraphEnds, wordTiming, headings),
@@ -277,6 +277,7 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
             index={index}
             playing={playing}
             scale={textScale}
+            font={font}
             wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
@@ -288,7 +289,13 @@ export function Reader({ book, initialIndex, settings, onSettings, onProgress, o
         </section>
       ) : (
         <section className="stage">
-          <WordDisplay word={words[index] ?? ''} scale={textScale} heading={headingWords.has(index)} onClick={toggle} />
+          <WordDisplay
+            word={words[index] ?? ''}
+            scale={textScale}
+            heading={headingWords.has(index)}
+            font={font}
+            onClick={toggle}
+          />
           <div className="context" aria-hidden={playing}>
             {context && (
               <p>
