@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createBackup, mergeBackup, parseBackup } from '../backup'
+import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from '../backup'
 
 const meta = (id: string, addedAt = 1) => ({ id, title: id, fileName: `${id}.txt`, wordCount: 10, addedAt })
 
@@ -58,5 +58,29 @@ describe('mergeBackup', () => {
     const out = new Map(mergeBackup(current, backup).writes)
     expect(out.has('progress:a')).toBe(false)
     expect(out.get('progress:b')).toEqual({ index: 80, updatedAt: 30 })
+  })
+})
+
+describe('restoreSummary', () => {
+  it('says what changed', () => {
+    expect(restoreSummary(2, 0)).toBe('Restored 2 books.')
+    expect(restoreSummary(1, 3)).toBe('Restored 1 book and updated 3 reading positions.')
+    expect(restoreSummary(0, 1)).toBe('Updated 1 reading position from the backup.')
+    expect(restoreSummary(0, 0)).toBe('Everything in this backup is already here.')
+  })
+
+  it('counts reading positions moved forward for books already here', () => {
+    const current = new Map<string, unknown>([['progress:a', { index: 1, updatedAt: 1 }]])
+    const backup = createBackup([
+      ['progress:a', { index: 9, updatedAt: 5 }],
+      ['progress:b', { index: 2, updatedAt: 5 }],
+    ])
+    expect(mergeBackup(current, backup).updated).toBe(1)
+  })
+})
+
+describe('backupFileName', () => {
+  it('uses the local date', () => {
+    expect(backupFileName(new Date(2026, 0, 5, 23, 30))).toBe('rsvp-reader-backup-2026-01-05.json')
   })
 })

@@ -75,6 +75,26 @@ export async function requestPersistence(): Promise<boolean> {
   }
 }
 
+const LAST_BACKUP_KEY = storageName('rsvp-last-backup')
+
+/** When a backup was last saved from this browser (ms), or null if never. */
+export function loadLastBackup(): number | null {
+  try {
+    const value = Number(localStorage.getItem(LAST_BACKUP_KEY))
+    return value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function saveLastBackup(at: number): void {
+  try {
+    localStorage.setItem(LAST_BACKUP_KEY, String(at))
+  } catch {
+    // Storage unavailable: the "last backed up" note just won't show.
+  }
+}
+
 const SETTINGS_KEY = storageName('rsvp-settings')
 
 export interface Settings {

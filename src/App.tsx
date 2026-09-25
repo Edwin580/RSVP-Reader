@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
+import { Toast, type ToastMessage } from './components/Toast'
 import { navigate } from './components/transition'
 import { applyAppearance } from './lib/appearance'
-import { createBackup, mergeBackup, parseBackup } from './lib/backup'
+import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import * as storage from './lib/storage'
@@ -25,7 +26,8 @@ export default function App() {
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [lastBackup, setLastBackup] = useState(storage.loadLastBackup)
   // Whether the browser has promised not to clear our storage (null = unknown).
   const [storageKept, setStorageKept] = useState<boolean | null>(null)
   const [settings, setSettings] = useState(storage.loadSettings)
@@ -55,7 +57,6 @@ export default function App() {
 
   const handleUpload = async (file: File) => {
     setError(null)
-    setNotice(null)
     setBusy(`Reading ${file.name}…`)
     try {
       const book = await parseFile(file, (f) => setBusy(`Reading ${file.name}… ${Math.round(f * 100)}%`))
@@ -85,35 +86,50 @@ export default function App() {
     navigate('forward', () => setOpen({ book, startIndex: 0, demo: true }))
   }
 
+  const clearToast = useCallback(() => setToast(null), [])
+  const showToast = (text: string, tone: ToastMessage['tone'] = 'ok') => setToast({ text, tone, id: Date.now() })
+
   const handleBackup = async () => {
-    setError(null)
-    const backup = createBackup(await storage.allEntries())
-    const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `rsvp-reader-backup-${new Date().toISOString().slice(0, 10)}.json`
-    link.click()
-    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    try {
+      const backup = createBackup(await storage.allEntries())
+      const name = backupFileName(new Date())
+      const file = new File([JSON.stringify(backup)], name, { type: 'application/json' })
+      // Phones: the share sheet saves to Files or iCloud, or AirDrops to another device.
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Library backup' })
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return // closed the share sheet
+          throw e
+        }
+      } else {
+        const url = URL.createObjectURL(file)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = name
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      }
+      const now = Date.now()
+      storage.saveLastBackup(now)
+      setLastBackup(now)
+      showToast(`Backup saved: ${books.length} ${books.length === 1 ? 'book' : 'books'} with reading positions.`)
+    } catch (e) {
+      showToast(`Couldn't save a backup: ${message(e)}`, 'error')
+    }
   }
 
   const handleRestore = async (file: File) => {
-    setError(null)
-    setNotice(null)
     try {
       const backup = parseBackup(await file.text())
       const current = new Map(await storage.allEntries())
-      const { writes, added } = mergeBackup(current, backup)
+      const { writes, added, updated } = mergeBackup(current, backup)
       await storage.writeEntries(writes)
       storage.requestPersistence().then(setStorageKept, () => {})
       await refreshLibrary()
-      setNotice(
-        added > 0
-          ? `Restored ${added} ${added === 1 ? 'book' : 'books'} from the backup.`
-          : 'Everything in the backup was already here. Reading positions are up to date.',
-      )
+      showToast(restoreSummary(added, updated))
     } catch (e) {
-      setError(`Couldn't restore ${file.name}: ${message(e)}`)
+      showToast(message(e), 'error')
     }
   }
 
@@ -154,22 +170,25 @@ export default function App() {
   }
 
   return (
-    <Library
-      books={books}
-      progress={progress}
-      wpm={settings.wpm}
-      busy={busy}
-      error={error}
-      notice={notice}
-      storageKept={storageKept}
-      showDemo={libraryLoaded && books.length === 0 && !busy}
-      onDemo={handleDemo}
-      onUpload={handleUpload}
-      onOpen={handleOpen}
-      onDelete={handleDelete}
-      onBackup={handleBackup}
-      onRestore={handleRestore}
-    />
+    <>
+      <Library
+        books={books}
+        progress={progress}
+        wpm={settings.wpm}
+        busy={busy}
+        error={error}
+        lastBackup={lastBackup}
+        storageKept={storageKept}
+        showDemo={libraryLoaded && books.length === 0 && !busy}
+        onDemo={handleDemo}
+        onUpload={handleUpload}
+        onOpen={handleOpen}
+        onDelete={handleDelete}
+        onBackup={handleBackup}
+        onRestore={handleRestore}
+      />
+      <Toast message={toast} onDone={clearToast} />
+    </>
   )
 }
 

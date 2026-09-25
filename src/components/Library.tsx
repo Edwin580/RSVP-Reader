@@ -11,7 +11,8 @@ interface Props {
   wpm: number
   busy: string | null
   error: string | null
-  notice: string | null
+  /** When a backup was last saved from this browser, or null. */
+  lastBackup: number | null
   /** Whether the browser has promised to keep our storage (null = unknown). */
   storageKept: boolean | null
   /** Offer the built-in sample (only while the library is empty). */
@@ -25,6 +26,16 @@ interface Props {
 }
 
 const FORMATS = 'EPUB, PDF, TXT or Markdown'
+const BACKUP_NUDGE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
+
+/** "today", "yesterday", or a short date like "Sep 12". */
+function formatDate(at: number, now: number): string {
+  const day = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((day(now) - day(at)) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
 
 export function Library({
   books,
@@ -32,7 +43,7 @@ export function Library({
   wpm,
   busy,
   error,
-  notice,
+  lastBackup,
   storageKept,
   showDemo,
   onDemo,
@@ -57,6 +68,10 @@ export function Library({
   )
 
   const choose = () => input.current?.click()
+  // The time the library was shown, for "backed up yesterday" and the nudge below.
+  const [now] = useState(Date.now)
+  // Nudge only when it matters: storage isn't guaranteed and there's no backup from the last two weeks.
+  const needsBackup = storageKept === false && (lastBackup === null || now - lastBackup > BACKUP_NUDGE_AFTER_MS)
 
   return (
     <main className="library">
@@ -126,11 +141,6 @@ export function Library({
           {error}
         </p>
       )}
-      {notice && (
-        <p className="notice" role="status">
-          {notice}
-        </p>
-      )}
 
       {sorted.length > 0 && (
         <section>
@@ -175,29 +185,37 @@ export function Library({
         </section>
       )}
 
-      <section className="backup">
-        <h2>Backup</h2>
+      {/* Backups stay out of the way: one quiet line, with a gentle nudge only
+          when the browser might clear the library and there's no recent backup. */}
+      <footer className="backup">
         {sorted.length > 0 ? (
-          <p className="muted">
-            Your books and reading progress are saved in this browser. Save a backup file to keep them safe or to move
-            them to another device.
-            {storageKept === false && (
-              <> The browser may clear them if you don’t open the app for a while, so a backup is a good idea.</>
-            )}
-          </p>
+          <>
+            <p className={`backup-status${needsBackup ? ' is-nudge' : ''}`}>
+              {lastBackup ? `Backed up ${formatDate(lastBackup, now)}` : 'Not backed up yet'}
+              {needsBackup && (
+                <span className="backup-why">
+                  {' '}
+                  · This browser may clear books it hasn’t seen in a while.
+                </span>
+              )}
+            </p>
+            <div className="backup-actions">
+              <button type="button" className="text-button" onClick={onBackup} disabled={!!busy}>
+                Back up
+              </button>
+              <button type="button" className="text-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
+                Restore
+              </button>
+            </div>
+          </>
         ) : (
-          <p className="muted">Moving from another device? Restore your books and reading progress from a backup file.</p>
-        )}
-        <div className="backup-actions">
-          {sorted.length > 0 && (
-            <button type="button" className="pill-button" onClick={onBackup}>
-              Save backup
+          <p className="backup-status">
+            Moving from another device?{' '}
+            <button type="button" className="text-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
+              Restore a backup
             </button>
-          )}
-          <button type="button" className="pill-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
-            Restore backup
-          </button>
-        </div>
+          </p>
+        )}
         <input
           ref={restoreInput}
           type="file"
@@ -209,7 +227,7 @@ export function Library({
             e.target.value = ''
           }}
         />
-      </section>
+      </footer>
     </main>
   )
 }

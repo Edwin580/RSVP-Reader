@@ -27,7 +27,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Book covers**: the library shows each EPUB's cover image and a PDF's first page as its cover; other books get a plain cloth cover with the title. (Books added before covers were supported get the plain cover; add the file again to pick up its cover.)
 - **Works offline**: after your first visit the whole app is cached on the device, so it opens and reads without a connection (handy once it's added to your Home Screen). When you're online, new versions load as soon as they're deployed.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on. The app asks the browser to keep this data permanently (Safari otherwise clears site data that goes unused for about a week).
-- **Backup and restore**: save your whole library and reading progress as one file, and restore it on this or another device. Restoring merges: books you already have are kept, and the most recent reading position wins.
+- **Backup and restore**: a quiet line under your books shows when you last backed up. *Back up* saves your whole library and reading positions as one file (on phones, through the share sheet, so it can go to Files, iCloud or another device); *Restore* merges a backup into this device: books you already have are kept, and the most recent reading position wins. A gentle reminder appears only when the browser might clear your books and there's no backup from the last two weeks.
 
 ### Keyboard shortcuts
 

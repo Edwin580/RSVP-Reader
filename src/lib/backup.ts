@@ -41,9 +41,14 @@ const LIBRARY_KEY = 'library'
  * library, the most recently updated reading position wins, and anything
  * else is only written where nothing is stored yet.
  */
-export function mergeBackup(current: Map<string, unknown>, backup: Backup): { writes: [string, unknown][]; added: number } {
+export function mergeBackup(
+  current: Map<string, unknown>,
+  backup: Backup,
+): { writes: [string, unknown][]; added: number; updated: number } {
   const writes: [string, unknown][] = []
   let added = 0
+  /** Reading positions moved forward to the backup's (for books already here). */
+  let updated = 0
   for (const [key, value] of backup.entries) {
     const existing = current.get(key)
     if (key === LIBRARY_KEY) {
@@ -60,10 +65,29 @@ export function mergeBackup(current: Map<string, unknown>, backup: Backup): { wr
     } else if (key.startsWith('progress:')) {
       const mine = existing as Progress | undefined
       const theirs = value as Progress
-      if (!mine || (theirs?.updatedAt ?? 0) > mine.updatedAt) writes.push([key, value])
+      if (!mine || (theirs?.updatedAt ?? 0) > mine.updatedAt) {
+        writes.push([key, value])
+        if (mine) updated++
+      }
     } else if (existing === undefined) {
       writes.push([key, value])
     }
   }
-  return { writes, added }
+  return { writes, added, updated }
+}
+
+/** File name for a backup made on `date`, e.g. rsvp-reader-backup-2026-09-25.json. */
+export function backupFileName(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `rsvp-reader-backup-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.json`
+}
+
+/** A short summary of what a restore did, for the confirmation message. */
+export function restoreSummary(added: number, updated: number): string {
+  const books = added === 1 ? '1 book' : `${added} books`
+  const places = updated === 1 ? '1 reading position' : `${updated} reading positions`
+  if (added && updated) return `Restored ${books} and updated ${places}.`
+  if (added) return `Restored ${books}.`
+  if (updated) return `Updated ${places} from the backup.`
+  return 'Everything in this backup is already here.'
 }
