@@ -5,6 +5,8 @@ import type { ReadingMode, Settings } from '../lib/storage'
 interface Props {
   settings: Settings
   onSettings: (settings: Settings) => void
+  /** Animating out; the reader unmounts it shortly after. */
+  closing?: boolean
   onClose: () => void
 }
 
@@ -33,7 +35,7 @@ const SHORTCUTS: [string, string][] = [
   ['Esc', 'Library'],
 ]
 
-export function SettingsMenu({ settings, onSettings, onClose }: Props) {
+export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', esc)
@@ -48,8 +50,8 @@ export function SettingsMenu({ settings, onSettings, onClose }: Props) {
     <>
       {/* Catches the tap that closes the menu, so it can't also reach the
           reader underneath (where a tap plays, pauses or jumps to a word). */}
-      <div className="popover-backdrop" aria-hidden="true" onClick={onClose} />
-      <div className="popover" role="dialog" aria-label="Reading settings">
+      <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
+      <div className={`popover${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
         <div className="setting setting-stack">
           <span className="setting-name">Reading mode</span>
           <div className="segmented" role="radiogroup" aria-label="Reading mode">
