@@ -125,9 +125,10 @@ export function minutesBetween(timeline: Timeline, from: number, to: number, wpm
   return Math.max(0, timeline.cumulative[end] - timeline.cumulative[Math.max(from, 0)]) / wpm
 }
 
+/** "12 min", "4h 37m"; anything under a minute (but not nothing) is "1 min", never "<1 min". */
 export function formatMinutes(minutes: number): string {
-  if (minutes < 1) return '<1 min'
-  const m = Math.round(minutes)
+  if (minutes <= 0) return '0 min'
+  const m = Math.max(1, Math.round(minutes))
   if (m < 60) return `${m} min`
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
 }

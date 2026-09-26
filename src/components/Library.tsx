@@ -87,20 +87,20 @@ export function Library({
         )}
         <p className="brand">
           <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="#1c1a17" />
+            <rect width="32" height="32" rx="7" fill="#141414" />
             <path
               d="M7 7.5h18M16 7.5v3M7 24.5h18M16 24.5v-3"
-              stroke="#f3efe6"
+              stroke="#fbfaf7"
               strokeWidth="2.2"
               strokeLinecap="round"
               fill="none"
             />
-            <circle cx="16" cy="16" r="3.6" fill="#e8674f" />
+            <circle cx="16" cy="16" r="3.6" fill="#e0483a" />
           </svg>
           Chapter
         </p>
         <h1>Library</h1>
-        <p className="muted">Speed-read your books one word at a time. Files stay on this device.</p>
+        <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>
         <ReadingStats stats={stats} />
       </header>
 
@@ -110,22 +110,12 @@ export function Library({
         onClick={choose}
         disabled={!!busy}
       >
-        <Icon name="upload" size={26} />
-        {busy ? (
-          <span className="dropzone-title">{busy}</span>
-        ) : (
-          <>
-            <span className="dropzone-title">{dragging ? (
-                'Drop to add it'
-              ) : (
-                <>
-                  Drop a book here or <span className="on-touch">tap</span>
-                  <span className="on-mouse">click</span> to choose
-                </>
-              )}</span>
-            <span className="muted">{FORMATS}</span>
-          </>
-        )}
+        <Icon name="plus" size={24} />
+        <span className="dropzone-title">{busy ?? (dragging ? 'Drop to add it' : 'Add a book')}</span>
+        <span className="muted">
+          {FORMATS}
+          <span className="on-mouse"> · or drop a file here</span>
+        </span>
       </button>
       <input
         ref={input}
@@ -138,6 +128,12 @@ export function Library({
           e.target.value = ''
         }}
       />
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
 
       {showDemo && (
         <section className="demo">
@@ -155,11 +151,6 @@ export function Library({
         </section>
       )}
 
-      {error && (
-        <p className="error" role="alert">
-          {error}
-        </p>
-      )}
 
       {sorted.length > 0 && (
         <section>

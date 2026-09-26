@@ -120,6 +120,8 @@ export function recordReading(ms: number, words: number): Promise<void> {
 
 // Old name kept, like the database, so settings carry over.
 const SETTINGS_KEY = storageName('rsvp-settings')
+/** Bumped when a saved setting needs moving to a new default; see loadSettings. */
+const SETTINGS_VERSION = 2
 
 export interface Settings {
   wpm: number
@@ -150,7 +152,7 @@ export type Accent = 'red' | 'blue' | 'green' | 'purple'
 export type PlayControl = 'tap' | 'hold'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
-export const FONTS: ReadingFont[] = ['sans', 'serif']
+export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 
@@ -160,7 +162,7 @@ export const DEFAULT_SETTINGS: Settings = {
   wordTiming: 'smart',
   mode: 'word',
   theme: 'system',
-  font: 'sans',
+  font: 'serif',
   accent: 'red',
   pageHighlight: true,
   pacer: true,
@@ -179,7 +181,9 @@ export function loadSettings(): Settings {
       wordTiming: oneOf(WORD_TIMINGS, saved.wordTiming, DEFAULT_SETTINGS.wordTiming),
       mode: saved.mode === 'page' ? 'page' : DEFAULT_SETTINGS.mode,
       theme: oneOf(THEMES, saved.theme, DEFAULT_SETTINGS.theme),
-      font: oneOf(FONTS, saved.font, DEFAULT_SETTINGS.font),
+      // Sans was the default before the book design (settings version 2), so a
+      // sans saved from then moves to the new serif; a later pick sticks.
+      font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageHighlight: saved.pageHighlight !== false,
       pacer: saved.pacer !== false,
@@ -192,7 +196,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(settings: Settings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, v: SETTINGS_VERSION }))
   } catch {
     // Storage unavailable (private mode etc.) — settings just won't persist.
   }
