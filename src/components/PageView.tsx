@@ -232,8 +232,9 @@ export function PageView({
     const before = prev.current
     const newPage = !before || before.start !== page.start
     const newLine = !newPage && before.top !== top
-    // Anything but reading on to the next word on the same line restarts the pacer here.
-    const restart = newPage || newLine || before.index !== index - 1
+    // Anything but reading on to the next word on the same line restarts the
+    // pacer here. Staying on the same word (pausing, say) keeps it as it is.
+    const restart = newPage || newLine || (before.index !== index - 1 && before.index !== index)
     const lineLeft = restart ? left : before.lineLeft
     prev.current = { index, top, start: page.start, lineLeft }
     // How long this word is actually on screen, including the reader's extra beats.
