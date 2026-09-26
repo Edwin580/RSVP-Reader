@@ -256,3 +256,25 @@ test('holding to read keeps the controls hidden, through drift and page turns', 
   await page.mouse.up()
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
 })
+
+test('the settings sheet dims the page without a coloured layer over the top', async ({ page }, testInfo) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  // Safari would tint its top bar from a coloured backdrop and keep that colour.
+  const backdrop = await page.evaluate(`getComputedStyle(document.querySelector('.popover-backdrop')).backgroundColor`)
+  expect(backdrop).toBe('rgba(0, 0, 0, 0)')
+  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Dark' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  if (testInfo.project.name === 'phone') {
+    // The dimming comes from the sheet's shadow, which follows the theme.
+    await expect.poll(() => page.evaluate(`getComputedStyle(document.querySelector('.settings-menu')).boxShadow`)).toContain('rgba(0, 0, 0, 0.5)')
+    // The page background (where Safari takes its top bar colour from) is the
+    // dimmed dark page, #121211 under half black, while the reader keeps its own.
+    const pageColour = () => page.evaluate(`getComputedStyle(document.documentElement).backgroundColor`)
+    await expect.poll(pageColour).toMatch(/0\.035/)
+    await expect(page.locator('.reader')).toHaveCSS('background-color', 'rgb(18, 18, 17)')
+    await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+    await expect.poll(pageColour).toBe('rgb(18, 18, 17)')
+  }
+})
