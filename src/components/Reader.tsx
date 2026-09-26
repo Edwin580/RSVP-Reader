@@ -3,6 +3,7 @@ import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
+import { planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
@@ -14,6 +15,7 @@ import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
 import { SearchPanel } from './SearchPanel'
+import { SessionMenu } from './SessionMenu'
 import { SettingsMenu } from './SettingsMenu'
 import { reducedMotion } from './transition'
 import { WordDisplay } from './WordDisplay'
@@ -43,6 +45,8 @@ const IDLE_MS = 2000
 const PAGE_TURN_MS = 450
 /** Extra time on the first word of each line in page mode, as a fraction of a word. */
 const LINE_RETURN = 0.3
+/** Session lengths offered in "Read for…". */
+const SESSION_MINUTES = [5, 10, 15, 20, 30]
 /** Length of the panels' closing animation; keep in sync with index.css. */
 const PANEL_CLOSE_MS = 200
 /** Jumps further than this offer a "back" button, shown for JUMP_BACK_MS. */
@@ -97,7 +101,38 @@ export function Reader({
   }, [])
   const pageNav = useRef<PageNav | null>(null)
 
-  const { index, playing, toggle, play, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
+  // A timed session ("read for 10 minutes"), planned to end at a natural break.
+  const [session, setSession] = useState<{ from: number; end: number; minutes: number; landing: Landing } | null>(null)
+  const [sessionDone, setSessionDone] = useState<{ minutes: number; words: number; landing: Landing; where: string } | null>(
+    null,
+  )
+  const chapterTitleAt = useCallback(
+    (i: number) => {
+      let title = ''
+      for (const c of chapters) if (c.start <= i) title = c.title
+      return chapters.length > 1 ? title : ''
+    },
+    [chapters],
+  )
+  const sessionRef = useRef(session)
+  useEffect(() => {
+    sessionRef.current = session
+  })
+  const finishSession = useCallback(() => {
+    const s = sessionRef.current
+    if (!s) return
+    setSession(null)
+    setSessionDone({ minutes: s.minutes, words: s.end - s.from + 1, landing: s.landing, where: chapterTitleAt(s.end) })
+  }, [chapterTitleAt])
+
+  const { index, playing, toggle, play, pause, seek } = useRsvp(
+    timeline.weights,
+    wpm,
+    initialIndex,
+    pageDelay,
+    session?.end,
+    finishSession,
+  )
 
   // Coming back after a while: a short "Previously…" of the last few
   // sentences, until reading carries on or it's dismissed.
@@ -141,7 +176,7 @@ export function Reader({
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | null>(null)
   // A closing panel stays mounted briefly so it can animate out.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -163,7 +198,7 @@ export function Reader({
   }, [])
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
-  const openPanel = (which: 'search' | 'settings' | 'bookmarks') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session') => {
     pause()
     if (panel === which && !closing) {
       closePanel()
@@ -290,6 +325,33 @@ export function Reader({
     return words.slice(start, index + CONTEXT_WORDS).map((w, i) => ({ w, i: start + i }))
   }, [playing, index, words, mode])
 
+  const doneCard = sessionDone && !playing && (
+    <aside className="recap" aria-label="Session done" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      <p className="recap-head">Session done · {sessionDone.minutes} min</p>
+      <p className="recap-text session-summary">
+        You read {sessionDone.words.toLocaleString()} words
+        {sessionDone.landing === 'chapter' && sessionDone.where ? ` and finished ${sessionDone.where}` : ''}
+        {sessionDone.landing === 'book' ? ' and finished the book' : ''}.
+      </p>
+      <div className="recap-actions">
+        <button
+          type="button"
+          className="demo-button"
+          onClick={() => {
+            setSessionDone(null)
+            play()
+          }}
+        >
+          <Icon name="play" size={16} />
+          Keep going
+        </button>
+        <button type="button" className="text-button" onClick={() => setSessionDone(null)}>
+          Done
+        </button>
+      </div>
+    </aside>
+  )
+
   const recapCard = recapAgo && (
     <Recap
       words={words}
@@ -396,6 +458,7 @@ export function Reader({
             navRef={pageNav}
           />
           {showRecap && recapCard}
+          {doneCard}
         </section>
       ) : (
         <section className="stage">
@@ -408,6 +471,7 @@ export function Reader({
           />
           {glancing && <Glance words={words} index={index} />}
           {showRecap && recapCard}
+          {doneCard}
           <div className="context" aria-hidden={playing}>
             {context && (
               <p>
@@ -439,12 +503,51 @@ export function Reader({
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
 
         <div className="deck">
-          <p className="deck-meta muted">
-            {hasChapters && <span>{chapterLeft} left in chapter</span>}
-            <span>
-              {bookLeft} left{hasChapters && ' in book'} · {percent}%
-            </span>
-          </p>
+          <div className="deck-meta-wrap">
+            {session ? (
+              <div className="deck-meta session-active">
+                <span className="session-left">
+                  <Icon name="clock" size={13} />
+                  {formatMinutes(minutesBetween(timeline, index, session.end + 1, wpm))} left in session
+                  <button type="button" className="text-button session-end" onClick={() => setSession(null)}>
+                    End
+                  </button>
+                </span>
+                <span className="muted">{describeLanding(session.landing, chapterTitleAt(session.end))}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="deck-meta muted session-open"
+                onClick={() => openPanel('session')}
+                title="Read for a set time"
+                aria-label={`${hasChapters ? `${chapterLeft} left in chapter, ` : ''}${bookLeft} left${hasChapters ? ' in book' : ''}, ${percent}%. Read for a set time`}
+              >
+                {hasChapters && <span>{chapterLeft} left in chapter</span>}
+                <span>
+                  {bookLeft} left{hasChapters && ' in book'} · {percent}%
+                  <Icon name="clock" size={13} />
+                </span>
+              </button>
+            )}
+            {panel === 'session' && (
+              <SessionMenu
+                options={SESSION_MINUTES.map((minutes) => {
+                  const plan = planSession(timeline, words, book.paragraphEnds, chapterStarts, index, minutes, wpm)
+                  return { minutes, lands: describeLanding(plan.landing, chapterTitleAt(plan.end)) }
+                })}
+                closing={closing}
+                onPick={(minutes) => {
+                  const plan = planSession(timeline, words, book.paragraphEnds, chapterStarts, index, minutes, wpm)
+                  setSession({ ...plan, from: index, minutes })
+                  setSessionDone(null)
+                  closePanel()
+                  play()
+                }}
+                onClose={closePanel}
+              />
+            )}
+          </div>
 
           <div className="transport">
             <button type="button" className="icon-button" title="Previous sentence (Shift+←)" aria-label="Previous sentence" onClick={() => seek(previousSentence(words, index))}>
@@ -513,6 +616,13 @@ export function Reader({
       )}
     </main>
   )
+}
+
+/** Where a timed session will stop, in words. */
+function describeLanding(landing: Landing, chapter: string): string {
+  if (landing === 'book') return 'to the end of the book'
+  if (landing === 'chapter') return chapter ? `to the end of ${chapter}` : 'to the end of a chapter'
+  return chapter ? `ends in ${chapter}` : landing === 'paragraph' ? 'ends at a paragraph break' : 'ends at a full stop'
 }
 
 /** "Previously…": the last few sentences before where you left off. */
