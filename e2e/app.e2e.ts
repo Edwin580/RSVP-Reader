@@ -123,3 +123,28 @@ test('holding the word glances back and letting go carries on', async ({ page })
   await page.mouse.up()
   await expect(page.locator('.word')).toHaveText('Alice')
 })
+
+test('a session can run for a set time or to a chapter end', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'long.txt', ['Chapter 1', '', 'Word after word here. '.repeat(900), '', 'Chapter 2', '', 'More words to read. '.repeat(900)].join('\n'))
+
+  // A set time: pick 5, nudge it up to 10, see where it ends, start.
+  await page.locator('.session-open').click()
+  await page.getByRole('radio', { name: '5', exact: true }).click()
+  await page.getByRole('button', { name: '5 minutes more' }).click()
+  await expect(page.locator('.session-number')).toHaveText('10')
+  await expect(page.getByRole('radio', { name: '10', exact: true })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.session-lands')).toContainText('Chapter')
+  await page.getByRole('button', { name: 'Start reading' }).click()
+  await expect(page.locator('.session-active')).toContainText('left in session')
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await page.locator('.session-end').click()
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
+
+  // To a chapter end: one tap starts it.
+  await page.locator('.session-open').click()
+  await page.getByRole('radio', { name: 'Chapter', exact: true }).click()
+  await expect(page.locator('.session-chapter').first()).toContainText('This chapter')
+  await page.locator('.session-chapter').first().click()
+  await expect(page.locator('.session-active')).toContainText('to the end of Chapter 1')
+})
