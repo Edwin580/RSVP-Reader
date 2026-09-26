@@ -424,18 +424,34 @@ h1, h2, p { margin: 0; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chapter-select {
+/* The chapter name with its arrow beside it; an invisible select on top opens the picker. */
+.chapter-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
   max-width: 100%;
   margin-top: 0.1rem;
   padding: 0.1rem 0.4rem;
-  border: 0;
   border-radius: 6px;
-  background: none;
   color: var(--text-2);
   font-size: 0.8rem;
-  text-align: center;
+}
+.chapter-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chapter-picker svg { flex-shrink: 0; }
+.chapter-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  font-size: 16px; /* ≥16px so iOS doesn't zoom when it opens */
   cursor: pointer;
 }
+.chapter-picker:active { background: var(--fill); }
+@media (hover: hover) {
+  .chapter-picker:hover { background: var(--fill); color: var(--text); }
+}
+.chapter-picker:has(.chapter-select:focus-visible) { outline: 2px solid var(--text); outline-offset: 2px; }
 .top-actions { justify-self: end; display: flex; align-items: center; position: relative; }
 .aa { font-size: 1.05rem; font-weight: 600; }
 
@@ -640,6 +656,9 @@ h1, h2, p { margin: 0; }
   will-change: transform, width;
 }
 
+/* Page mode switches in the Aa menu. */
+.no-highlight .page-marker, .no-pacer .page-pacer { display: none; }
+
 /* Chapters open on a fresh page, set lower, with the title as a heading. */
 .page-text.opens-chapter { padding-top: min(14vh, 5rem); }
 .page-heading {
@@ -681,6 +700,36 @@ h1, h2, p { margin: 0; }
 .segmented button { min-height: 36px; padding: 0.35rem; border: 0; border-radius: 8px; background: none; }
 .segmented button[aria-checked='true'] { background: var(--raised); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
 .hint { font-size: 0.85rem; color: var(--text-2); }
+.setting-group { display: grid; gap: 0.35rem; margin-top: -0.4rem; }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 40px; cursor: pointer; }
+/* An iOS-style switch built on a real checkbox. */
+.switch-row input {
+  appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 14px;
+  background: var(--fill);
+  box-shadow: inset 0 0 0 1px var(--separator);
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.switch-row input::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--raised);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.switch-row input:checked { background: var(--accent); box-shadow: none; }
+.switch-row input:checked::after { transform: translateX(18px); background: #fff; }
 .segmented .serif { font-family: var(--serif); }
 .swatches { display: flex; gap: 0.6rem; }
 .swatch {
@@ -729,6 +778,10 @@ kbd {
   animation: panel-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes panel-in { from { transform: translateX(100%); } }
+/* Phones: panels take the full width, never leaving a sliver of the reader showing. */
+@media (max-width: 640px) {
+  .search-panel { width: 100%; }
+}
 @keyframes panel-out { to { transform: translateX(100%); } }
 /* Panels and menus animate out too, instead of vanishing (see useClosing in Reader). */
 .search-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
@@ -756,6 +809,10 @@ kbd {
   transition: opacity 0.1s;
 }
 .search-body.stale { opacity: 0.55; }
+.search-body.is-idle { overflow: hidden; }
+/* While a panel is open the page underneath never scrolls (iOS would otherwise
+   scroll it when the keyboard opens). */
+html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; }
 .search-hint, .search-status { margin: 0.25rem 1rem 0.75rem; font-size: 0.9rem; color: var(--text-2); line-height: 1.5; }
 .search-hint em { font-style: normal; color: var(--text); }
 .search-empty { margin: 1.5rem 1rem; }
@@ -795,6 +852,20 @@ kbd {
 .search-snippet { line-height: 1.5; }
 
 /* ——— Bookmarks (reuses the search panel) ——— */
+/* On phones the bookmarks list is a bottom sheet sized to its content, like settings. */
+@media (max-width: 640px) {
+  .search-backdrop.is-sheet { align-items: flex-end; }
+  .is-sheet .search-panel {
+    width: 100%;
+    height: auto;
+    max-height: 80dvh;
+    padding: 0.25rem var(--safe-right) 0 var(--safe-left);
+    border-radius: 16px 16px 0 0;
+    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .is-sheet .search-body { flex: 0 1 auto; }
+  .search-backdrop.is-sheet.is-closing .search-panel { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+}
 .panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
 .panel-title { font-size: 1.15rem; font-weight: 700; }
 .bookmark-here {

@@ -91,6 +91,32 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           <span className="hint">{MODES.find((m) => m.value === settings.mode)?.hint}</span>
         </div>
 
+        {settings.mode === 'page' && (
+          <div className="setting-group">
+            <label className="switch-row">
+              <span>Highlight the current word</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.pageHighlight}
+                onChange={(e) => onSettings({ ...settings, pageHighlight: e.target.checked })}
+              />
+            </label>
+            <label className="switch-row">
+              <span>Pacer line</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={settings.pacer}
+                onChange={(e) => onSettings({ ...settings, pacer: e.target.checked })}
+              />
+            </label>
+            {!settings.pageHighlight && !settings.pacer && (
+              <span className="hint">Pages still turn on their own at your speed.</span>
+            )}
+          </div>
+        )}
+
         <div className="setting">
           <span className="setting-name">Text size</span>
           <div className="stepper">

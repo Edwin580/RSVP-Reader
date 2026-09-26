@@ -135,6 +135,10 @@ export interface Settings {
   font: ReadingFont
   /** Colour of the focus letter, page marker and pacer. */
   accent: Accent
+  /** Page mode: softly highlight the current word. */
+  pageHighlight: boolean
+  /** Page mode: the thin line that sweeps along under the current line. */
+  pacer: boolean
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -154,6 +158,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   font: 'sans',
   accent: 'red',
+  pageHighlight: true,
+  pacer: true,
 }
 
 const oneOf = <T,>(options: readonly T[], value: unknown, fallback: T): T =>
@@ -170,6 +176,8 @@ export function loadSettings(): Settings {
       theme: oneOf(THEMES, saved.theme, DEFAULT_SETTINGS.theme),
       font: oneOf(FONTS, saved.font, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
+      pageHighlight: saved.pageHighlight !== false,
+      pacer: saved.pacer !== false,
     }
   } catch {
     return DEFAULT_SETTINGS
