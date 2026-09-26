@@ -9,7 +9,8 @@ interface Props {
   heading?: boolean
   /** The reading font setting; the word is re-measured when it changes. */
   font?: string
-  onClick?: () => void
+  /** Pointer handlers for tap, hold and swipe (see usePressGestures). */
+  gestures?: React.HTMLAttributes<HTMLDivElement>
 }
 
 const MIN_SIZE = 28
@@ -25,7 +26,7 @@ const MAX_SIZE = 76
  * width) and otherwise shrinks, so nothing is ever clipped, long words stay
  * readable on phones, and the eye barely has to move.
  */
-export function WordDisplay({ word, scale, heading, font, onClick }: Props) {
+export function WordDisplay({ word, scale, heading, font, gestures }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState<{ width: number; height: number; font: string } | null>(null)
 
@@ -59,7 +60,7 @@ export function WordDisplay({ word, scale, heading, font, onClick }: Props) {
   }
 
   return (
-    <div className="word-frame" ref={frame} onClick={onClick}>
+    <div className="word-frame" ref={frame} {...gestures}>
       <div className="reticle" aria-hidden="true" />
       <div className={`word${heading ? ' is-heading' : ''}`} style={{ fontSize: size, transform: shift ? `translateX(${shift}px)` : undefined }}>
         <span className="word-before">{before}</span>

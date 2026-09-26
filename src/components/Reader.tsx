@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
+import { glanceRange } from '../lib/glance'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
@@ -86,7 +88,29 @@ export function Reader({
   }, [])
   const pageNav = useRef<PageNav | null>(null)
 
-  const { index, playing, toggle, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
+  const { index, playing, toggle, play, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
+
+  // Glance back: hold the word to see the last couple of sentences (reading
+  // pauses while you look), let go to carry on. Swipe to move by sentence.
+  const [glancing, setGlancing] = useState(false)
+  const resumeAfterGlance = useRef(false)
+  const wordGestures = usePressGestures({
+    onTap: () => toggle(),
+    onHoldStart: () => {
+      resumeAfterGlance.current = playing
+      setGlancing(true)
+      pause()
+    },
+    onHoldEnd: () => {
+      setGlancing(false)
+      if (resumeAfterGlance.current) play()
+    },
+    onSwipe: (direction) => seek(direction === 'left' ? nextSentence(words, index) : previousSentence(words, index)),
+  })
+  // Page mode: swipe to turn pages, like an e-reader.
+  const pageGestures = usePressGestures({
+    onSwipe: (direction) => (direction === 'left' ? pageNav.current?.next() : pageNav.current?.previous()),
+  })
 
   // Big jumps (progress bar, chapter menu, search) offer a way back for a few
   // seconds, so an accidental jump never costs your place.
@@ -308,6 +332,14 @@ export function Reader({
 
       {mode === 'page' ? (
         <section
+          {...pageGestures.handlers}
+          onClickCapture={(e) => {
+            // The click a swipe ends with shouldn't also jump to the word under the finger.
+            if (pageGestures.wasSwipe()) {
+              e.stopPropagation()
+              e.preventDefault()
+            }
+          }}
           className={`stage stage-page${settings.pageHighlight ? '' : ' no-highlight'}${settings.pacer ? '' : ' no-pacer'}`}
         >
           <PageView
@@ -335,8 +367,9 @@ export function Reader({
             scale={textScale}
             heading={headingWords.has(index)}
             font={font}
-            onClick={toggle}
+            gestures={wordGestures.handlers}
           />
+          {glancing && <Glance words={words} index={index} />}
           <div className="context" aria-hidden={playing}>
             {context && (
               <p>
@@ -439,6 +472,26 @@ export function Reader({
         />
       )}
     </main>
+  )
+}
+
+/** The previous and current sentence, shown while the word is held. */
+function Glance({ words, index }: { words: string[]; index: number }) {
+  const { start, end } = glanceRange(words, index)
+  return (
+    <div className="glance" role="status">
+      <p>
+        {words.slice(start, end + 1).map((w, k) => {
+          const i = start + k
+          return (
+            <span key={i} className={i === index ? 'current' : i > index ? 'ahead' : undefined}>
+              {w}{' '}
+            </span>
+          )
+        })}
+      </p>
+      <span className="glance-hint">Let go to keep reading</span>
+    </div>
   )
 }
 
