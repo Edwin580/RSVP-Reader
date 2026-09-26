@@ -115,6 +115,7 @@ function Choice<T extends string>({
  */
 export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
+  const [openedWith] = useState(settings.theme)
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', esc)
@@ -137,7 +138,16 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
     <>
       {/* Catches the tap that closes the menu, so it can't also reach the
           reader underneath (where a tap plays, pauses or jumps to a word). */}
-      <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
+      {/* Remade when the theme changes: Safari tints its top bar from the
+          backdrop when it appears and doesn't notice its colour changing, so
+          the bar kept the old theme until the menu closed. The new one skips
+          the fade-in so nothing flickers. */}
+      <div
+        key={settings.theme}
+        className={`popover-backdrop${settings.theme !== openedWith ? ' is-still' : ''}${closing ? ' is-closing' : ''}`}
+        aria-hidden="true"
+        onClick={onClose}
+      />
       <div className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
         <div className="setting">
           <span className="setting-name">Mode</span>

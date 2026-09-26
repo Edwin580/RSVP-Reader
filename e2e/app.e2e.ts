@@ -256,3 +256,16 @@ test('holding to read keeps the controls hidden, through drift and page turns', 
   await page.mouse.up()
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
 })
+
+test('changing theme remakes the menu backdrop, without a fade', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const backdrop = page.locator('.popover-backdrop')
+  await backdrop.evaluate((el) => el.setAttribute('data-first', ''))
+  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Sepia' }).click()
+  // A new element (Safari re-reads its colour for the top bar), shown at once.
+  await expect(backdrop).not.toHaveAttribute('data-first', '')
+  await expect(backdrop).toHaveClass(/is-still/)
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'sepia')
+})

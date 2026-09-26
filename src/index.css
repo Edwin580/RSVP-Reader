@@ -963,6 +963,7 @@ kbd {
 .search-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
 .search-backdrop.is-closing .search-panel { animation: panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 .popover-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
+.popover-backdrop.is-still:not(.is-closing) { animation: none; }
 .popover.is-closing { animation: fade-out 0.14s ease-in forwards; pointer-events: none; }
 .search-bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.75rem 0.5rem 0.5rem 1rem; }
 .search-bar input {
