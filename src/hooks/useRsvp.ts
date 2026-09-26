@@ -20,7 +20,14 @@ export function useRsvp(
   initialIndex = 0,
   /** Extra milliseconds to hold word i, e.g. before a page turn. */
   extraDelay?: (i: number) => number,
+  /** Stop after showing this word (a timed session's end), then call `onStop`. */
+  stopAt?: number,
+  onStop?: () => void,
 ) {
+  const stopped = useRef(onStop)
+  useEffect(() => {
+    stopped.current = onStop
+  })
   const count = weights.length
   const [index, setIndexState] = useState(() => clamp(initialIndex, count))
   const [playing, setPlaying] = useState(false)
@@ -46,11 +53,16 @@ export function useRsvp(
         setPlaying(false)
         return
       }
+      if (stopAt !== undefined && index === stopAt) {
+        setPlaying(false)
+        stopped.current?.()
+        return
+      }
       clock.current = { index: index + 1, at: due }
       setIndexState(index + 1)
     }, Math.max(0, due - performance.now()))
     return () => window.clearTimeout(timer)
-  }, [playing, index, wpm, weights, count, extraDelay])
+  }, [playing, index, wpm, weights, count, extraDelay, stopAt])
 
   const play = useCallback(() => {
     sincePlay.current = 0
