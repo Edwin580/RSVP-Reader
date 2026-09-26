@@ -29,6 +29,8 @@
   --red: #b3261e;
   --shadow: 0 10px 30px rgb(0 0 0 / 0.12);
   --scrim: rgb(0 0 0 / 0.28);
+  /* The page colour as it looks under --scrim, as one solid colour. */
+  --page-dimmed: color-mix(in srgb, var(--bg), black 28%);
   /* The focus letter, page marker and pacer. Each focus colour has a shade
      for light pages and one for dark; the theme picks which. */
   --accent-l: #b3261e;
@@ -69,6 +71,7 @@
     --red: #ff6f5e;
     --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
     --scrim: rgb(0 0 0 / 0.5);
+    --page-dimmed: color-mix(in srgb, var(--bg), black 50%);
     --accent: var(--accent-d);
   }
 }
@@ -85,6 +88,7 @@
   --red: #ff6f5e;
   --shadow: 0 10px 30px rgb(0 0 0 / 0.5);
   --scrim: rgb(0 0 0 / 0.5);
+  --page-dimmed: color-mix(in srgb, var(--bg), black 50%);
   --accent: var(--accent-d);
 }
 /* Sepia: warmer and lower-contrast than light, for long reads. */
@@ -100,6 +104,7 @@
   --red: #a8321a;
   --shadow: 0 10px 30px rgb(80 55 20 / 0.16);
   --scrim: rgb(40 28 10 / 0.28);
+  --page-dimmed: color-mix(in srgb, var(--bg), rgb(40 28 10) 28%);
 }
 
 :root[data-accent='blue'] { --accent-l: #1f4fb4; --accent-d: #7ea2ff; }
@@ -413,6 +418,9 @@ h1, h2, p { margin: 0; }
 
 /* ——— Reader ——— */
 .reader {
+  /* Its own background, so the page colour behind it can change (see the
+     settings sheet) without the reader changing with it. */
+  background: var(--bg);
   height: 100vh;
   height: 100dvh;
   display: grid;
@@ -1117,6 +1125,11 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   /* The settings sheet dims the page with a shadow, not a backdrop (see
      SettingsMenu), so it follows a theme change made in it. */
   .popover-backdrop.is-clear { background: none; }
+  /* Safari colours its top bar from the page background, so while the sheet
+     is open that becomes the dimmed colour: the bar dims along with the page,
+     and follows a theme picked here. The reader keeps its own colour. */
+  html:has(.settings-menu:not(.is-closing)),
+  html:has(.settings-menu:not(.is-closing)) body { background: var(--page-dimmed); }
   .settings-menu {
     box-shadow: 0 0 0 100vmax var(--scrim);
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;

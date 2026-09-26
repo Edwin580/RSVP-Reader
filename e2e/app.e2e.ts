@@ -269,5 +269,12 @@ test('the settings sheet dims the page without a coloured layer over the top', a
   if (testInfo.project.name === 'phone') {
     // The dimming comes from the sheet's shadow, which follows the theme.
     await expect.poll(() => page.evaluate(`getComputedStyle(document.querySelector('.settings-menu')).boxShadow`)).toContain('rgba(0, 0, 0, 0.5)')
+    // The page background (where Safari takes its top bar colour from) is the
+    // dimmed dark page, #121211 under half black, while the reader keeps its own.
+    const pageColour = () => page.evaluate(`getComputedStyle(document.documentElement).backgroundColor`)
+    await expect.poll(pageColour).toMatch(/0\.035/)
+    await expect(page.locator('.reader')).toHaveCSS('background-color', 'rgb(18, 18, 17)')
+    await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+    await expect.poll(pageColour).toBe('rgb(18, 18, 17)')
   }
 })
