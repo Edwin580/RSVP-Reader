@@ -32,3 +32,9 @@ export interface Progress {
   index: number
   updatedAt: number
 }
+
+/** A saved spot in a book: the start of the sentence that was showing. */
+export interface Bookmark {
+  index: number
+  createdAt: number
+}

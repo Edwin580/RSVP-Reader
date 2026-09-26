@@ -22,6 +22,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Sized for your device**: the word size comes from your screen's width and height, and very long words slide slightly off-centre or shrink so they're never cut off. Safe areas around notches and home bars are respected, buttons are at least 44px, settings open as a bottom sheet on phones, and landscape phones get a compact layout.
 - **Smooth, native-feeling motion**: every button responds visibly to a tap, opening a book slides the reader in (and back out to the library) where the browser supports view transitions, and menus and panels slide away when closed instead of vanishing. All motion is turned off when the system asks for reduced motion.
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
+- **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
 - **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with a bar for each of the last 7 days, time read, your real average speed, streak and words read. Only time with the words moving counts, the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
@@ -39,6 +40,7 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 | Shift + ← / → | Previous / next sentence |
 | ↑ / ↓ | Speed ±25 wpm |
 | / or Ctrl/⌘ + F | Search in book |
+| B | Bookmark this spot (again to remove) |
 | M | Switch word / page mode |
 | Page Up / Page Down | Previous / next page (page mode) |
 | Esc | Back to library |
@@ -72,6 +74,7 @@ src/
   lib/
     appearance.ts      applies theme, reading font and focus color to the page
     backup.ts          backup file format and merging a restore into the library
+    bookmarks.ts       adding and removing bookmarks (saved per sentence)
     covers.ts          finding EPUB cover images and making cover thumbnails
     demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
@@ -87,7 +90,7 @@ src/
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts, parse.worker.ts
-  components/          Library, ReadingStats, Reader, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon
+  components/          Library, ReadingStats, Reader, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
 ```
 
 ## Roadmap
