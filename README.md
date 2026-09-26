@@ -26,6 +26,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
 - **Glance back**: RSVP's big weakness is that you can't look back at what you just read, and research on reading finds that costs comprehension. Hold the word to see the previous and current sentence (reading pauses while you look), and let go to carry on. Swipe left or right to move a sentence at a time; in page mode, swipe to turn pages.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
+- **People and places so far**: open search before typing and Chapter lists the characters and places you've met, most mentioned first, with no spoilers: only names that have already appeared, counted up to where you are. Tap one to see where you first met them and their latest mention, and tap either to jump there. Handy when a name comes back after 200 pages.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
 - **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with a bar for each of the last 7 days, time read, your real average speed, streak and words read. Only time with the words moving counts, the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
 - **Book covers**: the library shows each EPUB's cover image and a PDF's first page as its cover; other books get a plain cloth cover with the title. (Books added before covers were supported get the plain cover; add the file again to pick up its cover.)
@@ -80,6 +81,7 @@ src/
     covers.ts          finding EPUB cover images and making cover thumbnails
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
+    cast.ts            the spoiler-free list of people and places met so far
     pacing.ts          smart pacing: extra time for new names, rare words, numbers, dialogue
     glance.ts          what a glance back shows, and telling taps, holds and swipes apart
     demo.ts            built-in sample book offered while the library is empty

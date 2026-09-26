@@ -473,6 +473,8 @@ export function Reader({
           bookSearch={bookSearch}
           words={words}
           chapters={chapters}
+          names={analysis?.names}
+          position={index}
           closing={closing}
           onSelect={(i) => {
             jumpTo(i)
