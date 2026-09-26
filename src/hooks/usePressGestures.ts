@@ -11,6 +11,8 @@ interface Handlers {
   onPressStart?: () => void
   /** Called as soon as that press ends (released anywhere, or cancelled), before `onTap`/`onSwipe`. */
   onPressEnd?: () => void
+  /** Presses that start on something matching this (a button, say) are left alone. */
+  ignore?: (target: Element) => boolean
 }
 
 type PointerPoint = { pointerId: number; clientX: number; clientY: number }
@@ -61,6 +63,7 @@ export function usePressGestures(handlers: Handlers) {
     handlers: {
       onPointerDown: (e: React.PointerEvent) => {
         if (e.button !== 0 || press.current) return
+        if (e.target instanceof Element && latest.current.ignore?.(e.target)) return
         const at = performance.now()
         const timer = window.setTimeout(() => {
           // Without a hold handler a long press is just a slow tap.

@@ -88,7 +88,7 @@ test('closing settings with a tap does not resume reading', async ({ page }) => 
 test('unsupported files show a clear error', async ({ page }) => {
   await page.goto('./')
   await page.locator('input[type=file]').first().setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('x') })
-  await expect(page.getByRole('alert')).toContainText('Unsupported file type')
+  await expect(page.getByRole('alert')).toContainText('Chapter reads EPUB, PDF, TXT and Markdown files')
 })
 
 test('page mode highlight and pacer can be switched off', async ({ page }) => {
@@ -157,8 +157,9 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   await expect(page.locator('.popover')).toContainText('pauses when you let go')
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
 
-  const box = (await page.locator('.word-frame').boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  // Press anywhere on the reading area, not just the word: here, well above it.
+  const stage = (await page.locator('.stage').boundingBox())!
+  await page.mouse.move(stage.x + 20, stage.y + 20)
   await page.mouse.down()
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
   await expect.poll(() => currentWord(page)).not.toBe('Chapter')
@@ -170,4 +171,30 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   const stopped = await currentWord(page)
   await page.waitForTimeout(600)
   expect(await currentWord(page)).toBe(stopped)
+})
+
+test('tapping anywhere plays and pauses, and holding never selects text', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  // Let the page-open transition finish: taps during it go to the page root.
+  await page.waitForFunction('document.getAnimations().length === 0')
+  const stage = (await page.locator('.stage').boundingBox())!
+  const corner = { x: stage.x + 20, y: stage.y + 20 }
+  await page.mouse.click(corner.x, corner.y)
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await page.mouse.click(corner.x, corner.y)
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+
+  // Tapping a word in the paused text jumps there instead of playing.
+  await page.locator('.context [data-i]', { hasText: 'Alice' }).first().click()
+  await expect(page.locator('.word')).toHaveText('Alice')
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+
+  // A long press dragged across the paused text selects nothing.
+  const text = (await page.locator('.context p').boundingBox())!
+  await page.mouse.move(text.x + 5, text.y + 10)
+  await page.mouse.down()
+  await page.mouse.move(text.x + text.width - 5, text.y + 10, { steps: 8 })
+  await page.mouse.up()
+  expect(await page.evaluate('String(window.getSelection())')).toBe('')
 })

@@ -1,7 +1,7 @@
 import type { Settings } from './storage'
 
 /** Page colour of each theme, for the browser's toolbar (theme-color). */
-const BACKGROUND = { light: '#f3efe6', sepia: '#f4e8d0', dark: '#141311' }
+const BACKGROUND = { light: '#fbfaf7', sepia: '#f4e8d0', dark: '#121211' }
 
 /**
  * Apply the theme, reading font and focus colour to the page. Runs

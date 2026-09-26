@@ -42,7 +42,7 @@ export async function parsePdf(
     }
 
     if (pages.length === 0) {
-      throw new Error('No text found in this PDF (it may be scanned images)')
+      throw new Error('There’s no text in this PDF. It may be scanned pages, which are only pictures.')
     }
     const outline = await outlineChapters(doc).catch(() => [])
     const cover = await firstPageImage(doc).catch(() => undefined)
