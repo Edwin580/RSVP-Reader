@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange } from '../lib/glance'
+import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import type { BookAnalysis } from '../lib/analysis'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
@@ -20,6 +21,8 @@ import { WordDisplay } from './WordDisplay'
 interface Props {
   book: Book
   initialIndex: number
+  /** When the book was last read; a long gap shows a "Previously…" recap. */
+  lastReadAt?: number
   settings: Settings
   onSettings: (settings: Settings) => void
   onProgress: (index: number) => void
@@ -49,6 +52,7 @@ const JUMP_BACK_MS = 8000
 export function Reader({
   book,
   initialIndex,
+  lastReadAt,
   settings,
   onSettings,
   onProgress,
@@ -94,6 +98,14 @@ export function Reader({
   const pageNav = useRef<PageNav | null>(null)
 
   const { index, playing, toggle, play, pause, seek } = useRsvp(timeline.weights, wpm, initialIndex, pageDelay)
+
+  // Coming back after a while: a short "Previously…" of the last few
+  // sentences, until reading carries on or it's dismissed.
+  const [recapAgo] = useState(() =>
+    shouldRecap(lastReadAt, initialIndex, Date.now()) ? timeAgo(lastReadAt!, Date.now()) : null,
+  )
+  const [recapDismissed, setRecapDismissed] = useState(false)
+  const showRecap = recapAgo !== null && !recapDismissed && !playing && index === initialIndex
 
   // Glance back: hold the word to see the last couple of sentences (reading
   // pauses while you look), let go to carry on. Swipe to move by sentence.
@@ -278,6 +290,20 @@ export function Reader({
     return words.slice(start, index + CONTEXT_WORDS).map((w, i) => ({ w, i: start + i }))
   }, [playing, index, words, mode])
 
+  const recapCard = recapAgo && (
+    <Recap
+      words={words}
+      index={initialIndex}
+      where={hasChapters ? chapters[chapterIndex].title : null}
+      ago={recapAgo}
+      onContinue={() => {
+        setRecapDismissed(true)
+        play()
+      }}
+      onDismiss={() => setRecapDismissed(true)}
+    />
+  )
+
   return (
     <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}`}>
       <header className="reader-top chrome">
@@ -369,6 +395,7 @@ export function Reader({
             onPage={onPage}
             navRef={pageNav}
           />
+          {showRecap && recapCard}
         </section>
       ) : (
         <section className="stage">
@@ -380,6 +407,7 @@ export function Reader({
             gestures={wordGestures.handlers}
           />
           {glancing && <Glance words={words} index={index} />}
+          {showRecap && recapCard}
           <div className="context" aria-hidden={playing}>
             {context && (
               <p>
@@ -484,6 +512,46 @@ export function Reader({
         />
       )}
     </main>
+  )
+}
+
+/** "Previously…": the last few sentences before where you left off. */
+function Recap({
+  words,
+  index,
+  where,
+  ago,
+  onContinue,
+  onDismiss,
+}: {
+  words: string[]
+  index: number
+  where: string | null
+  ago: string
+  onContinue: () => void
+  onDismiss: () => void
+}) {
+  const { start, end } = recapRange(words, index)
+  if (end < start) return null
+  return (
+    <aside className="recap" aria-label="Previously" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+      <p className="recap-head">
+        Previously{where && <> · {where}</>} <span className="muted">· {ago}</span>
+      </p>
+      <p className="recap-text">
+        {start > 0 && '… '}
+        {words.slice(start, end + 1).join(' ')}
+      </p>
+      <div className="recap-actions">
+        <button type="button" className="demo-button" onClick={onContinue}>
+          <Icon name="play" size={16} />
+          Continue reading
+        </button>
+        <button type="button" className="text-button" onClick={onDismiss}>
+          Dismiss
+        </button>
+      </div>
+    </aside>
   )
 }
 

@@ -14,6 +14,8 @@ import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
 interface OpenBook {
   book: Book
   startIndex: number
+  /** When this book was last read, for the "Previously…" recap. */
+  lastReadAt?: number
   /** The built-in sample: not in the library, and its progress isn't saved. */
   demo?: boolean
 }
@@ -57,7 +59,7 @@ export default function App() {
     setBookmarks(await storage.loadBookmarks(book.id))
     // Resume from the start of the sentence so there's context to pick up from.
     const startIndex = saved ? sentenceStart(book.words, saved.index) : 0
-    navigate('forward', () => setOpen({ book, startIndex }))
+    navigate('forward', () => setOpen({ book, startIndex, lastReadAt: saved?.updatedAt }))
   }, [])
 
   const handleUpload = async (file: File) => {
@@ -177,6 +179,7 @@ export default function App() {
         key={open.book.id}
         book={open.book}
         initialIndex={open.startIndex}
+        lastReadAt={open.lastReadAt}
         settings={settings}
         onSettings={handleSettings}
         onProgress={handleProgress}

@@ -524,6 +524,28 @@ h1, h2, p { margin: 0; }
 }
 .glance .current { background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 4px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 16%, transparent); }
 .glance .ahead { color: var(--text-2); }
+/* "Previously…" when coming back to a book after a while. */
+.recap {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  bottom: 0.75rem;
+  z-index: 3;
+  display: grid;
+  gap: 0.6rem;
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--separator);
+  border-radius: 14px;
+  background: var(--raised);
+  box-shadow: var(--shadow);
+  animation: toast-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.recap-head { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.02em; }
+.recap-head .muted { font-weight: 400; }
+.recap-text { font-family: var(--reading-font); font-size: 0.95rem; line-height: 1.55; color: var(--text-2); max-height: 7.8em; overflow: hidden; }
+.recap-actions { display: flex; align-items: center; gap: 0.5rem; }
 .glance-hint { text-align: center; font-size: 0.8rem; color: var(--text-2); }
 .stage-page { touch-action: pan-y; }
 
