@@ -81,6 +81,6 @@ describe('restoreSummary', () => {
 
 describe('backupFileName', () => {
   it('uses the local date', () => {
-    expect(backupFileName(new Date(2026, 0, 5, 23, 30))).toBe('rsvp-reader-backup-2026-01-05.json')
+    expect(backupFileName(new Date(2026, 0, 5, 23, 30))).toBe('chapter-backup-2026-01-05.json')
   })
 })

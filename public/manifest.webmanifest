@@ -1,7 +1,7 @@
 {
-  "name": "RSVP Reader",
-  "short_name": "RSVP Reader",
-  "description": "Speed-read your books one word at a time. Files stay on your device.",
+  "name": "Chapter",
+  "short_name": "Chapter",
+  "description": "Chapter: speed-read your books one word at a time. Files stay on your device.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
