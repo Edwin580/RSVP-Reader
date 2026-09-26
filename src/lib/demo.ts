@@ -19,7 +19,7 @@ const SECTIONS: Section[] = [
     paragraphs: [
       'Before you start',
       'This is a short sample so you can see how reading works here. Press play, or tap the word, and the text will appear one word at a time, always in the same spot, so your eyes can stay still.',
-      'Tap again to pause, and the words around you appear so you can find your place. Use the plus and minus buttons to change your speed.',
+      'Tap again to pause, and the words around you appear so you can find your place. Missed something? Hold the word to glance back at the last two sentences, and let go to carry on. Swipe left or right to move a sentence at a time. Use the plus and minus buttons to change your speed.',
       'Open the Aa menu to switch to page mode, where the whole page stays in view and a marker follows along as you read. You can also search for any word or phrase. Try searching for rabbit.',
       'When you are ready, add a book of your own from the library. It stays on your device.',
     ],

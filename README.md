@@ -23,6 +23,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **Smooth, native-feeling motion**: every button responds visibly to a tap, opening a book slides the reader in (and back out to the library) where the browser supports view transitions, and menus and panels slide away when closed instead of vanishing. All motion is turned off when the system asks for reduced motion.
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
 - **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
+- **Glance back**: RSVP's big weakness is that you can't look back at what you just read, and research on reading finds that costs comprehension. Hold the word to see the previous and current sentence (reading pauses while you look), and let go to carry on. Swipe left or right to move a sentence at a time; in page mode, swipe to turn pages.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
 - **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with a bar for each of the last 7 days, time read, your real average speed, streak and words read. Only time with the words moving counts, the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
@@ -76,6 +77,7 @@ src/
     backup.ts          backup file format and merging a restore into the library
     bookmarks.ts       adding and removing bookmarks (saved per sentence)
     covers.ts          finding EPUB cover images and making cover thumbnails
+    glance.ts          what a glance back shows, and telling taps, holds and swipes apart
     demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
     pages.ts           page anchoring and paragraph grouping for page mode

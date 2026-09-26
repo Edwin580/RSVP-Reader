@@ -104,3 +104,22 @@ test('page mode highlight and pacer can be switched off', async ({ page }) => {
   await expect(page.locator('.page-pacer')).toBeHidden()
   await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field.')
 })
+
+test('holding the word glances back and letting go carries on', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  for (let i = 0; i < 9; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  const word = page.locator('.word-frame')
+  const box = (await word.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect(page.locator('.glance')).toContainText('The rabbit ran across the field. Alice followed it')
+  await page.mouse.up()
+  await expect(page.locator('.glance')).toBeHidden()
+  // Swipe right: back to the start of this sentence (like Shift+←).
+  await page.mouse.move(box.x + box.width / 2 - 60, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, { steps: 5 })
+  await page.mouse.up()
+  await expect(page.locator('.word')).toHaveText('Alice')
+})
