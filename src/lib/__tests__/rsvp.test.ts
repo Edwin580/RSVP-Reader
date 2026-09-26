@@ -138,3 +138,15 @@ describe('pauseFactor fast path', () => {
     }
   })
 })
+
+describe('buildTimeline extras', () => {
+  it('gives extra time to marked words while keeping the average speed', () => {
+    const words = 'one two three four five six seven eight'.split(' ')
+    const extras = new Float32Array(words.length)
+    extras[3] = 0.6
+    const { weights } = buildTimeline(words, [], 'smart', [], extras)
+    const mean = weights.reduce((a, b) => a + b, 0) / weights.length
+    expect(mean).toBeCloseTo(1)
+    expect(weights[3]).toBeGreaterThan(weights[2] + 0.4)
+  })
+})

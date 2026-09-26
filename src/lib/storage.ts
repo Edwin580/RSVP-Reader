@@ -1,6 +1,6 @@
 import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
 import { storageName } from './preview'
-import type { WordTiming } from './rsvp'
+import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
 import type { Book, BookMeta, Bookmark, Progress } from './types'
 
@@ -153,7 +153,7 @@ export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
   textScale: 1,
-  wordTiming: 'natural',
+  wordTiming: 'smart',
   mode: 'word',
   theme: 'system',
   font: 'sans',
@@ -171,7 +171,7 @@ export function loadSettings(): Settings {
     return {
       wpm: typeof saved.wpm === 'number' ? saved.wpm : DEFAULT_SETTINGS.wpm,
       textScale: typeof saved.textScale === 'number' ? saved.textScale : DEFAULT_SETTINGS.textScale,
-      wordTiming: saved.wordTiming === 'even' ? 'even' : DEFAULT_SETTINGS.wordTiming,
+      wordTiming: oneOf(WORD_TIMINGS, saved.wordTiming, DEFAULT_SETTINGS.wordTiming),
       mode: saved.mode === 'page' ? 'page' : DEFAULT_SETTINGS.mode,
       theme: oneOf(THEMES, saved.theme, DEFAULT_SETTINGS.theme),
       font: oneOf(FONTS, saved.font, DEFAULT_SETTINGS.font),

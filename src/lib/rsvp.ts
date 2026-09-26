@@ -26,7 +26,9 @@ const SENTENCE_END = /[.!?…]["'”’)\]]*$/
 const ABBREVIATION = /^["'“‘(]*(?:mr|mrs|ms|mx|dr|st|jr|sr|prof|rev|hon|capt|col|gen|lt|sgt|mt|vs|e\.g|i\.e|cf|[a-hj-z]|(?:[a-z]\.){1,}[a-z])\.$/i
 const CLAUSE_END = /[,;:—–]["'”’)\]]*$/
 
-export type WordTiming = 'natural' | 'even'
+/** 'smart' is natural timing plus extra time for new names, rare words and numbers (see pacing.ts). */
+export type WordTiming = 'smart' | 'natural' | 'even'
+export const WORD_TIMINGS: WordTiming[] = ['smart', 'natural', 'even']
 
 /**
  * Relative display time for a word with `letters` letters/digits: 1 at five
@@ -49,7 +51,7 @@ export function pauseFactor(word: string, paragraphEnd: boolean): number {
 
 /** Un-normalised display weight of one word. */
 export function wordWeight(word: string, paragraphEnd: boolean, timing: WordTiming = 'natural'): number {
-  return (timing === 'natural' ? lengthFactor(countLetters(word)) : 1) + pauseFactor(word, paragraphEnd)
+  return (timing === 'even' ? 1 : lengthFactor(countLetters(word))) + pauseFactor(word, paragraphEnd)
 }
 
 const isAsciiAlnum = (c: number) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57)
@@ -95,6 +97,8 @@ export function buildTimeline(
   paragraphEnds: number[],
   timing: WordTiming = 'natural',
   headings: { start: number; end: number }[] = [],
+  /** Extra weight per word, e.g. from smart pacing; added before balancing. */
+  extras?: ArrayLike<number>,
 ): Timeline {
   // A flag per word is much faster to check than a Set, and this runs for every word.
   const ends = new Uint8Array(words.length)
@@ -102,6 +106,7 @@ export function buildTimeline(
   const raw = new Float64Array(words.length)
   for (let i = 0; i < words.length; i++) raw[i] = wordWeight(words[i], ends[i] === 1, timing)
   for (const h of headings) for (let i = h.start; i <= h.end && i < words.length; i++) raw[i] += HEADING_EXTRA
+  if (extras) for (let i = 0; i < words.length; i++) raw[i] += extras[i] ?? 0
   let total = 0
   for (let i = 0; i < words.length; i++) total += raw[i]
   const scale = total > 0 ? words.length / total : 1
