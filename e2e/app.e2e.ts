@@ -278,3 +278,22 @@ test('the settings sheet dims the page without a coloured layer over the top', a
     await expect.poll(pageColour).toBe('rgb(18, 18, 17)')
   }
 })
+
+test('holding to read hides the controls at once and brings them back on release', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+
+  const opacity = () => page.evaluate(`Number(getComputedStyle(document.querySelector('.reader-bottom')).opacity)`)
+  const stage = (await page.locator('.stage').boundingBox())!
+  await page.mouse.move(stage.x + stage.width / 2, stage.y + 30)
+  await page.mouse.down()
+  // Well before the usual two idle seconds.
+  await expect.poll(opacity, { timeout: 500 }).toBe(0)
+  await page.mouse.up()
+  await expect.poll(opacity, { timeout: 500 }).toBe(1)
+})

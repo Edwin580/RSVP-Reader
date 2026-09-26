@@ -153,13 +153,20 @@ export function Reader({
   // the paused text jumps there instead of playing.
   const ignorePress = (target: Element) =>
     !!target.closest('button, a, input, select, .recap') || (!holdToRead && !!target.closest('.context [data-i]'))
+  // While held, the controls get out of the way at once, and come straight
+  // back on release (rather than fading after a couple of idle seconds).
+  const [holding, setHolding] = useState(false)
   const holdHandlers = {
     ignore: ignorePress,
     onPressStart: () => {
       pressFrom.current = index
+      setHolding(true)
       play()
     },
-    onPressEnd: () => pause(),
+    onPressEnd: () => {
+      setHolding(false)
+      pause()
+    },
   }
   const wordGestures = usePressGestures(
     holdToRead
@@ -404,7 +411,7 @@ export function Reader({
   )
 
   return (
-    <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}`}>
+    <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}${holding && playing ? ' is-holding' : ''}`}>
       <header className="reader-top chrome">
         <button type="button" className="nav-button" onClick={onClose}>
           <Icon name="chevronLeft" size={22} />
