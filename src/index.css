@@ -318,6 +318,61 @@ h1, h2, p { margin: 0; }
 .bar { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; margin-top: 0.4rem; }
 .bar > span { display: block; height: 100%; border-radius: 2px; background: var(--text); }
 .shelf-remove { color: var(--text-2); flex-shrink: 0; }
+/* Backup: one quiet line under the shelf. */
+.backup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  margin-top: 1.75rem;
+  font-size: 0.875rem;
+  color: var(--text-2);
+}
+.backup-status { flex: 1 1 14rem; line-height: 1.5; }
+.backup-status.is-nudge { color: var(--text); }
+.backup-why { color: var(--text-2); }
+.backup-actions { display: flex; gap: 0.25rem; margin-right: -0.6rem; }
+.text-button {
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font-weight: 600;
+  color: var(--text);
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+.backup-status .text-button { min-height: 0; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+.text-button:disabled { cursor: default; opacity: 0.45; }
+.text-button:not(:disabled):active { background: var(--fill); transform: scale(0.96); transition-duration: 0.05s; }
+@media (hover: hover) {
+  .text-button:not(:disabled):hover { background: var(--fill); }
+  .backup-status .text-button:hover { background: none; }
+}
+
+/* Toast: a short message that slides up from the bottom and fades away. */
+.toast {
+  position: fixed;
+  left: 1rem;
+  right: 1rem;
+  bottom: calc(1.25rem + var(--safe-bottom));
+  z-index: 30;
+  width: fit-content;
+  max-width: 26rem;
+  margin-inline: auto;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 0.925rem;
+  line-height: 1.4;
+  box-shadow: var(--shadow);
+  animation: toast-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  cursor: default;
+}
+.toast.is-error { background: var(--red); color: var(--bg); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } }
 
 /* ——— Reader ——— */
 .reader {

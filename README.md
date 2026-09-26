@@ -27,7 +27,8 @@ A simple speed-reading app that uses RSVP (Rapid Serial Visual Presentation). Up
 - **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with a bar for each of the last 7 days, time read, your real average speed, streak and words read. Only time with the words moving counts, the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
 - **Book covers**: the library shows each EPUB's cover image and a PDF's first page as its cover; other books get a plain cloth cover with the title. (Books added before covers were supported get the plain cover; add the file again to pick up its cover.)
 - **Works offline**: after your first visit the whole app is cached on the device, so it opens and reads without a connection (handy once it's added to your Home Screen). When you're online, new versions load as soon as they're deployed.
-- **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on.
+- **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on. The app asks the browser to keep this data permanently (Safari otherwise clears site data that goes unused for about a week).
+- **Backup and restore**: a quiet line under your books shows when you last backed up. *Back up* saves your whole library and reading positions as one file (on phones, through the share sheet, so it can go to Files, iCloud or another device); *Restore* merges a backup into this device: books you already have are kept, and the most recent reading position wins. A gentle reminder appears only when the browser might clear your books and there's no backup from the last two weeks.
 
 ### Keyboard shortcuts
 
@@ -70,6 +71,7 @@ service-worker/sw.js   offline cache; the build fills in the file list (vite.con
 src/
   lib/
     appearance.ts      applies theme, reading font and focus color to the page
+    backup.ts          backup file format and merging a restore into the library
     covers.ts          finding EPUB cover images and making cover thumbnails
     demo.ts            built-in sample book offered while the library is empty
     rsvp.ts            ORP, word timing and timeline, sentence navigation
@@ -94,7 +96,7 @@ src/
 
 1. **Rename the app to "Chapter"**: a short, friendly name to use everywhere (page title, header, README, repo).
 2. **Themes and customization**: light, dark and other color themes, plus reader settings such as font, focus-letter color and word position, so each reader can make it their own.
-3. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Open questions are whether to add export/import for moving a library between devices, and whether optional sync is ever worth adding.
+3. **Storage decision, local vs. account-based**: the leaning is to stay local, so no account is needed. Books and progress already live on the device (IndexedDB). Backup and restore now covers moving a library between devices; the open question is whether optional sync is ever worth adding.
 
 ### Done
 

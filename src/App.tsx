@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
+import { Toast, type ToastMessage } from './components/Toast'
 import { navigate } from './components/transition'
 import { applyAppearance } from './lib/appearance'
+import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import { EMPTY_STATS } from './lib/stats'
@@ -26,6 +28,10 @@ export default function App() {
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [lastBackup, setLastBackup] = useState(storage.loadLastBackup)
+  // Whether the browser has promised not to clear our storage (null = unknown).
+  const [storageKept, setStorageKept] = useState<boolean | null>(null)
   const [settings, setSettings] = useState(storage.loadSettings)
 
   const refreshLibrary = useCallback(async () => {
@@ -41,6 +47,10 @@ export default function App() {
     refreshLibrary().catch((e) => setError(`Could not load library: ${message(e)}`))
   }, [refreshLibrary])
 
+  useEffect(() => {
+    navigator.storage?.persisted?.().then(setStorageKept, () => {})
+  }, [])
+
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
     // Resume from the start of the sentence so there's context to pick up from.
@@ -54,6 +64,8 @@ export default function App() {
     try {
       const book = await parseFile(file, (f) => setBusy(`Reading ${file.name}… ${Math.round(f * 100)}%`))
       await storage.saveBook(book, file.name)
+      // Now there's something worth keeping, ask the browser not to clear it.
+      storage.requestPersistence().then(setStorageKept, () => {})
       await refreshLibrary()
       await openBook(book)
     } catch (e) {
@@ -75,6 +87,53 @@ export default function App() {
     const { createDemoBook } = await import('./lib/demo')
     const book = createDemoBook()
     navigate('forward', () => setOpen({ book, startIndex: 0, demo: true }))
+  }
+
+  const clearToast = useCallback(() => setToast(null), [])
+  const showToast = (text: string, tone: ToastMessage['tone'] = 'ok') => setToast({ text, tone, id: Date.now() })
+
+  const handleBackup = async () => {
+    try {
+      const backup = createBackup(await storage.allEntries())
+      const name = backupFileName(new Date())
+      const file = new File([JSON.stringify(backup)], name, { type: 'application/json' })
+      // Phones: the share sheet saves to Files or iCloud, or AirDrops to another device.
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Library backup' })
+        } catch (e) {
+          if (e instanceof DOMException && e.name === 'AbortError') return // closed the share sheet
+          throw e
+        }
+      } else {
+        const url = URL.createObjectURL(file)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = name
+        link.click()
+        setTimeout(() => URL.revokeObjectURL(url), 10000)
+      }
+      const now = Date.now()
+      storage.saveLastBackup(now)
+      setLastBackup(now)
+      showToast(`Backup saved: ${books.length} ${books.length === 1 ? 'book' : 'books'} with reading positions.`)
+    } catch (e) {
+      showToast(`Couldn't save a backup: ${message(e)}`, 'error')
+    }
+  }
+
+  const handleRestore = async (file: File) => {
+    try {
+      const backup = parseBackup(await file.text())
+      const current = new Map(await storage.allEntries())
+      const { writes, added, updated } = mergeBackup(current, backup)
+      await storage.writeEntries(writes)
+      storage.requestPersistence().then(setStorageKept, () => {})
+      await refreshLibrary()
+      showToast(restoreSummary(added, updated))
+    } catch (e) {
+      showToast(message(e), 'error')
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -123,19 +182,26 @@ export default function App() {
   }
 
   return (
-    <Library
-      books={books}
-      progress={progress}
-      stats={stats}
-      wpm={settings.wpm}
-      busy={busy}
-      error={error}
-      showDemo={libraryLoaded && books.length === 0 && !busy}
-      onDemo={handleDemo}
-      onUpload={handleUpload}
-      onOpen={handleOpen}
-      onDelete={handleDelete}
-    />
+    <>
+      <Library
+        books={books}
+        progress={progress}
+        stats={stats}
+        wpm={settings.wpm}
+        busy={busy}
+        error={error}
+        lastBackup={lastBackup}
+        storageKept={storageKept}
+        showDemo={libraryLoaded && books.length === 0 && !busy}
+        onDemo={handleDemo}
+        onUpload={handleUpload}
+        onOpen={handleOpen}
+        onDelete={handleDelete}
+        onBackup={handleBackup}
+        onRestore={handleRestore}
+      />
+      <Toast message={toast} onDone={clearToast} />
+    </>
   )
 }
 

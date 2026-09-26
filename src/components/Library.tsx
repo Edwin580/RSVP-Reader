@@ -14,18 +14,51 @@ interface Props {
   wpm: number
   busy: string | null
   error: string | null
+  /** When a backup was last saved from this browser, or null. */
+  lastBackup: number | null
+  /** Whether the browser has promised to keep our storage (null = unknown). */
+  storageKept: boolean | null
   /** Offer the built-in sample (only while the library is empty). */
   showDemo: boolean
   onDemo: () => void
   onUpload: (file: File) => void
   onOpen: (id: string) => void
   onDelete: (id: string) => void
+  onBackup: () => void
+  onRestore: (file: File) => void
 }
 
 const FORMATS = 'EPUB, PDF, TXT or Markdown'
+const BACKUP_NUDGE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
 
-export function Library({ books, progress, stats, wpm, busy, error, showDemo, onDemo, onUpload, onOpen, onDelete }: Props) {
+/** "today", "yesterday", or a short date like "Sep 12". */
+function formatDate(at: number, now: number): string {
+  const day = (t: number) => new Date(t).setHours(0, 0, 0, 0)
+  const days = Math.round((day(now) - day(at)) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+export function Library({
+  books,
+  progress,
+  stats,
+  wpm,
+  busy,
+  error,
+  lastBackup,
+  storageKept,
+  showDemo,
+  onDemo,
+  onUpload,
+  onOpen,
+  onDelete,
+  onBackup,
+  onRestore,
+}: Props) {
   const input = useRef<HTMLInputElement>(null)
+  const restoreInput = useRef<HTMLInputElement>(null)
   const dragging = useWindowFileDrag((file) => !busy && onUpload(file))
 
   // Most recently read (or added) first.
@@ -39,6 +72,10 @@ export function Library({ books, progress, stats, wpm, busy, error, showDemo, on
   )
 
   const choose = () => input.current?.click()
+  // The time the library was shown, for "backed up yesterday" and the nudge below.
+  const [now] = useState(Date.now)
+  // Nudge only when it matters: storage isn't guaranteed and there's no backup from the last two weeks.
+  const needsBackup = storageKept === false && (lastBackup === null || now - lastBackup > BACKUP_NUDGE_AFTER_MS)
 
   return (
     <main className="library">
@@ -152,6 +189,50 @@ export function Library({ books, progress, stats, wpm, busy, error, showDemo, on
           </ul>
         </section>
       )}
+
+      {/* Backups stay out of the way: one quiet line, with a gentle nudge only
+          when the browser might clear the library and there's no recent backup. */}
+      <footer className="backup">
+        {sorted.length > 0 ? (
+          <>
+            <p className={`backup-status${needsBackup ? ' is-nudge' : ''}`}>
+              {lastBackup ? `Backed up ${formatDate(lastBackup, now)}` : 'Not backed up yet'}
+              {needsBackup && (
+                <span className="backup-why">
+                  {' '}
+                  · This browser may clear books it hasn’t seen in a while.
+                </span>
+              )}
+            </p>
+            <div className="backup-actions">
+              <button type="button" className="text-button" onClick={onBackup} disabled={!!busy}>
+                Back up
+              </button>
+              <button type="button" className="text-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
+                Restore
+              </button>
+            </div>
+          </>
+        ) : (
+          <p className="backup-status">
+            Moving from another device?{' '}
+            <button type="button" className="text-button" onClick={() => restoreInput.current?.click()} disabled={!!busy}>
+              Restore a backup
+            </button>
+          </p>
+        )}
+        <input
+          ref={restoreInput}
+          type="file"
+          hidden
+          accept=".json,application/json"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) onRestore(file)
+            e.target.value = ''
+          }}
+        />
+      </footer>
     </main>
   )
 }

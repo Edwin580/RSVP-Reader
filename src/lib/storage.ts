@@ -1,4 +1,4 @@
-import { createStore, del, get, set, update } from 'idb-keyval'
+import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
 import { storageName } from './preview'
 import type { WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
@@ -50,6 +50,50 @@ export function loadProgress(id: string): Promise<Progress | undefined> {
 
 export function saveProgress(id: string, index: number): Promise<void> {
   return set(progressKey(id), { index, updatedAt: Date.now() } satisfies Progress, store)
+}
+
+/** Every stored entry, for backups. */
+export async function allEntries(): Promise<[string, unknown][]> {
+  const all = await entries<IDBValidKey, unknown>(store)
+  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string')
+}
+
+export function writeEntries(writes: [string, unknown][]): Promise<void> {
+  return setMany(writes, store)
+}
+
+/**
+ * Ask the browser not to clear our data when space runs low or the site
+ * goes unused for a while (Safari clears it after about a week otherwise).
+ * Browsers decide for themselves; returns whether storage is now kept.
+ */
+export async function requestPersistence(): Promise<boolean> {
+  try {
+    if (!navigator.storage?.persist) return false
+    return (await navigator.storage.persisted()) || (await navigator.storage.persist())
+  } catch {
+    return false
+  }
+}
+
+const LAST_BACKUP_KEY = storageName('rsvp-last-backup')
+
+/** When a backup was last saved from this browser (ms), or null if never. */
+export function loadLastBackup(): number | null {
+  try {
+    const value = Number(localStorage.getItem(LAST_BACKUP_KEY))
+    return value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+export function saveLastBackup(at: number): void {
+  try {
+    localStorage.setItem(LAST_BACKUP_KEY, String(at))
+  } catch {
+    // Storage unavailable: the "last backed up" note just won't show.
+  }
 }
 
 const STATS_KEY = 'stats'
