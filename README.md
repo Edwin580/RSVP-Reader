@@ -24,6 +24,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **Smooth, native-feeling motion**: every button responds visibly to a tap, opening a book slides the reader in (and back out to the library) where the browser supports view transitions, and menus and panels slide away when closed instead of vanishing. All motion is turned off when the system asks for reduced motion.
 - **Focus mode**: while you're reading, the controls fade away after a couple of seconds and come back when you move the mouse or pause.
 - **Bookmarks**: press `B` or use the bookmark button to save the sentence you're on; the bookmarks list shows each spot's opening words, chapter and date, and jumps back there with a tap.
+- **"Previously…"**: come back to a book after a few hours or more and a card shows the last few sentences you read, which chapter you're in and how long ago it was, with *Continue reading* (or *Dismiss*).
 - **Glance back**: RSVP's big weakness is that you can't look back at what you just read, and research on reading finds that costs comprehension. Hold the word to see the previous and current sentence (reading pauses while you look), and let go to carry on. Swipe left or right to move a sentence at a time; in page mode, swipe to turn pages.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **People and places so far**: open search before typing and Chapter lists the characters and places you've met, most mentioned first, with no spoilers: only names that have already appeared, counted up to where you are. Tap one to see where you first met them and their latest mention, and tap either to jump there. Handy when a name comes back after 200 pages.
@@ -81,6 +82,7 @@ src/
     covers.ts          finding EPUB cover images and making cover thumbnails
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
+    recap.ts           the "Previously…" recap when coming back to a book
     cast.ts            the spoiler-free list of people and places met so far
     pacing.ts          smart pacing: extra time for new names, rare words, numbers, dialogue
     glance.ts          what a glance back shows, and telling taps, holds and swipes apart
