@@ -252,7 +252,7 @@ export function Library({
 }
 
 /** Muted cloth colours for books without a cover image, picked from the book id. */
-const COVER_TONES = ['#8a5a44', '#4f6b5a', '#5a6480', '#7a6a4a', '#6b4f6b', '#4a6a73']
+const COVER_TONES = ['#23386b', '#7a2f2a', '#245945', '#4d3f7a', '#8a6326', '#2b5a68']
 
 function Cover({ book }: { book: BookMeta }) {
   if (book.cover) return <img className="cover" src={book.cover} alt="" loading="lazy" />

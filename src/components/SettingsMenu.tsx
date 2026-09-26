@@ -44,10 +44,10 @@ const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
 
 /** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
 const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
-  { value: 'red', label: 'Red', color: '#c23b25' },
-  { value: 'blue', label: 'Blue', color: '#2d5bb5' },
-  { value: 'green', label: 'Green', color: '#2f7a45' },
-  { value: 'purple', label: 'Purple', color: '#7a45b8' },
+  { value: 'blue', label: 'Blue', color: '#2f45d0' },
+  { value: 'red', label: 'Red', color: '#cf3a1d' },
+  { value: 'green', label: 'Green', color: '#13774a' },
+  { value: 'purple', label: 'Purple', color: '#6b3fd0' },
 ]
 
 const SHORTCUTS: [string, string][] = [

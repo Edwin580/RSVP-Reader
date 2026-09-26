@@ -1,21 +1,25 @@
-/* Warm paper and ink: a beige page in light mode, a warm near-black in dark
-   mode, with a single red for the focus letter and marker. Secondary text is
-   darkened from the classic paper grey so it stays readable (≥ 4.5:1). */
+/* Paper and ink. Light is a clean, neutral page (not beige) with blue-black
+   ink; dark is a cool near-black. The focus letter, marker and pacer default
+   to ink blue rather than the red most speed readers use. Secondary text
+   stays readable (≥ 4.5:1) on every theme. */
 :root {
-  --bg: #f3efe6;
-  --bg-2: #ece6da;
-  --fill: #e4ddcf;
-  --raised: #fbf8f2;
-  --text: #1c1a17;
-  --text-2: #6b645a;
-  --separator: #d9d1c2;
-  --red: #c23b25;
-  --shadow: 0 12px 32px rgb(60 45 20 / 0.16);
+  --bg: #f8f8f6;
+  --bg-2: #efefec;
+  --fill: #e6e6e2;
+  --raised: #ffffff;
+  --text: #15171c;
+  --text-2: #5b606b;
+  --separator: #dcdcd8;
+  --red: #c62f1e;
+  --shadow: 0 12px 32px rgb(20 24 34 / 0.14);
+  --scrim: rgb(12 14 20 / 0.32);
   /* The focus letter, page marker and pacer. Each focus colour has a shade
      for light pages and one for dark; the theme picks which. */
-  --accent-l: #c23b25;
-  --accent-d: #e8674f;
+  --accent-l: #2f45d0;
+  --accent-d: #8c9bff;
   --accent: var(--accent-l);
+  /* Text and icons on an accent-filled button. */
+  --on-accent: #ffffff;
 
   --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --serif: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', serif;
@@ -37,31 +41,35 @@
 /* Themes: no data-theme follows the system; the Aa menu can pick one. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #141311;
-    --bg-2: #1c1a17;
-    --fill: #2a2723;
-    --raised: #45403a;
-    --text: #ebe5d8;
-    --text-2: #a39c90;
-    --separator: #2f2c27;
-    --red: #e8674f;
-    --shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+    --bg: #0e0f12;
+    --bg-2: #16171b;
+    --fill: #22242a;
+    --raised: #2d3038;
+    --text: #ecedf0;
+    --text-2: #9a9fa9;
+    --separator: #26282e;
+    --red: #ff7a66;
+    --shadow: 0 12px 32px rgb(0 0 0 / 0.6);
+    --scrim: rgb(0 0 0 / 0.5);
     --accent: var(--accent-d);
+    --on-accent: #0e0f12;
   }
 }
 :root[data-theme='light'] { color-scheme: light; }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #141311;
-  --bg-2: #1c1a17;
-  --fill: #2a2723;
-  --raised: #45403a;
-  --text: #ebe5d8;
-  --text-2: #a39c90;
-  --separator: #2f2c27;
-  --red: #e8674f;
-  --shadow: 0 12px 32px rgb(0 0 0 / 0.55);
+  --bg: #0e0f12;
+  --bg-2: #16171b;
+  --fill: #22242a;
+  --raised: #2d3038;
+  --text: #ecedf0;
+  --text-2: #9a9fa9;
+  --separator: #26282e;
+  --red: #ff7a66;
+  --shadow: 0 12px 32px rgb(0 0 0 / 0.6);
+  --scrim: rgb(0 0 0 / 0.5);
   --accent: var(--accent-d);
+  --on-accent: #0e0f12;
 }
 /* Sepia: warmer and lower-contrast than light, for long reads. */
 :root[data-theme='sepia'] {
@@ -75,11 +83,12 @@
   --separator: #dbc6a0;
   --red: #b0391f;
   --shadow: 0 12px 32px rgb(80 55 20 / 0.18);
+  --scrim: rgb(40 28 10 / 0.3);
 }
 
-:root[data-accent='blue'] { --accent-l: #2d5bb5; --accent-d: #6f9cf0; }
-:root[data-accent='green'] { --accent-l: #2f7a45; --accent-d: #5cb87a; }
-:root[data-accent='purple'] { --accent-l: #7a45b8; --accent-d: #b18ae8; }
+:root[data-accent='red'] { --accent-l: #cf3a1d; --accent-d: #ff7a5c; }
+:root[data-accent='green'] { --accent-l: #13774a; --accent-d: #4cc98a; }
+:root[data-accent='purple'] { --accent-l: #6b3fd0; --accent-d: #b69cff; }
 :root[data-font='serif'] { --reading-font: var(--serif); }
 
 * { box-sizing: border-box; }
@@ -265,8 +274,8 @@ h1, h2, p { margin: 0; }
   padding: 0 1.1rem 0 0.9rem;
   border: 0;
   border-radius: 999px;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--on-accent);
   font-weight: 600;
 }
 @media (max-width: 520px) {
@@ -308,7 +317,7 @@ h1, h2, p { margin: 0; }
   justify-content: center;
   padding: 0.35rem 0.3rem 0.35rem 0.45rem;
   overflow: hidden;
-  color: #f6efe2;
+  color: #f8f8f6;
   font-family: var(--serif, Georgia, serif);
   font-size: 0.6rem;
   font-weight: 600;
@@ -320,7 +329,7 @@ h1, h2, p { margin: 0; }
 .shelf-title { font-size: 1.05rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shelf-meta { font-size: 0.875rem; }
 .bar { height: 4px; border-radius: 2px; background: var(--fill); overflow: hidden; margin-top: 0.4rem; }
-.bar > span { display: block; height: 100%; border-radius: 2px; background: var(--text); }
+.bar > span { display: block; height: 100%; border-radius: 2px; background: var(--accent); }
 .shelf-remove { color: var(--text-2); flex-shrink: 0; }
 /* Backup: one quiet line under the shelf. */
 .backup {
@@ -554,7 +563,13 @@ h1, h2, p { margin: 0; }
 .context { width: 100%; max-width: 36rem; margin: 0 auto; min-height: 0; }
 .context p { color: var(--text-2); font-family: var(--reading-font); font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere; animation: fade-in 0.3s ease; }
 .context span { cursor: pointer; }
-.context .current { color: var(--text); background: var(--fill); border-radius: 4px; box-shadow: 0 0 0 2px var(--fill); }
+.context .current {
+  --mark: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+  background: var(--mark);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--mark);
+}
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 
@@ -579,7 +594,7 @@ h1, h2, p { margin: 0; }
   background: var(--separator);
   overflow: hidden;
 }
-.scrubber-fill { height: 100%; background: var(--text); }
+.scrubber-fill { height: 100%; background: var(--accent); }
 .scrubber-thumb {
   position: absolute;
   top: 50%;
@@ -728,8 +743,8 @@ h1, h2, p { margin: 0; }
   margin: 0 0.35rem;
   border: 0;
   border-radius: 50%;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--on-accent);
   transition: transform 0.1s;
 }
 .play-button:active { transform: scale(0.95); }
@@ -900,7 +915,7 @@ kbd {
   inset: 0;
   display: flex;
   justify-content: flex-end;
-  background: rgb(28 22 12 / 0.35);
+  background: var(--scrim);
   z-index: 10;
   animation: fade-in 0.15s ease;
 }
@@ -1060,7 +1075,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .speed { grid-row: 2; }
 
   /* Settings become a bottom sheet within thumb reach, over a dimmed page. */
-  .popover-backdrop { background: rgb(28 22 12 / 0.25); animation: fade-in 0.2s ease; }
+  .popover-backdrop { background: var(--scrim); animation: fade-in 0.2s ease; }
   .popover {
     position: fixed;
     top: auto;

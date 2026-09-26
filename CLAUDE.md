@@ -37,7 +37,7 @@ The parts that deserve a careful look: tricky logic, trade-offs, behavior change
 What was run and what it showed: unit tests added or changed, manual or browser checks (devices, modes, formats), and anything not tested.
 ```
 
-- Screenshots or short tables are welcome inside these sections when they help, especially for UI changes.
+- Include screenshots whenever a PR changes what the app looks like: before and after, at phone and desktop sizes (and light and dark when colours change). Put them in the section where they help most, usually "How it's tested". Short tables are welcome too.
 - Do not include a Claude session link (`claude.ai/code/session_…`) in PR titles or descriptions.
 - Keep titles short and descriptive.
 

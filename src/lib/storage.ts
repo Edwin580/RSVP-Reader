@@ -120,6 +120,8 @@ export function recordReading(ms: number, words: number): Promise<void> {
 
 // Old name kept, like the database, so settings carry over.
 const SETTINGS_KEY = storageName('rsvp-settings')
+/** Bumped when a saved setting needs migrating; see loadSettings. */
+const SETTINGS_VERSION = 2
 
 export interface Settings {
   wpm: number
@@ -151,7 +153,7 @@ export type PlayControl = 'tap' | 'hold'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['sans', 'serif']
-export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+export const ACCENTS: Accent[] = ['blue', 'red', 'green', 'purple']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -161,7 +163,7 @@ export const DEFAULT_SETTINGS: Settings = {
   mode: 'word',
   theme: 'system',
   font: 'sans',
-  accent: 'red',
+  accent: 'blue',
   pageHighlight: true,
   pacer: true,
   playControl: 'tap',
@@ -180,7 +182,9 @@ export function loadSettings(): Settings {
       mode: saved.mode === 'page' ? 'page' : DEFAULT_SETTINGS.mode,
       theme: oneOf(THEMES, saved.theme, DEFAULT_SETTINGS.theme),
       font: oneOf(FONTS, saved.font, DEFAULT_SETTINGS.font),
-      accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
+      // Red was the default before the palette changed (settings version 2),
+      // so a red saved from then moves to the new default; other picks stay.
+      accent: oneOf(ACCENTS, saved.v >= 2 || saved.accent !== 'red' ? saved.accent : undefined, DEFAULT_SETTINGS.accent),
       pageHighlight: saved.pageHighlight !== false,
       pacer: saved.pacer !== false,
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
@@ -192,7 +196,7 @@ export function loadSettings(): Settings {
 
 export function saveSettings(settings: Settings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...settings, v: SETTINGS_VERSION }))
   } catch {
     // Storage unavailable (private mode etc.) — settings just won't persist.
   }
