@@ -153,6 +153,7 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
   await page.getByRole('radio', { name: 'Hold', exact: true }).click()
   await expect(page.locator('.popover')).toContainText('pauses when you let go')
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })

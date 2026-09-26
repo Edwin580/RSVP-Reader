@@ -913,6 +913,30 @@ h1, h2, p { margin: 0; }
 .switch-row input:checked { background: var(--text); box-shadow: none; }
 .switch-row input:checked::after { transform: translateX(18px); background: var(--bg); }
 .segmented .serif { font-family: var(--serif); }
+/* A choice beside its label (Mode, Font) stays compact. */
+.setting:not(.setting-stack) > .segmented { flex: 0 1 11rem; }
+/* Everything past the essentials, behind one quiet toggle. */
+.more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: -0.25rem;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--separator);
+  background: none;
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.more-toggle svg { transition: transform 0.2s ease; }
+.more-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
+@media (hover: hover) {
+  .more-toggle:hover { color: var(--text); }
+}
+.more-settings { display: grid; gap: 1rem; animation: fade-in 0.2s ease; }
 .swatches { display: flex; gap: 0.6rem; }
 .swatch {
   width: 36px;
