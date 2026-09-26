@@ -15,6 +15,7 @@ const MAX_SCALE = 1.6
 const SCALE_STEP = 0.1
 
 const TIMINGS: { value: WordTiming; label: string; hint: string }[] = [
+  { value: 'smart', label: 'Smart', hint: 'A beat longer on new names, rare words and numbers' },
   { value: 'natural', label: 'Natural', hint: 'Longer words stay a little longer' },
   { value: 'even', label: 'Even', hint: 'Every word gets the same time' },
 ]
