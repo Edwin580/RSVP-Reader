@@ -1,13 +1,13 @@
+import { analyzeBook, type BookAnalysis } from './analysis'
 import { buildSearchIndex, search, type SearchIndex, type SearchResult } from './search'
 
 export type SearchRequest =
   | { type: 'index'; id: string; text: string }
   | { type: 'search'; id: string; reqId: number; query: string; limit: number }
 
-export interface SearchResponse {
-  reqId: number
-  result: SearchResult
-}
+export type SearchResponse =
+  | { type: 'result'; reqId: number; result: SearchResult }
+  | { type: 'analysis'; id: string; analysis: BookAnalysis }
 
 /**
  * Search for one book. The index is built in a Web Worker as soon as this is
@@ -23,6 +23,9 @@ export class BookSearch {
   private readonly id: string
   private readonly words: string[]
   private indexTimer: ReturnType<typeof setTimeout> | undefined
+  private resolveAnalysis: (a: BookAnalysis) => void = () => {}
+  /** The book's names and smart-pacing extras, ready shortly after opening. */
+  readonly analysis: Promise<BookAnalysis> = new Promise((resolve) => (this.resolveAnalysis = resolve))
 
   constructor(id: string, words: string[]) {
     this.id = id
@@ -30,11 +33,18 @@ export class BookSearch {
     try {
       this.worker = new Worker(new URL('../workers/search.worker.ts', import.meta.url), { type: 'module' })
     } catch {
+      // No workers: work it out on the main thread, after the reader has opened.
+      setTimeout(() => this.resolveAnalysis(analyzeBook(words)), 50)
       return
     }
     this.worker.onmessage = (e: MessageEvent<SearchResponse>) => {
-      this.pending.get(e.data.reqId)?.resolve(e.data.result)
-      this.pending.delete(e.data.reqId)
+      const msg = e.data
+      if (msg.type === 'analysis') {
+        if (msg.id === this.id) this.resolveAnalysis(msg.analysis)
+        return
+      }
+      this.pending.get(msg.reqId)?.resolve(msg.result)
+      this.pending.delete(msg.reqId)
     }
     this.worker.onerror = () => this.useFallback()
     // Copying a long book to the worker takes a moment, so do it in its own
@@ -78,6 +88,7 @@ export class BookSearch {
   private useFallback() {
     this.worker?.terminate()
     this.worker = null
+    this.resolveAnalysis(analyzeBook(this.words)) // no-op if the worker already answered
     const waiting = [...this.pending.values()]
     this.pending.clear()
     for (const { query, limit, resolve } of waiting) this.query(query, limit).then(resolve)

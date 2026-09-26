@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange } from '../lib/glance'
+import type { BookAnalysis } from '../lib/analysis'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
@@ -59,9 +60,13 @@ export function Reader({
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode, font } = settings
   const headings = useMemo(() => book.headings ?? [], [book.headings])
+  // People, places and smart-pacing extras, worked out in the background by
+  // the search worker. Until they arrive, smart pacing times words naturally.
+  const [analysis, setAnalysis] = useState<BookAnalysis | null>(null)
+  const extras = wordTiming === 'smart' ? analysis?.extras : undefined
   const timeline = useMemo(
-    () => buildTimeline(words, book.paragraphEnds, wordTiming, headings),
-    [words, book.paragraphEnds, wordTiming, headings],
+    () => buildTimeline(words, book.paragraphEnds, wordTiming, headings, extras),
+    [words, book.paragraphEnds, wordTiming, headings, extras],
   )
   const headingWords = useMemo(() => {
     const set = new Set<number>()
@@ -162,7 +167,12 @@ export function Reader({
   useEffect(() => {
     const s = new BookSearch(book.id, words)
     setBookSearch(s)
-    return () => s.dispose()
+    let live = true
+    s.analysis.then((a) => live && setAnalysis(a))
+    return () => {
+      live = false
+      s.dispose()
+    }
   }, [book.id, words])
 
   // Persist progress: whenever paused, and periodically while playing.
