@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTimeline } from '../rsvp'
-import { planSession } from '../session'
+import { chapterTargets, planSession } from '../session'
 
 // 100 plain words per "paragraph", sentences of 10 words.
 const sentence = (n: number) => Array.from({ length: 10 }, (_, i) => `w${n}x${i}${i === 9 ? '.' : ''}`)
@@ -29,5 +29,31 @@ describe('planSession', () => {
 
   it('stops at the end of the book', () => {
     expect(planSession(timeline, words, paragraphEnds, [0], 500, 30, wpm)).toEqual({ end: 599, landing: 'book' })
+  })
+})
+
+describe('chapterTargets', () => {
+  const chapters = [
+    { title: 'One', start: 0 },
+    { title: 'Two', start: 100 },
+    { title: 'Three', start: 250 },
+    { title: 'Four', start: 400 },
+    { title: 'Five', start: 500 },
+  ]
+
+  it('offers the current chapter and the next few', () => {
+    expect(chapterTargets(chapters, 120, 600, 3)).toEqual([
+      { title: 'Two', end: 249, current: true },
+      { title: 'Three', end: 399, current: false },
+      { title: 'Four', end: 499, current: false },
+    ])
+  })
+
+  it('ends the last chapter at the end of the book', () => {
+    expect(chapterTargets(chapters, 550, 600)).toEqual([{ title: 'Five', end: 599, current: true }])
+  })
+
+  it('has nothing to offer for books without chapters', () => {
+    expect(chapterTargets([{ title: 'All', start: 0 }], 10, 600)).toEqual([])
   })
 })

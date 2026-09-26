@@ -55,3 +55,33 @@ export function planSession(
   while (end < last && !isSentenceEnd(words[end])) end++
   return { end, landing: 'sentence' }
 }
+
+export interface ChapterTarget {
+  /** Chapter title. */
+  title: string
+  /** Its last word. */
+  end: number
+  /** Whether it's the chapter being read now. */
+  current: boolean
+}
+
+/**
+ * "Read to the end of…" targets: the current chapter and the next few, so a
+ * session can run to a chapter end instead of for a set time.
+ */
+export function chapterTargets(
+  chapters: { title: string; start: number }[],
+  from: number,
+  totalWords: number,
+  count = 4,
+): ChapterTarget[] {
+  if (chapters.length < 2) return []
+  let current = 0
+  for (let i = 0; i < chapters.length; i++) if (chapters[i].start <= from) current = i
+  const targets: ChapterTarget[] = []
+  for (let i = current; i < chapters.length && targets.length < count; i++) {
+    const end = (chapters[i + 1]?.start ?? totalWords) - 1
+    if (end > from) targets.push({ title: chapters[i].title, end, current: i === current })
+  }
+  return targets
+}

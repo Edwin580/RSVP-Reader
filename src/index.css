@@ -673,10 +673,27 @@ h1, h2, p { margin: 0; }
 @media (hover: hover) {
   .session-option:hover { background: var(--fill); }
 }
-.session-minutes { min-width: 3.5rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.session-target { font-weight: 700; white-space: nowrap; }
+.session-option { justify-content: space-between; }
+.session-time { display: grid; gap: 0.9rem; }
+.session-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; }
+.session-presets button {
+  min-height: 40px;
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  background: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+.session-presets button:active { transform: scale(0.96); transition-duration: 0.05s; }
+.session-presets button[aria-checked='true'] { background: var(--text); border-color: var(--text); color: var(--bg); }
+.session-lands { min-height: 2.6em; }
+.session-start { justify-content: center; width: 100%; }
+.session-menu .stepper-value { min-width: 4.2rem; }
 .session-option .muted { font-size: 0.875rem; }
 @media (min-width: 641px) {
-  .popover.opens-up { top: auto; bottom: calc(100% + 0.6rem); left: 0; right: auto; width: 21rem; }
+  .popover.opens-up { top: auto; bottom: calc(100% + 0.6rem); left: 0; right: auto; width: 22rem; }
 }
 .transport { display: flex; align-items: center; gap: 0.25rem; }
 .play-button {

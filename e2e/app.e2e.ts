@@ -124,15 +124,26 @@ test('holding the word glances back and letting go carries on', async ({ page })
   await expect(page.locator('.word')).toHaveText('Alice')
 })
 
-test('a timed session shows where it will end and counts down', async ({ page }) => {
+test('a session can run for a set time or to a chapter end', async ({ page }) => {
   await page.goto('./')
   await upload(page, 'long.txt', ['Chapter 1', '', 'Word after word here. '.repeat(900), '', 'Chapter 2', '', 'More words to read. '.repeat(900)].join('\n'))
+
+  // A set time: pick 5, nudge it up to 10, see where it ends, start.
   await page.locator('.session-open').click()
-  await expect(page.locator('.session-option').first()).toContainText('5 min')
-  await expect(page.locator('.session-option').nth(1)).toContainText('Chapter')
-  await page.locator('.session-option').first().click()
+  await page.getByRole('radio', { name: '5', exact: true }).click()
+  await page.getByRole('button', { name: '5 minutes more' }).click()
+  await expect(page.locator('.session-menu .stepper-value')).toHaveText('10 min')
+  await expect(page.locator('.session-lands')).toContainText('Chapter')
+  await page.getByRole('button', { name: 'Start 10-minute session' }).click()
   await expect(page.locator('.session-active')).toContainText('left in session')
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
   await page.locator('.session-end').click()
-  await expect(page.locator('.session-open')).toBeVisible()
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
+
+  // To a chapter end: one tap starts it.
+  await page.locator('.session-open').click()
+  await page.getByRole('tab', { name: 'To a chapter end' }).click()
+  await expect(page.locator('.session-option').first()).toContainText('End of this chapter')
+  await page.locator('.session-option').first().click()
+  await expect(page.locator('.session-active')).toContainText('to the end of Chapter 1')
 })

@@ -3,7 +3,7 @@ import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
-import { planSession, type Landing } from '../lib/session'
+import { chapterTargets, planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
@@ -45,8 +45,6 @@ const IDLE_MS = 2000
 const PAGE_TURN_MS = 450
 /** Extra time on the first word of each line in page mode, as a fraction of a word. */
 const LINE_RETURN = 0.3
-/** Session lengths offered in "Read for…". */
-const SESSION_MINUTES = [5, 10, 15, 20, 30]
 /** Length of the panels' closing animation; keep in sync with index.css. */
 const PANEL_CLOSE_MS = 200
 /** Jumps further than this offer a "back" button, shown for JUMP_BACK_MS. */
@@ -207,6 +205,13 @@ export function Reader({
     window.clearTimeout(closeTimer.current)
     setClosing(false)
     setPanel(which)
+  }
+
+  const startSession = (plan: { end: number; landing: Landing; minutes: number }) => {
+    setSession({ ...plan, from: index })
+    setSessionDone(null)
+    closePanel()
+    play()
   }
 
   // Start indexing in the background as soon as the book opens.
@@ -532,17 +537,22 @@ export function Reader({
             )}
             {panel === 'session' && (
               <SessionMenu
-                options={SESSION_MINUTES.map((minutes) => {
+                landsFor={(minutes) => {
                   const plan = planSession(timeline, words, book.paragraphEnds, chapterStarts, index, minutes, wpm)
-                  return { minutes, lands: describeLanding(plan.landing, chapterTitleAt(plan.end)) }
-                })}
+                  return describeLanding(plan.landing, chapterTitleAt(plan.end))
+                }}
+                chapters={chapterTargets(chapters, index, words.length).map((c) => ({
+                  ...c,
+                  time: formatMinutes(minutesBetween(timeline, index, c.end + 1, wpm)),
+                }))}
                 closing={closing}
-                onPick={(minutes) => {
+                onStartTime={(minutes) => {
                   const plan = planSession(timeline, words, book.paragraphEnds, chapterStarts, index, minutes, wpm)
-                  setSession({ ...plan, from: index, minutes })
-                  setSessionDone(null)
-                  closePanel()
-                  play()
+                  startSession({ ...plan, minutes })
+                }}
+                onStartChapter={(c) => {
+                  const minutes = Math.max(1, Math.round(minutesBetween(timeline, index, c.end + 1, wpm)))
+                  startSession({ end: c.end, landing: 'chapter', minutes })
                 }}
                 onClose={closePanel}
               />

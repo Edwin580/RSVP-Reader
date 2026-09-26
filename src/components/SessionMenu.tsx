@@ -1,42 +1,130 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
-export interface SessionOption {
-  minutes: number
-  /** Where it ends, e.g. "to the end of Chapter 3". */
-  lands: string
+export interface ChapterOption {
+  title: string
+  end: number
+  /** Reading time to get there, already formatted ("14 min"). */
+  time: string
+  current: boolean
 }
 
 interface Props {
-  options: SessionOption[]
+  /** Where a session of `minutes` would end, in words ("ends in Chapter six"). */
+  landsFor: (minutes: number) => string
+  /** Chapter ends to read to; empty for books without chapters. */
+  chapters: ChapterOption[]
   closing?: boolean
-  onPick: (minutes: number) => void
+  onStartTime: (minutes: number) => void
+  onStartChapter: (option: ChapterOption) => void
   onClose: () => void
 }
 
-/** "Read for…": timed sessions, each showing where it will end. */
-export function SessionMenu({ options, closing, onPick, onClose }: Props) {
+const PRESETS = [5, 10, 15, 20, 30]
+const MIN_MINUTES = 5
+const MAX_MINUTES = 120
+const STEP = 5
+const LAST_KEY = 'chapter-session-minutes'
+
+function lastMinutes(): number {
+  try {
+    const saved = Number(localStorage.getItem(LAST_KEY))
+    return saved >= MIN_MINUTES && saved <= MAX_MINUTES ? saved : 10
+  } catch {
+    return 10
+  }
+}
+
+/**
+ * "Read for…": either a length of time (quick picks or any length in 5-minute
+ * steps, with where it will end shown live), or up to a chapter end.
+ */
+export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartChapter, onClose }: Props) {
+  const [tab, setTab] = useState<'time' | 'chapter'>('time')
+  const [minutes, setMinutes] = useState(lastMinutes)
+
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
+  const set = (m: number) => setMinutes(Math.max(MIN_MINUTES, Math.min(MAX_MINUTES, m)))
+  const start = () => {
+    try {
+      localStorage.setItem(LAST_KEY, String(minutes))
+    } catch {
+      // Not remembered; fine.
+    }
+    onStartTime(minutes)
+  }
+
   return (
     <>
       <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
-      <div className={`popover opens-up${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Read for">
+      <div className={`popover opens-up session-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Read for">
         <div className="setting setting-stack">
           <span className="setting-name">Read for</span>
-          <span className="hint">Stops at a natural break, never mid-sentence.</span>
+          {chapters.length > 0 && (
+            <div className="segmented" role="tablist" aria-label="Session length">
+              <button type="button" role="tab" aria-checked={tab === 'time'} aria-selected={tab === 'time'} onClick={() => setTab('time')}>
+                A set time
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-checked={tab === 'chapter'}
+                aria-selected={tab === 'chapter'}
+                onClick={() => setTab('chapter')}
+              >
+                To a chapter end
+              </button>
+            </div>
+          )}
         </div>
-        <div className="session-options">
-          {options.map((o) => (
-            <button key={o.minutes} type="button" className="session-option" onClick={() => onPick(o.minutes)}>
-              <span className="session-minutes">{o.minutes} min</span>
-              <span className="muted">{o.lands}</span>
+
+        {tab === 'time' ? (
+          <div className="session-time">
+            <div className="session-presets" role="radiogroup" aria-label="Quick picks">
+              {PRESETS.map((m) => (
+                <button key={m} type="button" role="radio" aria-checked={minutes === m} onClick={() => set(m)}>
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div className="setting">
+              <span className="setting-name">Minutes</span>
+              <div className="stepper">
+                <button type="button" className="icon-button" onClick={() => set(minutes - STEP)} aria-label="5 minutes less" disabled={minutes <= MIN_MINUTES}>
+                  −
+                </button>
+                <span className="stepper-value" aria-live="polite">
+                  {minutes} min
+                </span>
+                <button type="button" className="icon-button" onClick={() => set(minutes + STEP)} aria-label="5 minutes more" disabled={minutes >= MAX_MINUTES}>
+                  +
+                </button>
+              </div>
+            </div>
+            <p className="hint session-lands">
+              {landsFor(minutes)[0].toUpperCase() + landsFor(minutes).slice(1)}. Stops at a natural break, never mid-sentence.
+            </p>
+            <button type="button" className="demo-button session-start" onClick={start}>
+              Start {minutes}-minute session
             </button>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="session-options">
+            {chapters.map((c) => (
+              <button key={c.end} type="button" className="session-option" onClick={() => onStartChapter(c)}>
+                <span className="session-target">{c.current ? 'End of this chapter' : `End of ${c.title}`}</span>
+                <span className="muted">
+                  {c.current ? `${c.title} · ` : ''}
+                  {c.time}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )
