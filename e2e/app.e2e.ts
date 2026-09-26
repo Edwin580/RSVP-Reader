@@ -220,3 +220,39 @@ test('old settings with both page guides off come back with both on', async ({ p
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await expect(page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 })
+
+test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
+  test.setTimeout(40_000)
+  await page.goto('./')
+  await page.getByRole('button', { name: 'Try the demo', exact: true }).click()
+  await expect(page.locator('.reader')).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  for (let i = 0; i < 30; i++) await page.keyboard.press('ArrowUp')
+  await expect(page.locator('.speed-value')).toContainText('1050')
+  await page.waitForFunction('document.getAnimations().length === 0')
+
+  const firstWord = () => page.locator('.page-text [data-i]').first().getAttribute('data-i')
+  const startPage = await firstWord()
+  const box = (await page.locator('.page').boundingBox())!
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  // A held finger drifts: keep nudging it while the pages turn.
+  const hidden: boolean[] = []
+  for (let i = 0; i < 60; i++) {
+    await page.mouse.move(x + (i % 2 ? 6 : -6), y + (i % 3) * 4)
+    await page.waitForTimeout(200)
+    // Once the controls have faded (after 2s), they must stay hidden.
+    if (i >= 15) hidden.push(await page.locator('.reader.is-idle.is-playing').isVisible())
+  }
+  expect(hidden.every(Boolean)).toBe(true)
+  expect(await firstWord()).not.toBe(startPage)
+  await page.mouse.up()
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+})

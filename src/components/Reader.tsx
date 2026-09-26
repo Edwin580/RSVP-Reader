@@ -785,13 +785,39 @@ function useReadingTime(playing: boolean, index: number, wpm: number, report: (m
   }, [playing, report])
 }
 
-/** True after `ms` without pointer/keyboard activity, while `active`. */
+/**
+ * True after `ms` without pointer/keyboard activity, while `active`.
+ *
+ * A press on the reading area isn't activity: it plays, pauses or (with Hold
+ * to read) keeps reading, and a held finger always drifts a little, and is
+ * re-targeted when the page under it turns. Counting those would bring the
+ * controls back mid-read. Mouse movement without a press still wakes them.
+ */
 function useIdle(active: boolean, ms: number): boolean {
   const [idle, setIdle] = useState(false)
+  // Pointers that went down on the reading area and are still down. Tracked
+  // all the time, since with Hold to read the press starts before playing does.
+  const onStage = useRef(new Set<number>())
+  useEffect(() => {
+    const presses = onStage.current
+    const down = (e: PointerEvent) => {
+      if (e.target instanceof Element && e.target.closest('.stage')) presses.add(e.pointerId)
+    }
+    const up = (e: PointerEvent) => presses.delete(e.pointerId)
+    window.addEventListener('pointerdown', down, true)
+    window.addEventListener('pointerup', up, true)
+    window.addEventListener('pointercancel', up, true)
+    return () => {
+      window.removeEventListener('pointerdown', down, true)
+      window.removeEventListener('pointerup', up, true)
+      window.removeEventListener('pointercancel', up, true)
+    }
+  }, [])
   useEffect(() => {
     if (!active) return
     let timer = window.setTimeout(() => setIdle(true), ms)
-    const wake = () => {
+    const wake = (e: Event) => {
+      if (e instanceof PointerEvent && onStage.current.has(e.pointerId)) return
       setIdle(false)
       window.clearTimeout(timer)
       timer = window.setTimeout(() => setIdle(true), ms)

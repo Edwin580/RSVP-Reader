@@ -65,6 +65,19 @@ export function usePressGestures(handlers: Handlers) {
         if (e.button !== 0 || press.current) return
         if (e.target instanceof Element && latest.current.ignore?.(e.target)) return
         const at = performance.now()
+        // A long press, even one that drifts, stays with this element when
+        // what's under the finger is replaced (a page turning), which could
+        // otherwise end it. Only after a moment, so a quick tap still reaches
+        // the word it landed on.
+        const el = e.currentTarget as Element
+        const id = e.pointerId
+        const capture = window.setTimeout(() => {
+          try {
+            el.setPointerCapture(id)
+          } catch {
+            // The pointer is already gone; its release is on the way.
+          }
+        }, HOLD_MS)
         const timer = window.setTimeout(() => {
           // Without a hold handler a long press is just a slow tap.
           if (!press.current || !latest.current.onHoldStart) return
@@ -78,6 +91,7 @@ export function usePressGestures(handlers: Handlers) {
         window.addEventListener('pointerup', up)
         window.addEventListener('pointercancel', cancel)
         const release = () => {
+          window.clearTimeout(capture)
           window.removeEventListener('pointerup', up)
           window.removeEventListener('pointercancel', cancel)
         }
