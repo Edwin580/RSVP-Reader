@@ -47,7 +47,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    refreshLibrary().catch((e) => setError(`Could not load library: ${message(e)}`))
+    refreshLibrary().catch((e) => setError(`Couldn’t load your library. ${message(e)}`))
   }, [refreshLibrary])
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function App() {
       await refreshLibrary()
       await openBook(book)
     } catch (e) {
-      setError(`Couldn't open ${file.name}: ${message(e)}`)
+      setError(`Couldn’t open “${file.name}”. ${message(e)}`)
     } finally {
       setBusy(null)
     }
@@ -123,7 +123,7 @@ export default function App() {
       setLastBackup(now)
       showToast(`Backup saved: ${books.length} ${books.length === 1 ? 'book' : 'books'} with reading positions.`)
     } catch (e) {
-      showToast(`Couldn't save a backup: ${message(e)}`, 'error')
+      showToast(`Couldn’t save a backup. ${message(e)}`, 'error')
     }
   }
 

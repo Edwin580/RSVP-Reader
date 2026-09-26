@@ -22,6 +22,44 @@ export function glanceRange(words: string[], index: number): { start: number; en
   return { start, end }
 }
 
+/**
+ * The text shown around the current word while paused: about `around` words
+ * either side, widened to whole sentences so it never starts or stops
+ * mid-sentence (unless a sentence is too long to fit). Inclusive range.
+ */
+export function pausedRange(words: string[], index: number, around = 40): { start: number; end: number } {
+  if (words.length === 0) return { start: 0, end: -1 }
+  const last = words.length - 1
+  // Start: back to the start of that sentence if it's close, otherwise
+  // forward to the next sentence that starts before the current word.
+  const from = Math.max(0, index - around)
+  let start = sentenceStart(words, from)
+  if (from - start > around) {
+    start = from
+    for (let i = from + 1; i <= index; i++) {
+      if (isSentenceEnd(words[i - 1])) {
+        start = i
+        break
+      }
+    }
+  }
+  // End: on to the end of that sentence if it's close, otherwise back to the
+  // last sentence end after the current word.
+  let end = Math.min(last, index + around)
+  let stop = end
+  while (stop < last && !isSentenceEnd(words[stop]) && stop - end < around) stop++
+  if (isSentenceEnd(words[stop]) || stop === last) end = stop
+  else {
+    for (let i = end; i >= index; i--) {
+      if (isSentenceEnd(words[i])) {
+        end = i
+        break
+      }
+    }
+  }
+  return { start, end }
+}
+
 export type Gesture = 'tap' | 'hold' | 'swipe-left' | 'swipe-right' | 'none'
 
 /** Movement (px) that stops a press counting as a tap or hold. */

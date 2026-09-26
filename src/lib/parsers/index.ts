@@ -49,10 +49,10 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
       request = { kind: ext === '.txt' ? 'text' : 'markdown', id, title: fallbackTitle, data }
       break
     default:
-      throw new Error(`Unsupported file type "${ext || file.name}". Try ${ACCEPTED_EXTENSIONS.join(', ')}.`)
+      throw new Error('Chapter reads EPUB, PDF, TXT and Markdown files.')
   }
 
   const book = await assembleInBackground(request)
-  if (book.words.length === 0) throw new Error('No readable text found in this file')
+  if (book.words.length === 0) throw new Error('There’s no readable text in it.')
   return cover ? { ...book, cover } : book
 }

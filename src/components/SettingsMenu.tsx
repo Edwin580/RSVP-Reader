@@ -26,8 +26,8 @@ const MODES: { value: ReadingMode; label: string; hint: string }[] = [
 ]
 
 const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
-  { value: 'tap', label: 'Tap', hint: 'Tap the text to start, tap again to pause' },
-  { value: 'hold', label: 'Hold', hint: 'Reads while you hold the text, pauses when you let go' },
+  { value: 'tap', label: 'Tap', hint: 'Tap anywhere on the page to start, and again to pause' },
+  { value: 'hold', label: 'Hold', hint: 'Reads while you hold anywhere on the page, pauses when you let go' },
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -38,16 +38,16 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
 ]
 
 const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
-  { value: 'sans', label: 'Sans' },
   { value: 'serif', label: 'Serif' },
+  { value: 'sans', label: 'Sans' },
 ]
 
 /** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
 const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
-  { value: 'red', label: 'Red', color: '#c23b25' },
-  { value: 'blue', label: 'Blue', color: '#2d5bb5' },
-  { value: 'green', label: 'Green', color: '#2f7a45' },
-  { value: 'purple', label: 'Purple', color: '#7a45b8' },
+  { value: 'red', label: 'Red', color: '#b3261e' },
+  { value: 'blue', label: 'Blue', color: '#1f4fb4' },
+  { value: 'green', label: 'Green', color: '#1d6b43' },
+  { value: 'purple', label: 'Purple', color: '#6a3fb0' },
 ]
 
 const SHORTCUTS: [string, string][] = [

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
-import { glanceRange } from '../lib/glance'
+import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
@@ -141,7 +141,7 @@ export function Reader({
   const [recapDismissed, setRecapDismissed] = useState(false)
   const showRecap = recapAgo !== null && !recapDismissed && !playing && index === initialIndex
 
-  // Glance back: hold the word to see the last couple of sentences (reading
+  // Glance back: hold anywhere on the stage to see the last couple of sentences (reading
   // pauses while you look), let go to carry on. Swipe to move by sentence.
   const [glancing, setGlancing] = useState(false)
   const resumeAfterGlance = useRef(false)
@@ -149,7 +149,12 @@ export function Reader({
   // the text. A swipe still moves by sentence or page, measured from where
   // the press began.
   const pressFrom = useRef(0)
+  // Buttons and cards on the stage keep their own taps. In tap mode a word in
+  // the paused text jumps there instead of playing.
+  const ignorePress = (target: Element) =>
+    !!target.closest('button, a, input, select, .recap') || (!holdToRead && !!target.closest('.context [data-i]'))
   const holdHandlers = {
+    ignore: ignorePress,
     onPressStart: () => {
       pressFrom.current = index
       play()
@@ -168,6 +173,7 @@ export function Reader({
             ),
         }
       : {
+          ignore: ignorePress,
           onTap: () => toggle(),
           onHoldStart: () => {
             resumeAfterGlance.current = playing
@@ -352,8 +358,8 @@ export function Reader({
 
   const context = useMemo(() => {
     if (playing || mode === 'page') return null
-    const start = Math.max(0, index - CONTEXT_WORDS)
-    return words.slice(start, index + CONTEXT_WORDS).map((w, i) => ({ w, i: start + i }))
+    const { start, end } = pausedRange(words, index, CONTEXT_WORDS)
+    return words.slice(start, end + 1).map((w, i) => ({ w, i: start + i }))
   }, [playing, index, words, mode])
 
   const doneCard = sessionDone && !playing && (
@@ -492,24 +498,37 @@ export function Reader({
           {doneCard}
         </section>
       ) : (
-        <section className="stage">
-          <WordDisplay
-            word={words[index] ?? ''}
-            scale={textScale}
-            heading={headingWords.has(index)}
-            font={font}
-            gestures={wordGestures.handlers}
-          />
-          {glancing && <Glance words={words} index={index} />}
+        <section
+          className="stage"
+          {...wordGestures.handlers}
+          onClickCapture={(e) => {
+            // A hold or swipe ends with a click; it shouldn't also jump to a word.
+            if (wordGestures.wasSwipe()) {
+              e.stopPropagation()
+              e.preventDefault()
+            }
+          }}
+        >
+          <WordDisplay word={words[index] ?? ''} scale={textScale} heading={headingWords.has(index)} font={font} />
+          {glancing && <Glance words={words} index={index} headings={headingWords} />}
           {showRecap && recapCard}
           {doneCard}
           <div className="context" aria-hidden={playing}>
-            {context && (
+            {/* A recap or session card takes this space; the text would show round its edges. */}
+            {context && !showRecap && !(sessionDone && !playing) && (
               <p>
-                {context.map(({ w, i }) => (
-                  <span key={i} className={i === index ? 'current' : undefined} onClick={() => seek(i)}>
-                    {w}{' '}
-                  </span>
+                {context.map(({ w, i }, k) => (
+                  <Fragment key={i}>
+                    {k > 0 && headingWords.has(i) && !headingWords.has(i - 1) && <br />}
+                    <span
+                      data-i={i}
+                      className={[i === index && 'current', headingWords.has(i) && 'is-heading'].filter(Boolean).join(' ') || undefined}
+                      onClick={() => seek(i)}
+                    >
+                      {w}{' '}
+                    </span>
+                    {headingWords.has(i) && !headingWords.has(i + 1) && <br />}
+                  </Fragment>
                 ))}
               </p>
             )}
@@ -702,17 +721,20 @@ function Recap({
 }
 
 /** The previous and current sentence, shown while the word is held. */
-function Glance({ words, index }: { words: string[]; index: number }) {
+function Glance({ words, index, headings }: { words: string[]; index: number; headings: Set<number> }) {
   const { start, end } = glanceRange(words, index)
   return (
     <div className="glance" role="status">
       <p>
         {words.slice(start, end + 1).map((w, k) => {
           const i = start + k
+          const classes = [i === index ? 'current' : i > index && 'ahead', headings.has(i) && 'is-heading']
           return (
-            <span key={i} className={i === index ? 'current' : i > index ? 'ahead' : undefined}>
-              {w}{' '}
-            </span>
+            <Fragment key={i}>
+              {k > 0 && headings.has(i) && !headings.has(i - 1) && <br />}
+              <span className={classes.filter(Boolean).join(' ') || undefined}>{w} </span>
+              {headings.has(i) && !headings.has(i + 1) && <br />}
+            </Fragment>
           )
         })}
       </p>

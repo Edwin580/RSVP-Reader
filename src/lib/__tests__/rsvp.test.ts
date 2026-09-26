@@ -84,7 +84,8 @@ describe('buildTimeline', () => {
 
 describe('formatMinutes', () => {
   it('formats short and long durations', () => {
-    expect(formatMinutes(0.4)).toBe('<1 min')
+    expect(formatMinutes(0.4)).toBe('1 min')
+    expect(formatMinutes(0)).toBe('0 min')
     expect(formatMinutes(12.2)).toBe('12 min')
     expect(formatMinutes(277)).toBe('4h 37m')
   })

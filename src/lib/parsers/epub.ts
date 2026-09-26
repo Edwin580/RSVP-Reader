@@ -78,13 +78,13 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
   const zip = await JSZip.loadAsync(data)
   const read = async (path: string) => {
     const file = zip.file(path)
-    if (!file) throw new Error(`EPUB is missing ${path}`)
+    if (!file) throw new Error(`This EPUB looks damaged (${path} is missing).`)
     return file.async('string')
   }
 
   const container = parseXml(await read('META-INF/container.xml'), 'application/xml')
   const opfPath = container.getElementsByTagName('rootfile')[0]?.getAttribute('full-path')
-  if (!opfPath) throw new Error('EPUB has no package document')
+  if (!opfPath) throw new Error('This EPUB looks damaged (it has no contents list).')
   const opf = parseXml(await read(opfPath), 'application/xml')
 
   const title = opf.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() || undefined
@@ -119,7 +119,7 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
     sections.push({ title: title || doc.querySelector('title')?.textContent?.trim(), paragraphs, headings })
   }
 
-  if (sections.length === 0) throw new Error('No readable text found in this EPUB')
+  if (sections.length === 0) throw new Error('There’s no readable text in this EPUB.')
   return { title, sections, cover: await epubCover(zip, opf, opfPath, manifest) }
 }
 
