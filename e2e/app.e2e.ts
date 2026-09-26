@@ -148,3 +148,26 @@ test('a session can run for a set time or to a chapter end', async ({ page }) =>
   await page.locator('.session-chapter').first().click()
   await expect(page.locator('.session-active')).toContainText('to the end of Chapter 1')
 })
+
+test('hold to read plays only while the text is held', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await expect(page.locator('.popover')).toContainText('pauses when you let go')
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+
+  const box = (await page.locator('.word-frame').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await expect.poll(() => currentWord(page)).not.toBe('Chapter')
+  // Let go anywhere, even off the word: reading stops.
+  await page.mouse.move(5, 5)
+  await page.mouse.up()
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  await expect(page.locator('.glance')).toBeHidden()
+  const stopped = await currentWord(page)
+  await page.waitForTimeout(600)
+  expect(await currentWord(page)).toBe(stopped)
+})
