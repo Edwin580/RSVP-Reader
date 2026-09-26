@@ -10,8 +10,8 @@
  * - Everything else: cache first. Built files have content hashes in their
  *   names, so a cached copy is never stale.
  */
-const VERSION = "2418c61fa6f5"
-const PRECACHE = ["./","./assets/covers-D6T0RbYq.js","./assets/demo-D70mICHY.js","./assets/epub-BIcnosFU.js","./assets/index-COyrt6s8.js","./assets/index-CXt9QOSE.css","./assets/parse.worker-C6ExXA5f.js","./assets/pdf-CteOxmOr.js","./assets/pdf.worker.min-BmVo14Nb.mjs","./assets/search.worker-CgCEYrNq.js","./apple-touch-icon.png","./favicon.ico","./favicon.svg","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./manifest.webmanifest"]
+const VERSION = "60c5d0817898"
+const PRECACHE = ["./","./assets/covers-D6T0RbYq.js","./assets/demo-DgQ-OlKk.js","./assets/epub-BcybRCYY.js","./assets/index-C27X1lG_.js","./assets/index-DQcTNCCk.css","./assets/parse.worker-C6ExXA5f.js","./assets/pdf-8KjxkKS6.js","./assets/pdf.worker.min-BmVo14Nb.mjs","./assets/search.worker-CgCEYrNq.js","./apple-touch-icon.png","./favicon.ico","./favicon.svg","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./manifest.webmanifest"]
 const PREFIX = 'rsvp-reader-'
 const CACHE = PREFIX + VERSION
 /** Give up on the network for page loads after this long and use the cached app. */
