@@ -840,6 +840,28 @@ kbd {
 }
 .search-body.stale { opacity: 0.55; }
 .search-body.is-idle { overflow: hidden; }
+
+/* People and places so far, in the empty search panel. */
+.cast-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.35rem 1rem 0.75rem; }
+.cast-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.75rem;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+.cast-chip:active { transform: scale(0.96); transition-duration: 0.05s; }
+.cast-chip[aria-pressed='true'] { background: var(--text); border-color: var(--text); color: var(--bg); }
+.cast-count { font-weight: 400; font-size: 0.8rem; opacity: 0.7; font-variant-numeric: tabular-nums; }
+@media (hover: hover) {
+  .cast-chip:not([aria-pressed='true']):hover { background: var(--fill); }
+}
 /* While a panel is open the page underneath never scrolls (iOS would otherwise
    scroll it when the keyboard opens). */
 html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; }

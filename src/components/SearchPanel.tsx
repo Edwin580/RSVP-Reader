@@ -1,4 +1,6 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { castSoFar, joinCompoundNames } from '../lib/cast'
+import type { NameInfo } from '../lib/names'
 import type { SearchHit, SearchResult } from '../lib/search'
 import type { BookSearch } from '../lib/searchClient'
 import type { Chapter } from '../lib/types'
@@ -9,6 +11,10 @@ interface Props {
   bookSearch: BookSearch
   words: string[]
   chapters: Chapter[]
+  /** People and places in the book (from the background analysis), once known. */
+  names?: NameInfo[]
+  /** Reading position: only names met up to here are listed. */
+  position: number
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
   onSelect: (index: number) => void
@@ -20,13 +26,18 @@ const PAGE = 30
 const CONTEXT_WORDS = 7
 const NO_RESULT: SearchResult = { matches: [], related: [], totalMatches: 0, totalRelated: 0 }
 
-export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, onClose }: Props) {
+export function SearchPanel({ bookSearch, words, chapters, names, position, closing, onSelect, onClose }: Props) {
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   // The query the current results belong to, so stale results are never shown as fresh.
   const [answered, setAnswered] = useState<{ query: string; result: SearchResult } | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const viewport = useVisualViewport()
+  // People and places met so far, with no spoilers; tap one to see where you met them.
+  const people = useMemo(() => (names ? joinCompoundNames(names) : []), [names])
+  const cast = useMemo(() => castSoFar(people, position), [people, position])
+  const [member, setMember] = useState<string | null>(null)
+  const selected = cast.find((c) => c.name === member)
 
   useEffect(() => {
     let cancelled = false
@@ -135,7 +146,7 @@ export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, on
 
         {/* Nothing to scroll until there are results, so the empty panel stays put while typing. */}
         <div
-          className={`search-body${searching && asked ? ' stale' : ''}${query.trim() ? '' : ' is-idle'}`}
+          className={`search-body${searching && asked ? ' stale' : ''}${query.trim() || cast.length ? '' : ' is-idle'}`}
           aria-live="polite"
         >
           {!query.trim() && (
@@ -143,6 +154,47 @@ export function SearchPanel({ bookSearch, words, chapters, closing, onSelect, on
               Find a word, a phrase, or a passage you half remember. Different forms of a word count too
               (<em>run</em> finds <em>running</em>). Use “quotes” for an exact phrase.
             </p>
+          )}
+
+          {!query.trim() && cast.length > 0 && (
+            <section className="cast" aria-label="People and places so far">
+              <h3 className="search-section">
+                People and places so far<span className="muted"> — tap one to see where you met them</span>
+              </h3>
+              <div className="cast-chips">
+                {cast.map((c) => (
+                  <button
+                    key={c.name}
+                    type="button"
+                    className="cast-chip"
+                    aria-pressed={member === c.name}
+                    onClick={() => setMember(member === c.name ? null : c.name)}
+                  >
+                    {c.name}
+                    <span className="cast-count">{c.count}</span>
+                  </button>
+                ))}
+              </div>
+              {selected && (
+                <>
+                  <h3 className="search-section">First met</h3>
+                  <ol className="search-results">
+                    {renderHit('first')({ start: selected.first, end: selected.first, highlights: [selected.first] }, 0)}
+                  </ol>
+                  {selected.latest !== selected.first && (
+                    <>
+                      <h3 className="search-section">Latest mention</h3>
+                      <ol className="search-results">
+                        {renderHit('latest')(
+                          { start: selected.latest, end: selected.latest, highlights: [selected.latest] },
+                          0,
+                        )}
+                      </ol>
+                    </>
+                  )}
+                </>
+              )}
+            </section>
           )}
 
           {query.trim() && searching && !asked && <p className="search-status">Searching…</p>}
