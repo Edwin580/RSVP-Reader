@@ -87,15 +87,15 @@ export function Library({
         )}
         <p className="brand">
           <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="#1c1a17" />
+            <rect width="32" height="32" rx="7" fill="#15171c" />
             <path
               d="M7 7.5h18M16 7.5v3M7 24.5h18M16 24.5v-3"
-              stroke="#f3efe6"
+              stroke="#f8f8f6"
               strokeWidth="2.2"
               strokeLinecap="round"
               fill="none"
             />
-            <circle cx="16" cy="16" r="3.6" fill="#e8674f" />
+            <circle cx="16" cy="16" r="3.6" fill="#8c9bff" />
           </svg>
           Chapter
         </p>
