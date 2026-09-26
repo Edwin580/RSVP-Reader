@@ -35,8 +35,8 @@ function lastMinutes(): number {
 }
 
 /**
- * "Read for…": either a length of time (quick picks or any length in 5-minute
- * steps, with where it will end shown live), or up to a chapter end.
+ * "Read for…": a length of time (one big number, nudged with − and +, or set
+ * with a quick pick) or up to a chapter end. Both show where you'll stop.
  */
 export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartChapter, onClose }: Props) {
   const [tab, setTab] = useState<'time' | 'chapter'>('time')
@@ -57,33 +57,50 @@ export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartC
     }
     onStartTime(minutes)
   }
+  const lands = landsFor(minutes)
 
   return (
     <>
       <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
       <div className={`popover opens-up session-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Read for">
-        <div className="setting setting-stack">
-          <span className="setting-name">Read for</span>
-          {chapters.length > 0 && (
-            <div className="segmented" role="tablist" aria-label="Session length">
-              <button type="button" role="tab" aria-checked={tab === 'time'} aria-selected={tab === 'time'} onClick={() => setTab('time')}>
-                A set time
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-checked={tab === 'chapter'}
-                aria-selected={tab === 'chapter'}
-                onClick={() => setTab('chapter')}
-              >
-                To a chapter end
-              </button>
-            </div>
-          )}
-        </div>
+        <p className="session-title">Read for</p>
+        {chapters.length > 0 && (
+          <div className="segmented" role="radiogroup" aria-label="Read for a time or to a chapter end">
+            <button type="button" role="radio" aria-checked={tab === 'time'} onClick={() => setTab('time')}>
+              Time
+            </button>
+            <button type="button" role="radio" aria-checked={tab === 'chapter'} onClick={() => setTab('chapter')}>
+              Chapter
+            </button>
+          </div>
+        )}
 
         {tab === 'time' ? (
-          <div className="session-time">
+          <div className="session-body">
+            <div className="session-dial">
+              <button
+                type="button"
+                className="session-nudge"
+                onClick={() => set(minutes - STEP)}
+                aria-label="5 minutes less"
+                disabled={minutes <= MIN_MINUTES}
+              >
+                −
+              </button>
+              <p className="session-amount" aria-live="polite">
+                <span className="session-number">{minutes}</span>
+                <span className="session-unit">minutes</span>
+              </p>
+              <button
+                type="button"
+                className="session-nudge"
+                onClick={() => set(minutes + STEP)}
+                aria-label="5 minutes more"
+                disabled={minutes >= MAX_MINUTES}
+              >
+                +
+              </button>
+            </div>
             <div className="session-presets" role="radiogroup" aria-label="Quick picks">
               {PRESETS.map((m) => (
                 <button key={m} type="button" role="radio" aria-checked={minutes === m} onClick={() => set(m)}>
@@ -91,39 +108,28 @@ export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartC
                 </button>
               ))}
             </div>
-            <div className="setting">
-              <span className="setting-name">Minutes</span>
-              <div className="stepper">
-                <button type="button" className="icon-button" onClick={() => set(minutes - STEP)} aria-label="5 minutes less" disabled={minutes <= MIN_MINUTES}>
-                  −
-                </button>
-                <span className="stepper-value" aria-live="polite">
-                  {minutes} min
-                </span>
-                <button type="button" className="icon-button" onClick={() => set(minutes + STEP)} aria-label="5 minutes more" disabled={minutes >= MAX_MINUTES}>
-                  +
-                </button>
-              </div>
-            </div>
-            <p className="hint session-lands">
-              {landsFor(minutes)[0].toUpperCase() + landsFor(minutes).slice(1)}. Stops at a natural break, never mid-sentence.
+            <p className="session-lands">
+              {lands[0].toUpperCase() + lands.slice(1)}
+              {lands.startsWith('ends') && ', at the end of a sentence'}
             </p>
             <button type="button" className="demo-button session-start" onClick={start}>
-              Start {minutes}-minute session
+              Start reading
             </button>
           </div>
         ) : (
-          <div className="session-options">
+          <ul className="session-body session-chapters">
             {chapters.map((c) => (
-              <button key={c.end} type="button" className="session-option" onClick={() => onStartChapter(c)}>
-                <span className="session-target">{c.current ? 'End of this chapter' : `End of ${c.title}`}</span>
-                <span className="muted">
-                  {c.current ? `${c.title} · ` : ''}
-                  {c.time}
-                </span>
-              </button>
+              <li key={c.end}>
+                <button type="button" className="session-chapter" onClick={() => onStartChapter(c)}>
+                  <span className="session-chapter-name">
+                    {c.current && <span className="session-now">This chapter</span>}
+                    {c.title}
+                  </span>
+                  <span className="session-chapter-time">{c.time}</span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </>

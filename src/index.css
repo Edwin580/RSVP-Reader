@@ -656,42 +656,66 @@ h1, h2, p { margin: 0; }
 .session-active { color: var(--text); }
 .session-left { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
 .session-end { min-height: 28px; padding: 0 0.4rem; font-size: 0.8rem; }
-.session-options { display: grid; gap: 0.25rem; }
-.session-option {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  min-height: 44px;
-  padding: 0.5rem 0.6rem;
-  border: 0;
-  border-radius: 10px;
-  background: none;
-  text-align: left;
-  transition: background-color 0.18s ease-out;
-}
-.session-option:active { background: var(--fill); transition-duration: 0.05s; }
-@media (hover: hover) {
-  .session-option:hover { background: var(--fill); }
-}
-.session-target { font-weight: 700; white-space: nowrap; }
-.session-option { justify-content: space-between; }
-.session-time { display: grid; gap: 0.9rem; }
-.session-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; }
-.session-presets button {
-  min-height: 40px;
+/* "Read for…": a big number with − and +, quick picks, and where it ends. */
+.session-menu { gap: 0.9rem; }
+.session-title { font-weight: 700; }
+/* Both tabs are the same height, so switching doesn't make the sheet jump. */
+.session-body { display: grid; gap: 0.9rem; align-content: start; min-height: 15.5rem; }
+.session-dial { display: grid; grid-template-columns: auto 1fr auto; align-items: center; }
+.session-nudge {
+  width: 48px;
+  height: 48px;
   border: 1px solid var(--separator);
-  border-radius: 10px;
+  border-radius: 50%;
   background: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+.session-nudge:not(:disabled):active { transform: scale(0.92); background: var(--fill); transition-duration: 0.05s; }
+.session-nudge:disabled { opacity: 0.35; cursor: default; }
+.session-amount { display: grid; justify-items: center; line-height: 1; }
+.session-number { font-size: 2.6rem; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.session-unit { margin-top: 0.3rem; font-size: 0.8rem; color: var(--text-2); }
+.session-presets { display: flex; justify-content: center; gap: 0.4rem; }
+.session-presets button {
+  min-width: 44px;
+  min-height: 34px;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  font-size: 0.9rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   transition: background-color 0.18s ease-out, transform 0.18s ease-out;
 }
-.session-presets button:active { transform: scale(0.96); transition-duration: 0.05s; }
-.session-presets button[aria-checked='true'] { background: var(--text); border-color: var(--text); color: var(--bg); }
-.session-lands { min-height: 2.6em; }
+.session-presets button:active { transform: scale(0.94); transition-duration: 0.05s; }
+.session-presets button[aria-checked='true'] { background: var(--text); color: var(--bg); }
+.session-lands { text-align: center; font-size: 0.875rem; color: var(--text-2); min-height: 2.5em; }
 .session-start { justify-content: center; width: 100%; }
-.session-menu .stepper-value { min-width: 4.2rem; }
-.session-option .muted { font-size: 0.875rem; }
+.session-chapters { margin: 0; padding: 0; list-style: none; gap: 0.35rem; }
+.session-chapter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-height: 52px;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--separator);
+  border-radius: 12px;
+  background: none;
+  text-align: left;
+  transition: background-color 0.18s ease-out, transform 0.18s ease-out;
+}
+.session-chapter:active { transform: scale(0.98); background: var(--fill); transition-duration: 0.05s; }
+@media (hover: hover) {
+  .session-chapter:hover, .session-nudge:not(:disabled):hover { background: var(--fill); }
+}
+.session-chapter-name { display: grid; min-width: 0; font-weight: 600; }
+.session-now { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.session-chapter-time { flex-shrink: 0; font-size: 0.875rem; color: var(--text-2); font-variant-numeric: tabular-nums; }
 @media (min-width: 641px) {
   .popover.opens-up { top: auto; bottom: calc(100% + 0.6rem); left: 0; right: auto; width: 22rem; }
 }
