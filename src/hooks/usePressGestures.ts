@@ -7,7 +7,13 @@ interface Handlers {
   onHoldStart?: () => void
   onHoldEnd?: () => void
   onSwipe?: (direction: 'left' | 'right') => void
+  /** Called as soon as a press starts, before it's known to be a tap, hold or swipe. */
+  onPressStart?: () => void
+  /** Called as soon as that press ends (released anywhere, or cancelled), before `onTap`/`onSwipe`. */
+  onPressEnd?: () => void
 }
+
+type PointerPoint = { pointerId: number; clientX: number; clientY: number }
 
 /**
  * Tap, press-and-hold and horizontal swipe on one element, with mouse, pen or
@@ -19,14 +25,24 @@ export function usePressGestures(handlers: Handlers) {
   useEffect(() => {
     latest.current = handlers
   })
-  const press = useRef<{ id: number; x: number; y: number; at: number; held: boolean; timer: number } | null>(null)
+  const press = useRef<{
+    id: number
+    x: number
+    y: number
+    at: number
+    held: boolean
+    timer: number
+    release: () => void
+  } | null>(null)
   const lastGesture = useRef<Gesture>('none')
 
-  const end = (e: React.PointerEvent, cancelled = false) => {
+  const end = (e: PointerPoint, cancelled = false) => {
     const p = press.current
     if (!p || p.id !== e.pointerId) return
     window.clearTimeout(p.timer)
+    p.release()
     press.current = null
+    latest.current.onPressEnd?.()
     if (p.held) {
       lastGesture.current = 'hold'
       latest.current.onHoldEnd?.()
@@ -52,7 +68,18 @@ export function usePressGestures(handlers: Handlers) {
           press.current.held = true
           latest.current.onHoldStart?.()
         }, HOLD_MS)
-        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer }
+        // Also end the press when it's released off the element (a mouse
+        // dragged away), so a hold to read never gets stuck playing.
+        const up = (u: PointerEvent) => end(u)
+        const cancel = (u: PointerEvent) => end(u, true)
+        window.addEventListener('pointerup', up)
+        window.addEventListener('pointercancel', cancel)
+        const release = () => {
+          window.removeEventListener('pointerup', up)
+          window.removeEventListener('pointercancel', cancel)
+        }
+        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer, release }
+        latest.current.onPressStart?.()
       },
       onPointerMove: (e: React.PointerEvent) => {
         const p = press.current
