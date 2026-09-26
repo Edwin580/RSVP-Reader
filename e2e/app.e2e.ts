@@ -257,15 +257,17 @@ test('holding to read keeps the controls hidden, through drift and page turns', 
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
 })
 
-test('changing theme remakes the menu backdrop, without a fade', async ({ page }) => {
+test('the settings sheet dims the page without a coloured layer over the top', async ({ page }, testInfo) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  const backdrop = page.locator('.popover-backdrop')
-  await backdrop.evaluate((el) => el.setAttribute('data-first', ''))
-  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Sepia' }).click()
-  // A new element (Safari re-reads its colour for the top bar), shown at once.
-  await expect(backdrop).not.toHaveAttribute('data-first', '')
-  await expect(backdrop).toHaveClass(/is-still/)
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'sepia')
+  // Safari would tint its top bar from a coloured backdrop and keep that colour.
+  const backdrop = await page.evaluate(`getComputedStyle(document.querySelector('.popover-backdrop')).backgroundColor`)
+  expect(backdrop).toBe('rgba(0, 0, 0, 0)')
+  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Dark' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  if (testInfo.project.name === 'phone') {
+    // The dimming comes from the sheet's shadow, which follows the theme.
+    await expect.poll(() => page.evaluate(`getComputedStyle(document.querySelector('.settings-menu')).boxShadow`)).toContain('rgba(0, 0, 0, 0.5)')
+  }
 })

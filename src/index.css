@@ -963,7 +963,6 @@ kbd {
 .search-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
 .search-backdrop.is-closing .search-panel { animation: panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 .popover-backdrop.is-closing { animation: fade-out 0.2s ease-in forwards; pointer-events: none; }
-.popover-backdrop.is-still:not(.is-closing) { animation: none; }
 .popover.is-closing { animation: fade-out 0.14s ease-in forwards; pointer-events: none; }
 .search-bar { display: flex; align-items: center; gap: 0.25rem; padding: 0.75rem 0.5rem 0.5rem 1rem; }
 .search-bar input {
@@ -1115,7 +1114,19 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+  /* The settings sheet dims the page with a shadow, not a backdrop (see
+     SettingsMenu), so it follows a theme change made in it. */
+  .popover-backdrop.is-clear { background: none; }
+  .settings-menu {
+    box-shadow: 0 0 0 100vmax var(--scrim);
+    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
+  }
+  .settings-menu.is-closing {
+    animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards, scrim-out 0.2s ease-in forwards;
+  }
 }
+@keyframes scrim-in { from { box-shadow: 0 0 0 100vmax transparent; } }
+@keyframes scrim-out { to { box-shadow: 0 0 0 100vmax transparent; } }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 @keyframes sheet-out { to { transform: translateY(100%); } }
 
