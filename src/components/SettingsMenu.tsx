@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -29,6 +29,12 @@ const MODES: { value: ReadingMode; label: string; hint: string }[] = [
 const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
   { value: 'tap', label: 'Tap', hint: 'Tap anywhere on the page to start, and again to pause' },
   { value: 'hold', label: 'Hold', hint: 'Reads while you hold anywhere on the page, pauses when you let go' },
+]
+
+const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
+  { value: 'highlight', label: 'Highlight' },
+  { value: 'pacer', label: 'Line' },
+  { value: 'both', label: 'Both' },
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -139,20 +145,9 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
         </div>
 
         {settings.mode === 'page' && (
-          <div className="setting-group">
-            <label className="switch-row">
-              <span>Highlight the current word</span>
-              <input
-                type="checkbox"
-                role="switch"
-                checked={settings.pageHighlight}
-                onChange={(e) => set({ pageHighlight: e.target.checked })}
-              />
-            </label>
-            <label className="switch-row">
-              <span>Pacer line</span>
-              <input type="checkbox" role="switch" checked={settings.pacer} onChange={(e) => set({ pacer: e.target.checked })} />
-            </label>
+          <div className="setting setting-stack">
+            <span className="setting-name">Guide</span>
+            <Choice label="Guide" options={GUIDE_OPTIONS} value={settings.pageGuide} onChange={(pageGuide) => set({ pageGuide })} />
           </div>
         )}
 

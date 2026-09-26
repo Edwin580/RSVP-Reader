@@ -137,10 +137,12 @@ export interface Settings {
   font: ReadingFont
   /** Colour of the focus letter, page marker and pacer. */
   accent: Accent
-  /** Page mode: softly highlight the current word. */
-  pageHighlight: boolean
-  /** Page mode: the thin line that sweeps along under the current line. */
-  pacer: boolean
+  /**
+   * Page mode: how the current word is marked. 'highlight' is a soft box on
+   * the word, 'pacer' a thin line sweeping along under the line, 'both' both.
+   * There's always one, so you never lose your place on the page.
+   */
+  pageGuide: PageGuide
   /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
   playControl: PlayControl
 }
@@ -150,11 +152,13 @@ export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple'
 export type PlayControl = 'tap' | 'hold'
+export type PageGuide = 'highlight' | 'pacer' | 'both'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
+export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both']
 
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
@@ -164,8 +168,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   font: 'serif',
   accent: 'red',
-  pageHighlight: true,
-  pacer: true,
+  pageGuide: 'both',
   playControl: 'tap',
 }
 
@@ -185,13 +188,19 @@ export function loadSettings(): Settings {
       // sans saved from then moves to the new serif; a later pick sticks.
       font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
-      pageHighlight: saved.pageHighlight !== false,
-      pacer: saved.pacer !== false,
+      pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {
     return DEFAULT_SETTINGS
   }
+}
+
+/** The guide from the two old switches; both off (no guide at all) becomes both on. */
+function guideFromSwitches(highlight: unknown, pacer: unknown): PageGuide {
+  if (highlight === false && pacer !== false) return 'pacer'
+  if (pacer === false && highlight !== false) return 'highlight'
+  return 'both'
 }
 
 export function saveSettings(settings: Settings): void {

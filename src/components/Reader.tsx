@@ -475,7 +475,7 @@ export function Reader({
               e.preventDefault()
             }
           }}
-          className={`stage stage-page${settings.pageHighlight ? '' : ' no-highlight'}${settings.pacer ? '' : ' no-pacer'}`}
+          className={`stage stage-page${settings.pageGuide === 'pacer' ? ' no-highlight' : ''}${settings.pageGuide === 'highlight' ? ' no-pacer' : ''}`}
         >
           <PageView
             words={words}

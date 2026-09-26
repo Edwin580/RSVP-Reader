@@ -91,16 +91,24 @@ test('unsupported files show a clear error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Chapter reads EPUB, PDF, TXT and Markdown files')
 })
 
-test('page mode highlight and pacer can be switched off', async ({ page }) => {
+test('page mode guide: highlight, line or both, never neither', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  await page.getByRole('switch', { name: 'Highlight the current word' }).uncheck()
-  await page.getByRole('switch', { name: 'Pacer line' }).uncheck()
+  const guide = page.getByRole('radiogroup', { name: 'Guide' })
+  await expect(guide.getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
+
+  await guide.getByRole('radio', { name: 'Line' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
   await expect(page.locator('.page-marker')).toBeHidden()
+  await expect(page.locator('.page-pacer')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await guide.getByRole('radio', { name: 'Highlight' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.page-marker')).toBeVisible()
   await expect(page.locator('.page-pacer')).toBeHidden()
   await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field.')
 })
@@ -198,4 +206,17 @@ test('tapping anywhere plays and pauses, and holding never selects text', async 
   await page.mouse.move(text.x + text.width - 5, text.y + 10, { steps: 8 })
   await page.mouse.up()
   expect(await page.evaluate('String(window.getSelection())')).toBe('')
+})
+
+test('old settings with both page guides off come back with both on', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('migrated')) {
+      localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', pageHighlight: false, pacer: false }))
+      localStorage.setItem('migrated', '1')
+    }
+  })
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await expect(page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 })
