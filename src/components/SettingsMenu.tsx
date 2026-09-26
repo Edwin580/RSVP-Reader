@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -23,6 +23,11 @@ const TIMINGS: { value: WordTiming; label: string; hint: string }[] = [
 const MODES: { value: ReadingMode; label: string; hint: string }[] = [
   { value: 'word', label: 'Word', hint: 'One word at a time in a fixed spot' },
   { value: 'page', label: 'Page', hint: 'Full pages with a marker that follows along' },
+]
+
+const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
+  { value: 'tap', label: 'Tap', hint: 'Tap the text to start, tap again to pause' },
+  { value: 'hold', label: 'Hold', hint: 'Reads while you hold the text, pauses when you let go' },
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -117,6 +122,25 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
             )}
           </div>
         )}
+
+        <div className="setting setting-stack">
+          <span className="setting-name">Play with</span>
+          <div className="segmented" role="radiogroup" aria-label="Play with">
+            {PLAY_OPTIONS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                role="radio"
+                aria-checked={settings.playControl === p.value}
+                onClick={() => onSettings({ ...settings, playControl: p.value })}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <span className="hint">{PLAY_OPTIONS.find((p) => p.value === settings.playControl)?.hint}</span>
+        </div>
+
 
         <div className="setting">
           <span className="setting-name">Text size</span>

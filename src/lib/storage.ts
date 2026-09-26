@@ -139,16 +139,20 @@ export interface Settings {
   pageHighlight: boolean
   /** Page mode: the thin line that sweeps along under the current line. */
   pacer: boolean
+  /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
+  playControl: PlayControl
 }
 
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple'
+export type PlayControl = 'tap' | 'hold'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['sans', 'serif']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
@@ -160,6 +164,7 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: 'red',
   pageHighlight: true,
   pacer: true,
+  playControl: 'tap',
 }
 
 const oneOf = <T,>(options: readonly T[], value: unknown, fallback: T): T =>
@@ -178,6 +183,7 @@ export function loadSettings(): Settings {
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageHighlight: saved.pageHighlight !== false,
       pacer: saved.pacer !== false,
+      playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {
     return DEFAULT_SETTINGS

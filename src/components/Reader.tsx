@@ -65,6 +65,7 @@ export function Reader({
 }: Props) {
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode, font } = settings
+  const holdToRead = settings.playControl === 'hold'
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -144,21 +145,46 @@ export function Reader({
   // pauses while you look), let go to carry on. Swipe to move by sentence.
   const [glancing, setGlancing] = useState(false)
   const resumeAfterGlance = useRef(false)
-  const wordGestures = usePressGestures({
-    onTap: () => toggle(),
-    onHoldStart: () => {
-      resumeAfterGlance.current = playing
-      setGlancing(true)
-      pause()
+  // Hold to read: reading runs only while a finger (or the mouse) is down on
+  // the text. A swipe still moves by sentence or page, measured from where
+  // the press began.
+  const pressFrom = useRef(0)
+  const holdHandlers = {
+    onPressStart: () => {
+      pressFrom.current = index
+      play()
     },
-    onHoldEnd: () => {
-      setGlancing(false)
-      if (resumeAfterGlance.current) play()
-    },
-    onSwipe: (direction) => seek(direction === 'left' ? nextSentence(words, index) : previousSentence(words, index)),
-  })
+    onPressEnd: () => pause(),
+  }
+  const wordGestures = usePressGestures(
+    holdToRead
+      ? {
+          ...holdHandlers,
+          onSwipe: (direction) =>
+            seek(
+              direction === 'left'
+                ? nextSentence(words, pressFrom.current)
+                : previousSentence(words, pressFrom.current),
+            ),
+        }
+      : {
+          onTap: () => toggle(),
+          onHoldStart: () => {
+            resumeAfterGlance.current = playing
+            setGlancing(true)
+            pause()
+          },
+          onHoldEnd: () => {
+            setGlancing(false)
+            if (resumeAfterGlance.current) play()
+          },
+          onSwipe: (direction) =>
+            seek(direction === 'left' ? nextSentence(words, index) : previousSentence(words, index)),
+        },
+  )
   // Page mode: swipe to turn pages, like an e-reader.
   const pageGestures = usePressGestures({
+    ...(holdToRead && holdHandlers),
     onSwipe: (direction) => (direction === 'left' ? pageNav.current?.next() : pageNav.current?.previous()),
   })
 
@@ -458,7 +484,7 @@ export function Reader({
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
             onSeek={seek}
-            onToggle={toggle}
+            onToggle={holdToRead ? noop : toggle}
             onPage={onPage}
             navRef={pageNav}
           />
@@ -694,6 +720,8 @@ function Glance({ words, index }: { words: string[]; index: number }) {
     </div>
   )
 }
+
+const noop = () => {}
 
 /** Report reading while playing: every 30s, on pause, and when the reader closes. */
 const STATS_FLUSH_MS = 30_000
