@@ -156,17 +156,27 @@ export function Reader({
   // While held, the controls get out of the way at once, and come straight
   // back on release (rather than fading after a couple of idle seconds).
   const [holding, setHolding] = useState(false)
+  const startHold = () => {
+    setHolding(true)
+    play()
+  }
+  const endHold = () => {
+    setHolding(false)
+    pause()
+  }
+  // With Hold to read, nothing starts reading on its own: not the play
+  // button, Space, starting a session or continuing from a card. Those wait
+  // for a hold instead, so reading only ever runs while something is held.
+  const begin = () => {
+    if (!holdToRead) play()
+  }
   const holdHandlers = {
     ignore: ignorePress,
     onPressStart: () => {
       pressFrom.current = index
-      setHolding(true)
-      play()
+      startHold()
     },
-    onPressEnd: () => {
-      setHolding(false)
-      pause()
-    },
+    onPressEnd: endHold,
   }
   const wordGestures = usePressGestures(
     holdToRead
@@ -250,7 +260,7 @@ export function Reader({
     setSession({ ...plan, from: index })
     setSessionDone(null)
     closePanel()
-    play()
+    begin()
   }
 
   // Start indexing in the background as soon as the book opens.
@@ -298,7 +308,9 @@ export function Reader({
     switch (e.key) {
       case ' ':
       case 'k':
-        toggle()
+        // Hold to read: hold the key to read, let go to stop (see keyup below).
+        if (!holdToRead) toggle()
+        else if (!e.repeat) startHold()
         break
       case 'ArrowLeft':
         seek(e.shiftKey || e.ctrlKey || e.metaKey ? previousSentence(words, index) : index - 1)
@@ -338,10 +350,22 @@ export function Reader({
   useEffect(() => {
     keys.current = onKey
   })
+  const onKeyUp = (e: KeyboardEvent) => {
+    if (holdToRead && (e.key === ' ' || e.key === 'k')) endHold()
+  }
+  const keysUp = useRef(onKeyUp)
+  useEffect(() => {
+    keysUp.current = onKeyUp
+  })
   useEffect(() => {
     const handler = (e: KeyboardEvent) => keys.current(e)
+    const upHandler = (e: KeyboardEvent) => keysUp.current(e)
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    window.addEventListener('keyup', upHandler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('keyup', upHandler)
+    }
   }, [])
 
   const chapterIndex = useMemo(() => {
@@ -377,22 +401,31 @@ export function Reader({
         {sessionDone.landing === 'chapter' && sessionDone.where ? ` and finished ${sessionDone.where}` : ''}
         {sessionDone.landing === 'book' ? ' and finished the book' : ''}.
       </p>
-      <div className="recap-actions">
-        <button
-          type="button"
-          className="demo-button"
-          onClick={() => {
-            setSessionDone(null)
-            play()
-          }}
-        >
-          <Icon name="play" size={16} />
-          Keep going
-        </button>
-        <button type="button" className="text-button" onClick={() => setSessionDone(null)}>
-          Done
-        </button>
-      </div>
+      {holdToRead ? (
+        <div className="recap-actions">
+          <span className="recap-hint">Hold anywhere to keep reading.</span>
+          <button type="button" className="text-button" onClick={() => setSessionDone(null)}>
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="recap-actions">
+          <button
+            type="button"
+            className="demo-button"
+            onClick={() => {
+              setSessionDone(null)
+              play()
+            }}
+          >
+            <Icon name="play" size={16} />
+            Keep going
+          </button>
+          <button type="button" className="text-button" onClick={() => setSessionDone(null)}>
+            Done
+          </button>
+        </div>
+      )}
     </aside>
   )
 
@@ -402,6 +435,7 @@ export function Reader({
       index={initialIndex}
       where={hasChapters ? chapters[chapterIndex].title : null}
       ago={recapAgo}
+      holdToRead={holdToRead}
       onContinue={() => {
         setRecapDismissed(true)
         play()
@@ -618,9 +652,30 @@ export function Reader({
             <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
               <Icon name="back" />
             </button>
-            <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
-              <Icon name={playing ? 'pause' : 'play'} size={22} />
-            </button>
+            {holdToRead ? (
+              // Hold to read: a button you hold, not one you tap.
+              <button
+                type="button"
+                className="play-button is-hold"
+                aria-label="Hold to read"
+                title="Hold to read (or hold Space)"
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return
+                  e.currentTarget.setPointerCapture(e.pointerId)
+                  startHold()
+                }}
+                onPointerUp={endHold}
+                onPointerCancel={endHold}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <Icon name="hold" size={20} />
+                <span className="play-label">Hold</span>
+              </button>
+            ) : (
+              <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
+                <Icon name={playing ? 'pause' : 'play'} size={22} />
+              </button>
+            )}
             <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
               <Icon name="forward" />
             </button>
@@ -693,6 +748,7 @@ function Recap({
   index,
   where,
   ago,
+  holdToRead,
   onContinue,
   onDismiss,
 }: {
@@ -700,6 +756,7 @@ function Recap({
   index: number
   where: string | null
   ago: string
+  holdToRead: boolean
   onContinue: () => void
   onDismiss: () => void
 }) {
@@ -715,12 +772,16 @@ function Recap({
         {words.slice(start, end + 1).join(' ')}
       </p>
       <div className="recap-actions">
-        <button type="button" className="demo-button" onClick={onContinue}>
-          <Icon name="play" size={16} />
-          Continue reading
-        </button>
+        {holdToRead ? (
+          <span className="recap-hint">Hold anywhere to carry on.</span>
+        ) : (
+          <button type="button" className="demo-button" onClick={onContinue}>
+            <Icon name="play" size={16} />
+            Continue reading
+          </button>
+        )}
         <button type="button" className="text-button" onClick={onDismiss}>
-          Dismiss
+          {holdToRead ? 'OK' : 'Dismiss'}
         </button>
       </div>
     </aside>

@@ -170,12 +170,12 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   const stage = (await page.locator('.stage').boundingBox())!
   await page.mouse.move(stage.x + 20, stage.y + 20)
   await page.mouse.down()
-  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
   await expect.poll(() => currentWord(page)).not.toBe('Chapter')
   // Let go anywhere, even off the word: reading stops.
   await page.mouse.move(5, 5)
   await page.mouse.up()
-  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
   await expect(page.locator('.glance')).toBeHidden()
   const stopped = await currentWord(page)
   await page.waitForTimeout(600)
@@ -296,4 +296,40 @@ test('holding to read hides the controls at once and brings them back on release
   await expect.poll(opacity, { timeout: 500 }).toBe(0)
   await page.mouse.up()
   await expect.poll(opacity, { timeout: 500 }).toBe(1)
+})
+
+test('with Hold to read, nothing reads on a tap: the button, Space and Start reading all wait for a hold', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'long.txt', ['Chapter 1', '', 'Word after word here. '.repeat(300), '', 'Chapter 2', '', 'More words to read. '.repeat(300)].join('\n'))
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  const reader = page.locator('.reader')
+
+  // No play button: a Hold button instead, which reads only while held.
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveCount(0)
+  const hold = page.getByRole('button', { name: 'Hold to read' })
+  await hold.click()
+  await expect(reader).not.toHaveClass(/is-playing/)
+  const box = (await hold.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect(reader).toHaveClass(/is-playing/)
+  await page.mouse.up()
+  await expect(reader).not.toHaveClass(/is-playing/)
+
+  // Space: hold to read, let go to stop; a quick press doesn't leave it running.
+  await page.keyboard.down(' ')
+  await expect(reader).toHaveClass(/is-playing/)
+  await page.keyboard.up(' ')
+  await expect(reader).not.toHaveClass(/is-playing/)
+
+  // Starting a session sets it up but waits for a hold.
+  await page.locator('.session-open').click()
+  await page.getByRole('button', { name: 'Start reading' }).click()
+  await expect(page.locator('.session-active')).toContainText('left in session')
+  await page.waitForTimeout(400)
+  await expect(reader).not.toHaveClass(/is-playing/)
 })

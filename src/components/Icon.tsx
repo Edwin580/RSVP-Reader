@@ -12,6 +12,7 @@ const PATHS = {
   trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
   upload: 'M12 16V4m-5 5 5-5 5 5M5 20h14',
   plus: 'M12 5v14M5 12h14',
+  hold: 'M12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z',
   clock: 'M12 7.5V12l3 2M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z',
   bookmark: 'M7 4.5h10v15l-5-3.8-5 3.8z',
   bookmarkFilled: 'M7 4.5h10v15l-5-3.8-5 3.8z',

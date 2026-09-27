@@ -789,6 +789,10 @@ h1, h2, p { margin: 0; }
   transition: transform 0.1s;
 }
 .play-button:active { transform: scale(0.94); }
+/* Hold to read: the same square, marked as something you hold. */
+.play-button.is-hold { gap: 1px; align-content: center; touch-action: none; -webkit-touch-callout: none; }
+.play-label { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; }
+.recap-hint { flex: 1; font-size: 0.9rem; color: var(--text-2); }
 .speed { justify-self: end; display: flex; align-items: center; }
 .speed-value { min-width: 5.5rem; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 .speed-value .muted { font-weight: 400; font-size: 0.85rem; }
