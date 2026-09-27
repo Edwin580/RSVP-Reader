@@ -653,12 +653,13 @@ export function Reader({
               <Icon name="back" />
             </button>
             {holdToRead ? (
-              // Hold to read: a button you hold, not one you tap.
+              // Hold to read: a wide pad to rest a thumb on, labelled in words
+              // (an icon alone is ambiguous), that shows it's reading the
+              // moment it's pressed.
               <button
                 type="button"
-                className="play-button is-hold"
-                aria-label="Hold to read"
-                title="Hold to read (or hold Space)"
+                className={`hold-pad${holding && playing ? ' is-pressed' : ''}`}
+                title="Or hold Space"
                 onPointerDown={(e) => {
                   if (e.button !== 0) return
                   e.currentTarget.setPointerCapture(e.pointerId)
@@ -668,8 +669,7 @@ export function Reader({
                 onPointerCancel={endHold}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                <Icon name="hold" size={20} />
-                <span className="play-label">Hold</span>
+                {holding && playing ? 'Reading…' : 'Hold to read'}
               </button>
             ) : (
               <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">

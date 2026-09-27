@@ -789,9 +789,23 @@ h1, h2, p { margin: 0; }
   transition: transform 0.1s;
 }
 .play-button:active { transform: scale(0.94); }
-/* Hold to read: the same square, marked as something you hold. */
-.play-button.is-hold { gap: 1px; align-content: center; touch-action: none; -webkit-touch-callout: none; }
-.play-label { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; }
+/* Hold to read: a wide pad in the thumb's easiest reach, outlined (filled
+   ink means "tap"), that fills the moment it's pressed. */
+.hold-pad {
+  width: clamp(8.5rem, 34vw, 12rem);
+  height: 56px;
+  margin: 0 0.5rem;
+  border: 1.5px solid var(--text);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  transition: background-color 0.08s, color 0.08s;
+}
+.hold-pad.is-pressed { background: var(--text); color: var(--bg); }
 .recap-hint { flex: 1; font-size: 0.9rem; color: var(--text-2); }
 .speed { justify-self: end; display: flex; align-items: center; }
 .speed-value { min-width: 5.5rem; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1162,6 +1176,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .transport { grid-column: auto; grid-row: auto; }
   .deck-meta, .speed { grid-row: auto; }
   .play-button { width: 48px; height: 48px; }
+  .hold-pad { height: 48px; }
 }
 
 /* Moving between the library and a book: the new screen slides in a little
