@@ -196,11 +196,13 @@ export function Reader({
     onPressEnd: endHold,
   }
   const holdTaps = {
-    // A short press read for a moment; a tap on the word it began on still counts.
+    // A tap isn't a hold: undo the moment of reading it started, so tapping
+    // (or double-tapping to define) never moves your place. A tap on a word
+    // in the paused text jumps there instead.
     onTap: (target: Element | null) => {
       const tapped = wordAt(target)
       tapIndex.current = tapped ?? pressFrom.current
-      if (tapped !== null) seek(tapped)
+      seek(tapIndex.current)
     },
     onDoubleTap,
   }
@@ -235,7 +237,14 @@ export function Reader({
   )
   // Page mode: swipe to turn pages, like an e-reader.
   const pageGestures = usePressGestures({
-    ...(holdToRead && holdHandlers),
+    ...(holdToRead && {
+      ...holdHandlers,
+      // Taps on words are the page's own (jump there, double-tap to define);
+      // a tap anywhere else just undoes its moment of reading.
+      onTap: (target: Element | null) => {
+        if (!target?.closest('[data-i]')) seek(pressFrom.current)
+      },
+    }),
     onSwipe: (direction) => (direction === 'left' ? pageNav.current?.next() : pageNav.current?.previous()),
   })
 

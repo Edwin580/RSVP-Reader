@@ -432,9 +432,10 @@ h1, h2, p { margin: 0; }
 .chrome { transition: opacity 0.2s ease-out; }
 /* After a couple of idle seconds while playing, the controls fade slowly. */
 .reader.is-idle .chrome { opacity: 0; transition: opacity 0.5s ease; }
-/* Holding to read: they go at once (after a beat, so a quick tap doesn't
-   flicker them) and, without this class, come straight back on release. */
-.reader.is-holding .chrome { opacity: 0; transition: opacity 0.15s ease-in 0.08s; }
+/* Holding to read: they go once the press is clearly a hold (so taps and
+   double-taps don't flicker them) and, without this class, come straight
+   back on release. */
+.reader.is-holding .chrome { opacity: 0; transition: opacity 0.15s ease-in 0.2s; }
 .reader.is-idle { cursor: none; }
 
 .reader-top {

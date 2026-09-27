@@ -446,3 +446,50 @@ test('double-tapping a word in the paused text defines that word, even as the te
   await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText(`The meaning of ${target}.`)
   await expect(page.locator('.word')).toHaveText(new RegExp(`^${target}\\.?$`))
 })
+
+test('with Hold to read, taps never move your place, and double-tap defines', async ({ page }) => {
+  await stubDictionary(page)
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  await page.waitForFunction('document.getAnimations().length === 0')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  const stage = (await page.locator('.stage').boundingBox())!
+  const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
+  const opacity = () => page.evaluate(`Number(getComputedStyle(document.querySelector('.reader-bottom')).opacity)`)
+
+  // A quick press: the controls don't flicker, and the place doesn't move.
+  await page.mouse.move(spot.x, spot.y)
+  await page.mouse.down()
+  await page.waitForTimeout(150)
+  expect(await opacity()).toBe(1)
+  await page.mouse.up()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(400)
+    await page.mouse.click(spot.x, spot.y, { delay: 120 })
+  }
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  // Double-tap: defines the word you're on, which stays put.
+  await page.waitForTimeout(400)
+  await page.mouse.dblclick(spot.x, spot.y, { delay: 80 })
+  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText('The meaning of rabbit.')
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  await page.keyboard.press('Escape')
+
+  // Page mode, still Hold: double-tap a word on the page.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().dblclick({ delay: 80 })
+  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText('The meaning of hedge.')
+})
