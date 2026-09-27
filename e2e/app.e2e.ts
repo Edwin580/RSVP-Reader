@@ -493,3 +493,51 @@ test('with Hold to read, taps never move your place, and double-tap defines', as
   await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().dblclick({ delay: 80 })
   await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText('The meaning of hedge.')
 })
+
+test('double-tapping with a finger opens the definition and it stays open', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'touch only')
+  await stubDictionary(page)
+  await page.goto('./')
+  await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).tap()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  const panel = page.getByRole('dialog', { name: /Definition of/ })
+
+  // Real taps: the browser follows each with a click where the finger was,
+  // which lands on whatever is there by then (the sheet's backdrop).
+  const stage = (await page.locator('.stage').boundingBox())!
+  const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
+  await page.touchscreen.tap(spot.x, spot.y)
+  await page.touchscreen.tap(spot.x, spot.y)
+  await expect(panel).toBeVisible()
+  await page.waitForTimeout(600)
+  await expect(panel).toBeVisible()
+  await expect(panel).toContainText('The meaning of rabbit.')
+
+  // A word in the paused text, too.
+  await page.getByRole('button', { name: 'Close definition' }).tap()
+  await expect(panel).toBeHidden()
+  const hedge = (await page.locator('.context [data-i]', { hasText: 'hedge.' }).first().boundingBox())!
+  await page.touchscreen.tap(hedge.x + hedge.width / 2, hedge.y + hedge.height / 2)
+  await page.touchscreen.tap(hedge.x + hedge.width / 2, hedge.y + hedge.height / 2)
+  await page.waitForTimeout(600)
+  await expect(panel).toContainText('The meaning of hedge.')
+
+  // Tapping outside it still closes it.
+  await page.touchscreen.tap(20, 60)
+  await expect(panel).toBeHidden()
+
+  // Hold to read, and page mode: the same.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
+  await page.getByRole('radio', { name: 'Page' }).tap()
+  await page.getByRole('button', { name: 'More settings' }).tap()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).tap()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  const word = (await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().boundingBox())!
+  await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
+  await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
+  await page.waitForTimeout(600)
+  await expect(panel).toContainText('The meaning of rabbit.')
+})

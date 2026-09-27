@@ -17,6 +17,10 @@ interface Props {
  */
 export function DefinitionPanel({ word, closing, onClose }: Props) {
   const panel = useRef<HTMLElement>(null)
+  // Only a press that starts on the backdrop closes the sheet. After a
+  // double-tap, phones send a click where the finger was, which by then is
+  // the backdrop; it has no press of its own there, so it's ignored.
+  const pressedBackdrop = useRef(false)
   const [lookup, setLookup] = useState<{ word: string; result: Lookup } | null>(null)
   const shown = cleanWord(word)
 
@@ -43,7 +47,16 @@ export function DefinitionPanel({ word, closing, onClose }: Props) {
   const result = lookup?.word === word ? lookup.result : null
 
   return (
-    <div className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`} onClick={onClose}>
+    <div
+      className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`}
+      onPointerDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedBackdrop.current) onClose()
+        pressedBackdrop.current = false
+      }}
+    >
       <aside
         ref={panel}
         tabIndex={-1}
