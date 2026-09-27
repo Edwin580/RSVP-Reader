@@ -11,6 +11,7 @@ import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book, Bookmark } from '../lib/types'
 import { BookmarksPanel } from './BookmarksPanel'
+import { DefinitionPanel } from './DefinitionPanel'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
@@ -149,10 +150,26 @@ export function Reader({
   // the text. A swipe still moves by sentence or page, measured from where
   // the press began.
   const pressFrom = useRef(0)
-  // Buttons and cards on the stage keep their own taps. In tap mode a word in
-  // the paused text jumps there instead of playing.
-  const ignorePress = (target: Element) =>
-    !!target.closest('button, a, input, select, .recap') || (!holdToRead && !!target.closest('.context [data-i]'))
+  // Buttons and cards on the stage keep their own taps.
+  const ignorePress = (target: Element) => !!target.closest('button, a, input, select, .recap')
+  // A word in the paused text, if that's what a tap landed on.
+  const wordAt = (target: Element | null) => {
+    const el = target?.closest<HTMLElement>('.context [data-i]')
+    return el ? Number(el.dataset.i) : null
+  }
+  // Double-tap to define: the word that was showing (or tapped) at the first
+  // tap. The first tap acts straight away (play, pause or jump), so single
+  // taps never wait; the second undoes nothing and opens the definition.
+  const tapIndex = useRef(0)
+  const onTapWord = (target: Element | null, act: () => void) => {
+    const tapped = wordAt(target)
+    tapIndex.current = tapped ?? index
+    if (tapped !== null) seek(tapped)
+    else act()
+  }
+  // Always the first tap's word: that tap may have jumped to it, moving the
+  // paused text, so the second tap can land on a different word.
+  const onDoubleTap = () => openDefinition(tapIndex.current)
   // While held, the controls get out of the way at once, and come straight
   // back on release (rather than fading after a couple of idle seconds).
   const [holding, setHolding] = useState(false)
@@ -178,10 +195,20 @@ export function Reader({
     },
     onPressEnd: endHold,
   }
+  const holdTaps = {
+    // A short press read for a moment; a tap on the word it began on still counts.
+    onTap: (target: Element | null) => {
+      const tapped = wordAt(target)
+      tapIndex.current = tapped ?? pressFrom.current
+      if (tapped !== null) seek(tapped)
+    },
+    onDoubleTap,
+  }
   const wordGestures = usePressGestures(
     holdToRead
       ? {
           ...holdHandlers,
+          ...holdTaps,
           onSwipe: (direction) =>
             seek(
               direction === 'left'
@@ -191,7 +218,8 @@ export function Reader({
         }
       : {
           ignore: ignorePress,
-          onTap: () => toggle(),
+          onTap: (target) => onTapWord(target, toggle),
+          onDoubleTap,
           onHoldStart: () => {
             resumeAfterGlance.current = playing
             setGlancing(true)
@@ -223,7 +251,8 @@ export function Reader({
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | 'define' | null>(null)
+  const [defining, setDefining] = useState('')
   // A closing panel stays mounted briefly so it can animate out.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -245,7 +274,7 @@ export function Reader({
   }, [])
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
-  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session' | 'define') => {
     pause()
     if (panel === which && !closing) {
       closePanel()
@@ -254,6 +283,15 @@ export function Reader({
     window.clearTimeout(closeTimer.current)
     setClosing(false)
     setPanel(which)
+  }
+
+  // Reading pauses on the word, which stays put under the definition.
+  const openDefinition = (i: number) => {
+    const word = words[i]
+    if (!word) return
+    seek(i)
+    setDefining(word)
+    openPanel('define')
   }
 
   const startSession = (plan: { end: number; landing: Landing; minutes: number }) => {
@@ -331,6 +369,10 @@ export function Reader({
       case 'b':
       case 'B':
         toggleMark()
+        break
+      case 'd':
+      case 'D':
+        openDefinition(index)
         break
       case 'm':
       case 'M':
@@ -531,6 +573,7 @@ export function Reader({
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
             onSeek={seek}
+            onDefine={openDefinition}
             onToggle={holdToRead ? noop : toggle}
             onPage={onPage}
             navRef={pageNav}
@@ -564,7 +607,6 @@ export function Reader({
                     <span
                       data-i={i}
                       className={[i === index && 'current', headingWords.has(i) && 'is-heading'].filter(Boolean).join(' ') || undefined}
-                      onClick={() => seek(i)}
                     >
                       {w}{' '}
                     </span>
@@ -698,6 +740,8 @@ export function Reader({
           </div>
         </div>
       </footer>
+
+      {panel === 'define' && <DefinitionPanel word={defining} closing={closing} onClose={closePanel} />}
 
       {panel === 'bookmarks' && (
         <BookmarksPanel

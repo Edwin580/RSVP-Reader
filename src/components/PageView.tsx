@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { DOUBLE_TAP_MS } from '../hooks/usePressGestures'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
 
@@ -20,6 +21,8 @@ interface Props {
   lineReturnMs: number
   turnMs: number
   onSeek: (index: number) => void
+  /** Double-tap on a word: look it up. */
+  onDefine?: (index: number) => void
   onToggle: () => void
   /** Reports the visible page and the words that begin each line on it. */
   onPage: (start: number, end: number, lineStarts: Set<number>) => void
@@ -65,6 +68,7 @@ export function PageView({
   lineReturnMs,
   turnMs,
   onSeek,
+  onDefine,
   onToggle,
   onPage,
   navRef,
@@ -78,6 +82,7 @@ export function PageView({
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
   const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
   const known = useRef(new Map<number, number>())
+  const lastClick = useRef<{ i: number; at: number } | null>(null)
   const [page, setPage] = useState<{ start: number; end: number | null; turn: 'forward' | 'back' | null }>(() => ({
     start: pageAnchor(words, paragraphEnds, index),
     end: null,
@@ -285,8 +290,17 @@ export function PageView({
       style={{ '--page-scale': scale } as React.CSSProperties}
       onClick={(e) => {
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')
-        if (target) onSeek(Number(target.dataset.i))
-        else onToggle()
+        if (!target) return onToggle()
+        const i = Number(target.dataset.i)
+        // The same word tapped twice in quick succession: define it (the first
+        // tap has already jumped there).
+        const before = lastClick.current
+        const now = performance.now()
+        lastClick.current = { i, at: now }
+        if (before && before.i === i && now - before.at < DOUBLE_TAP_MS && onDefine) {
+          lastClick.current = null
+          onDefine(i)
+        } else onSeek(i)
       }}
     >
       <div

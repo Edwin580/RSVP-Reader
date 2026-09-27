@@ -2,7 +2,14 @@ import { useEffect, useRef } from 'react'
 import { classifyGesture, HOLD_MS, MOVE_TOLERANCE, type Gesture } from '../lib/glance'
 
 interface Handlers {
-  onTap?: () => void
+  /** A quick press and release. `target` is what the press started on. */
+  onTap?: (target: Element | null) => void
+  /**
+   * A second tap soon after the first, near it. The first tap still gets
+   * `onTap` straight away (so a single tap never waits), and this replaces
+   * the second tap's `onTap`.
+   */
+  onDoubleTap?: (target: Element | null) => void
   /** The press has lasted HOLD_MS without moving; `onHoldEnd` follows on release. */
   onHoldStart?: () => void
   onHoldEnd?: () => void
@@ -16,6 +23,10 @@ interface Handlers {
 }
 
 type PointerPoint = { pointerId: number; clientX: number; clientY: number }
+
+/** Two taps this close in time (ms) and distance (px) make a double tap. */
+export const DOUBLE_TAP_MS = 320
+const DOUBLE_TAP_DISTANCE = 30
 
 /**
  * Tap, press-and-hold and horizontal swipe on one element, with mouse, pen or
@@ -35,8 +46,10 @@ export function usePressGestures(handlers: Handlers) {
     held: boolean
     timer: number
     release: () => void
+    target: Element | null
   } | null>(null)
   const lastGesture = useRef<Gesture>('none')
+  const lastTap = useRef<{ at: number; x: number; y: number } | null>(null)
 
   const end = (e: PointerPoint, cancelled = false) => {
     const p = press.current
@@ -53,8 +66,18 @@ export function usePressGestures(handlers: Handlers) {
     if (cancelled) return
     const gesture = classifyGesture(e.clientX - p.x, e.clientY - p.y, performance.now() - p.at)
     lastGesture.current = gesture
-    if (gesture === 'tap') latest.current.onTap?.()
-    else if (gesture === 'swipe-left') latest.current.onSwipe?.('left')
+    if (gesture === 'tap') {
+      const now = performance.now()
+      const before = lastTap.current
+      const double =
+        !!before &&
+        now - before.at < DOUBLE_TAP_MS &&
+        Math.hypot(p.x - before.x, p.y - before.y) < DOUBLE_TAP_DISTANCE &&
+        !!latest.current.onDoubleTap
+      lastTap.current = double ? null : { at: now, x: p.x, y: p.y }
+      if (double) latest.current.onDoubleTap?.(p.target)
+      else latest.current.onTap?.(p.target)
+    } else if (gesture === 'swipe-left') latest.current.onSwipe?.('left')
     else if (gesture === 'swipe-right') latest.current.onSwipe?.('right')
   }
 
@@ -95,7 +118,8 @@ export function usePressGestures(handlers: Handlers) {
           window.removeEventListener('pointerup', up)
           window.removeEventListener('pointercancel', cancel)
         }
-        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer, release }
+        const target = e.target instanceof Element ? e.target : null
+        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer, release, target }
         latest.current.onPressStart?.()
       },
       onPointerMove: (e: React.PointerEvent) => {

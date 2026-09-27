@@ -191,8 +191,10 @@ test('tapping anywhere plays and pauses, and holding never selects text', async 
   const corner = { x: stage.x + 20, y: stage.y + 20 }
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await page.waitForTimeout(400) // two quick taps would be a double tap (define)
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  await page.waitForTimeout(400)
 
   // Tapping a word in the paused text jumps there instead of playing.
   await page.locator('.context [data-i]', { hasText: 'Alice' }).first().click()
@@ -332,4 +334,115 @@ test('with Hold to read, nothing reads on a tap: the button, Space and Start rea
   await expect(page.locator('.session-active')).toContainText('left in session')
   await page.waitForTimeout(400)
   await expect(reader).not.toHaveClass(/is-playing/)
+})
+
+// Double-tap to define, with the dictionary stubbed so tests don't need the network.
+async function stubDictionary(page: Page) {
+  const asked: string[] = []
+  await page.route('https://api.dictionaryapi.dev/**', (route) => {
+    const word = decodeURIComponent(route.request().url().split('/').pop()!)
+    asked.push(word)
+    if (word === 'hedge' || word === 'rabbit') {
+      return route.fulfill({
+        json: [{ word, phonetic: '/test/', meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: `The meaning of ${word}.`, example: `A ${word} here.` }] }] }],
+        headers: { 'access-control-allow-origin': '*' },
+      })
+    }
+    return route.fulfill({ status: 404, json: {}, headers: { 'access-control-allow-origin': '*' } })
+  })
+  await page.route('https://en.wiktionary.org/**', (route) =>
+    route.fulfill({ status: 404, json: {}, headers: { 'access-control-allow-origin': '*' } }),
+  )
+  return asked
+}
+
+test('double-tapping defines the word, while a single tap still plays and pauses at once', async ({ page }) => {
+  await stubDictionary(page)
+  await page.goto('./')
+  await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  // Step to "rabbit" (word 3).
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  // A single tap plays straight away (no waiting to see if a second tap comes).
+  const stage = (await page.locator('.stage').boundingBox())!
+  await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  // (Two taps in quick succession would be a double tap.)
+  await page.waitForTimeout(400)
+  await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  await page.waitForTimeout(400)
+
+  // Double-tap: reading pauses and the word's definition opens.
+  await page.keyboard.press('ArrowLeft')
+  const shown = await page.locator('.word').textContent()
+  await page.mouse.dblclick(stage.x + stage.width / 2, stage.y + 40)
+  const panel = page.getByRole('dialog', { name: /Definition of/ })
+  await expect(panel).toBeVisible()
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  await expect(page.locator('.word')).toHaveText(shown!)
+  await page.getByRole('button', { name: 'Close definition' }).click()
+
+  // A word in the paused text: double-tap it.
+  await page.locator('.context [data-i]', { hasText: 'hedge.' }).first().dblclick()
+  await expect(panel).toContainText('The meaning of hedge.')
+  await expect(panel).toContainText('A hedge here.')
+  await expect(panel).toContainText('From Free Dictionary')
+})
+
+test('definitions in page mode, not found, and offline', async ({ page, context }) => {
+  const asked = await stubDictionary(page)
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  const panel = page.getByRole('dialog', { name: /Definition of/ })
+
+  // Page mode: double-tap a word on the page.
+  await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().dblclick()
+  await expect(panel).toContainText('The meaning of rabbit.')
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+
+  // A word with no entry.
+  await page.locator('.page-text [data-i]', { hasText: /^Alice$/ }).first().dblclick()
+  await expect(panel).toContainText('No definition found for “alice”')
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+
+  // Offline: a new word can't be looked up, but one already looked up still can.
+  await context.setOffline(true)
+  await page.unrouteAll()
+  await page.route(/dictionaryapi|wiktionary/, (route) => route.abort('internetdisconnected'))
+  await page.locator('.page-text [data-i]', { hasText: /^field\.$/ }).first().dblclick()
+  await expect(panel).toContainText('Couldn’t reach the dictionary')
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+  await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().dblclick()
+  await expect(panel).toContainText('The meaning of rabbit.')
+  expect(asked.filter((w) => w === 'rabbit')).toHaveLength(1)
+})
+
+test('double-tapping a word in the paused text defines that word, even as the text re-centres', async ({ page }) => {
+  await page.route('https://api.dictionaryapi.dev/**', (route) => {
+    const word = decodeURIComponent(route.request().url().split('/').pop()!)
+    return route.fulfill({
+      json: [{ word, meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: `The meaning of ${word}.` }] }] }],
+      headers: { 'access-control-allow-origin': '*' },
+    })
+  })
+  const words = Array.from({ length: 200 }, (_, i) => `word${i}${i % 8 === 7 ? '.' : ''}`)
+  await page.goto('./')
+  await upload(page, 'long.txt', words.join(' '))
+  for (let i = 0; i < 100; i++) await page.keyboard.press('ArrowRight')
+  // The first word of the paused text: jumping there re-centres the text.
+  const first = page.locator('.context [data-i]').first()
+  const target = (await first.textContent())!.trim().replace(/\.$/, '')
+  await first.dblclick()
+  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText(`The meaning of ${target}.`)
+  await expect(page.locator('.word')).toHaveText(new RegExp(`^${target}\\.?$`))
 })
