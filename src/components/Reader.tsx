@@ -653,9 +653,9 @@ export function Reader({
               <Icon name="back" />
             </button>
             {holdToRead ? (
-              // Hold to read: a wide pad to rest a thumb on, labelled in words
-              // (an icon alone is ambiguous), that shows it's reading the
-              // moment it's pressed.
+              // Hold to read: no play button until you hold. A wide pad to rest
+              // a thumb on, labelled in words (an icon alone is ambiguous), that
+              // fills the moment it's pressed; then the controls fade away.
               <button
                 type="button"
                 className={`hold-pad${holding && playing ? ' is-pressed' : ''}`}
@@ -669,7 +669,7 @@ export function Reader({
                 onPointerCancel={endHold}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {holding && playing ? 'Reading…' : 'Hold to read'}
+                Hold to read
               </button>
             ) : (
               <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
