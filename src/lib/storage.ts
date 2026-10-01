@@ -135,7 +135,7 @@ export interface Settings {
   theme: Theme
   /** Typeface for the book's text; the controls always use the system font. */
   font: ReadingFont
-  /** The one colour for the focus letter, the page highlight, the pacer line and the underline. */
+  /** Colour of the focus letter, page marker and pacer. */
   accent: Accent
   /**
    * Page mode: how the current word is marked. 'highlight' is a soft box on
@@ -155,14 +155,14 @@ export interface Settings {
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
-export type Accent = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
+export type Accent = 'red' | 'blue' | 'green' | 'purple'
 export type PlayControl = 'tap' | 'hold'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
-export const ACCENTS: Accent[] = ['red', 'yellow', 'green', 'blue', 'purple', 'pink']
+export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
