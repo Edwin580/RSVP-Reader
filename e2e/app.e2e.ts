@@ -211,6 +211,60 @@ test('tapping anywhere plays and pauses, and dragging across the paused text sel
   await expect(page.locator('.word')).toHaveText('Alice')
 })
 
+test('the highlight sweeps along the whole line and grows like the underline', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'long.txt', Array.from({ length: 300 }, (_, i) => `word${i}`).join(' '))
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+
+  // Jump to a word in the middle of the second line: the highlight still
+  // covers that line from its first word to the end of this one.
+  const geometry = `(() => {
+    const box = (e) => e.getBoundingClientRect()
+    const spans = [...document.querySelectorAll('.page-text [data-i]')]
+    const tops = [...new Set(spans.map((s) => s.offsetTop))]
+    const line = spans.filter((s) => s.offsetTop === tops[1])
+    return { first: line[0].dataset.i, mid: line[Math.floor(line.length / 2)].dataset.i, left: box(line[0]).left }
+  })()`
+  const { first, mid, left } = (await page.evaluate(geometry)) as { first: string; mid: string; left: number }
+  expect(Number(mid)).toBeGreaterThan(Number(first))
+  await page.locator(`.page-text [data-i="${mid}"]`).click()
+  const edges = `(() => {
+    const m = document.querySelector('.page-marker').getBoundingClientRect()
+    const p = document.querySelector('.page-pacer').getBoundingClientRect()
+    const w = document.querySelector('.page-text [data-i="${mid}"]').getBoundingClientRect()
+    return { markerLeft: m.left + 3, markerRight: m.right - 3, pacerLeft: p.left, pacerRight: p.right, wordRight: w.right }
+  })()`
+  await expect.poll(async () => {
+    const e = (await page.evaluate(edges)) as Record<'markerLeft' | 'markerRight' | 'pacerLeft' | 'pacerRight' | 'wordRight', number>
+    return Math.abs(e.markerLeft - left) < 1.5 && Math.abs(e.markerRight - e.wordRight) < 1.5 && Math.abs(e.pacerLeft - left) < 1.5 && Math.abs(e.pacerRight - e.wordRight) < 1.5
+  }).toBe(true)
+
+  // Playing: both keep growing smoothly, together, between words too.
+  await page.keyboard.press('Space')
+  const sample = `(() => {
+    const m = document.querySelector('.page-marker').getBoundingClientRect()
+    const p = document.querySelector('.page-pacer').getBoundingClientRect()
+    return { top: Math.round(m.top), marker: m.right - 3, pacer: p.right }
+  })()`
+  const samples: { top: number; marker: number; pacer: number }[] = []
+  for (let i = 0; i < 12; i++) {
+    samples.push((await page.evaluate(sample)) as { top: number; marker: number; pacer: number })
+    await page.waitForTimeout(60)
+  }
+  await page.keyboard.press('Space')
+  let grew = 0
+  for (let i = 1; i < samples.length; i++) {
+    expect(Math.abs(samples[i].marker - samples[i].pacer)).toBeLessThan(2)
+    if (samples[i].top !== samples[i - 1].top) continue // a new line starts over
+    expect(samples[i].marker).toBeGreaterThanOrEqual(samples[i - 1].marker - 0.5)
+    if (samples[i].marker > samples[i - 1].marker + 0.5) grew++
+  }
+  expect(grew).toBeGreaterThanOrEqual(6)
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
