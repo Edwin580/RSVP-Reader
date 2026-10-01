@@ -36,8 +36,6 @@
   --accent-l: #b3261e;
   --accent-d: #ff6f5e;
   --accent: var(--accent-l);
-  /* The page highlight: a tint of the colour, or a highlighter shade. */
-  --mark: color-mix(in srgb, var(--accent) 18%, transparent);
   /* One corner for controls and cards, a larger one only for sheets that
      rise from the bottom of a phone. */
   --radius: 4px;
@@ -112,10 +110,6 @@
 :root[data-accent='blue'] { --accent-l: #1f4fb4; --accent-d: #7ea2ff; }
 :root[data-accent='green'] { --accent-l: #1d6b43; --accent-d: #5fc48e; }
 :root[data-accent='purple'] { --accent-l: #6a3fb0; --accent-d: #b595f5; }
-:root[data-accent='pink'] { --accent-l: #b3306b; --accent-d: #ff7eb6; }
-/* Yellow: amber ink so the focus letter and line stay readable on paper,
-   and a true highlighter yellow for the page highlight. */
-:root[data-accent='yellow'] { --accent-l: #875700; --accent-d: #f2c230; --mark: color-mix(in srgb, #ffd60a 42%, transparent); }
 :root[data-font='sans'] { --reading-font: var(--font); }
 
 * { box-sizing: border-box; }
@@ -870,7 +864,7 @@ h1, h2, p { margin: 0; }
   transform-origin: 0 0;
   will-change: transform;
 }
-.page-marker { border-radius: 2px; background: var(--mark); }
+.page-marker { border-radius: 2px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .page-pacer { height: 2px; background: var(--accent); }
 
 /* Page mode guide (Aa menu): the highlight, the line, or both. */

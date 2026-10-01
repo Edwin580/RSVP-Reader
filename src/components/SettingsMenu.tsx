@@ -49,18 +49,12 @@ const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
   { value: 'sans', label: 'Sans' },
 ]
 
-/**
- * The one reading colour: focus letter, page highlight, pacer line and
- * underline. Swatch colours; the CSS (data-accent) holds the light and dark
- * shades used in the reader.
- */
+/** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
 const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
   { value: 'red', label: 'Red', color: '#b3261e' },
-  { value: 'yellow', label: 'Yellow', color: '#f2c230' },
-  { value: 'green', label: 'Green', color: '#1d6b43' },
   { value: 'blue', label: 'Blue', color: '#1f4fb4' },
+  { value: 'green', label: 'Green', color: '#1d6b43' },
   { value: 'purple', label: 'Purple', color: '#6a3fb0' },
-  { value: 'pink', label: 'Pink', color: '#d0437f' },
 ]
 
 const SHORTCUTS: [string, string][] = [
@@ -208,9 +202,9 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
               />
             </div>
 
-            <div className="setting setting-stack">
-              <span className="setting-name">Color</span>
-              <div className="swatches" role="radiogroup" aria-label="Color">
+            <div className="setting">
+              <span className="setting-name">Focus color</span>
+              <div className="swatches" role="radiogroup" aria-label="Focus color">
                 {ACCENT_OPTIONS.map((a) => (
                   <button
                     key={a.value}

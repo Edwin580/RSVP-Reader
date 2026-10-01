@@ -13,7 +13,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
   - **Page**: guided reading. The book is laid out as pages that fit your screen. A soft highlight and a thin pacer line sweep steadily along each line at your chosen speed, like a highlighter pen: both cover the line from its first word to the word you're on, and their ends move smoothly through each word over exactly the time it's shown (the first word of each line gets a beat more for the return sweep), and the page turns itself when you reach the end: the old page slides out as the new one slides in, the highlight fades in on the first word, and that word gets a little extra time so your eyes can move to the top. Pages end at a sentence when one falls on the last two lines. Tap any word to jump there. In the Aa menu, *Guide* picks the highlight, the line, or both; one is always on, so you never lose your place. Pages are measured to fit exactly and re-flow when you rotate or resize.
-- **Themes and customization** (Aa menu): Auto (follows your system), Light, Sepia and Dark themes; a serif or sans reading font; and one reading colour (red, yellow, green, blue, purple or pink) for the focus letter, the page highlight, the pacer line and the underline. Yellow uses a true highlighter yellow for the page highlight and an amber ink for the letter and line, so it stays readable. The design is a printed book: a near-white page with black ink (near-black in dark mode), titles and text set in Newsreader, thin rules instead of boxes, and colour only where you're reading. All text meets WCAG AA contrast in every theme.
+- **Themes and customization** (Aa menu): Auto (follows your system), Light, Sepia and Dark themes; a serif or sans reading font; and a red, blue, green or purple focus color for the focus letter and page-mode marker. The design is a printed book: a near-white page with black ink (near-black in dark mode), titles and text set in Newsreader, thin rules instead of boxes, and colour only where you're reading. All text meets WCAG AA contrast in every theme.
 - **Fixed focus point**: each word's *Optimal Recognition Point*, a letter a little left of centre, is highlighted and pinned to the centre, so your eyes never move.
 - **Smart pacing** (the default): on top of natural timing, Chapter gives a beat more time where careful readers slow down: a character or place the first time it appears (and a little on its next two mentions), rare words, numbers, and the start of dialogue. Names are found in the book itself, with no dictionary. The overall speed stays exactly what you set. The analysis runs in the background, so opening a book never waits for it.
 - **Natural word timing**: longer words stay on screen slightly longer, following a smooth curve (1 letter ≈ 0.75×, 5 letters = 1×, 12 letters ≈ 1.25×). Commas, sentence endings and paragraph breaks get pauses. All of this is balanced across the book, so the speed you choose is your real average speed and time-left estimates are accurate. Choose *Natural* in the Aa menu for length and punctuation only, or *Even* to give every word the same time. The first few words after you press play are shown a bit slower.
@@ -79,7 +79,7 @@ e2e/                   browser tests: demo, upload and resume, chapters, page mo
 service-worker/sw.js   offline cache; the build fills in the file list (vite.config.ts)
 src/
   lib/
-    appearance.ts      applies theme, reading font and colour to the page
+    appearance.ts      applies theme, reading font and focus color to the page
     backup.ts          backup file format and merging a restore into the library
     bookmarks.ts       adding and removing bookmarks (saved per sentence)
     covers.ts          finding EPUB cover images and making cover thumbnails
@@ -118,7 +118,7 @@ src/
 
 - Dynamic word length timing, balanced to the chosen speed
 - UI refresh, then smoother motion and tap feedback
-- Themes and customization: sepia and explicit light/dark themes, reading font, reading colour
+- Themes and customization: sepia and explicit light/dark themes, reading font, focus color
 - Works offline, and asks the browser to keep your library
 - Backup and restore
 - Book covers, bookmarks and reading stats
