@@ -316,6 +316,26 @@ test('the highlight sweeps along the whole line and grows like the underline', a
   expect(grew).toBeGreaterThanOrEqual(6)
 })
 
+test('pinching never zooms the page', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'touch only')
+  await page.goto('./')
+  const cdp = await page.context().newCDPSession(page)
+  const pinch = async (scaleFactor: number) => {
+    await cdp.send('Input.synthesizePinchGesture', { x: 200, y: 300, scaleFactor, relativeSpeed: 800 })
+    await page.waitForTimeout(300)
+  }
+  const scale = () => page.evaluate('visualViewport.scale')
+  // The library, both ways.
+  await pinch(2)
+  expect(await scale()).toBe(1)
+  await pinch(0.5)
+  expect(await scale()).toBe(1)
+  // And while reading.
+  await upload(page)
+  await pinch(2)
+  expect(await scale()).toBe(1)
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {

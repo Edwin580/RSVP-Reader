@@ -13,6 +13,12 @@ if (IS_PREVIEW) document.title = `PR #${PREVIEW_PR} · ${document.title}`
 // iOS Safari only shows :active (press) styles when the page listens for touches.
 document.addEventListener('touchstart', () => {}, { passive: true })
 
+// No pinch zoom: it only knocks the layout out of shape (Aa changes the text
+// size). iOS ignores the viewport's user-scalable=no, but not these.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
