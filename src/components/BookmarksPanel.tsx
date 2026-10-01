@@ -30,6 +30,17 @@ export function BookmarksPanel({
   onRemove,
   onClose,
 }: Props) {
+  // Escape closes it wherever the focus is (not only inside the panel),
+  // and never reaches the reader, where it would close the book.
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', esc, { capture: true })
+    return () => window.removeEventListener('keydown', esc, { capture: true })
+  }, [onClose])
   const close = useRef<HTMLButtonElement>(null)
   useEffect(() => close.current?.focus(), [])
 
@@ -46,12 +57,6 @@ export function BookmarksPanel({
         role="dialog"
         aria-label="Bookmarks"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
-          }
-        }}
       >
         <div className="panel-bar">
           <h2 className="panel-title">Bookmarks</h2>

@@ -22,6 +22,15 @@ npm run test:e2e  # browser tests (Playwright); set PW_CHROMIUM_PATH to use an i
 
 Run the first four before pushing, and the browser tests too for UI changes. CI runs all five on every pull request. For UI changes, also check the app in a browser at phone and desktop sizes.
 
+## Bug fixes
+
+Every bug fix comes with a test that would have caught it, so it can't quietly come back:
+
+- Write a test that reproduces the bug as reported (a browser test for anything you can see or touch, a unit test for logic in `src/lib/`).
+- Check it fails with the fix undone, then passes with it. Say so in the PR.
+- Browser tests for fixed bugs go in `e2e/regressions.e2e.ts`, named after the behaviour and the PR that fixed it, for example `(#48)`.
+- Before changing something a past fix relied on (a CSS rule, a gesture, a layout), read the comment next to it. Several fixes depend on things that look harmless to change: for example, the reader must never be `position: fixed`, because Safari would keep its top bar in the wrong theme.
+
 ## Pull requests
 
 Every PR description uses exactly these three sections, in this order:
