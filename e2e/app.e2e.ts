@@ -336,6 +336,22 @@ test('on phones the settings sheet can be pulled down to put it away, and the pa
   await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
   await page.waitForTimeout(400)
   let box = (await sheet.boundingBox())!
+
+  // The sheet follows the finger from the very first move, all the way
+  // (iOS commits to scrolling on the first move, so waiting any longer let
+  // the content bounce instead).
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + 100, y: box.y + 10 }] })
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x + 100, y: box.y + 30 }] })
+  await expect.poll(async () => (await sheet.boundingBox())!.y - box.y).toBeCloseTo(20, 0)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await page.waitForTimeout(400)
+  await expect(sheet).toBeVisible()
+
+  // A quick little jitter, as in a tap, never closes it.
+  await drag(box.x + 100, box.y + 10, box.y + 14, 2, 0)
+  await page.waitForTimeout(400)
+  await expect(sheet).toBeVisible()
+
   await drag(box.x + box.width / 2, box.y + 10, box.y + 50, 6)
   await page.waitForTimeout(400)
   await expect(sheet).toBeVisible()

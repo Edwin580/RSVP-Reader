@@ -1162,6 +1162,9 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+  /* No bounce at the ends of a sheet's content: pulling down at the top
+     moves the whole sheet instead (useSheetDrag). */
+  .popover { overscroll-behavior-y: none; }
   /* The grab handle: pull the sheet down to put it away (useSheetDrag). */
   .sheet-handle {
     display: block;

@@ -4,8 +4,8 @@ import { useEffect, useRef } from 'react'
 const CLOSE_DISTANCE = 90
 /** Or flicked down at least this fast (px per ms). */
 const CLOSE_SPEED = 0.5
-/** Movement (px) before a press counts as a drag rather than a tap. */
-const SLOP = 6
+/** A flick has to travel at least this far (px), so a tap's jitter never closes the sheet. */
+const FLICK_MIN = 20
 
 /**
  * Pull a bottom sheet down to put it away, like a native sheet. A drag that
@@ -42,18 +42,17 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
       const now = performance.now()
       trail = [...trail.filter((p) => now - p.t < 100), { y, t: now }]
       if (!dragging) {
-        // Pulling down with the content at its top: the sheet comes with the
-        // finger. If the content was scrolled, it scrolls back up first.
-        if (sheet.scrollTop > 0) {
-          start.y = y
-          return
-        }
-        if (y - start.y < SLOP) {
-          if (start.y - y > SLOP) start = null // scrolling up: leave it alone
+        // iOS decides on the very first move whether a touch scrolls, and
+        // after that it can't be stopped. So decide straight away: pulling
+        // down with the content at its top moves the sheet; anything else
+        // (scrolling up, or content already scrolled) is left to scroll.
+        const dy = y - start.y
+        if (dy === 0) return
+        if (dy < 0 || sheet.scrollTop > 0) {
+          start = null
           return
         }
         dragging = true
-        start.y = y
         sheet.style.transition = 'none'
       }
       e.preventDefault()
@@ -68,7 +67,7 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
       const first = trail[0]
       const last = trail[trail.length - 1]
       const speed = last && first && last.t > first.t ? (last.y - first.y) / (last.t - first.t) : 0
-      if (offset > CLOSE_DISTANCE || speed > CLOSE_SPEED) {
+      if (offset > CLOSE_DISTANCE || (speed > CLOSE_SPEED && offset > FLICK_MIN)) {
         // Slides on down from where it is (the closing animation has no start point).
         sheet.style.transition = ''
         close.current()
