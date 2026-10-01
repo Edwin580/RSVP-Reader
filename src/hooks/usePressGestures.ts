@@ -10,8 +10,13 @@ interface Handlers {
    * the second tap's `onTap`.
    */
   onDoubleTap?: (target: Element | null) => void
-  /** The press has lasted HOLD_MS without moving; `onHoldEnd` follows on release. */
-  onHoldStart?: () => void
+  /** A tap that only dismissed selected text. A tap right after it is a double tap. */
+  onDismiss?: (target: Element | null) => void
+  /**
+   * The press has lasted HOLD_MS without moving; `onHoldEnd` follows on
+   * release. `target` is what the press started on.
+   */
+  onHoldStart?: (target: Element | null) => void
   onHoldEnd?: () => void
   onSwipe?: (direction: 'left' | 'right') => void
   /** Called as soon as a press starts, before it's known to be a tap, hold or swipe. */
@@ -20,9 +25,17 @@ interface Handlers {
   onPressEnd?: () => void
   /** Presses that start on something matching this (a button, say) are left alone. */
   ignore?: (target: Element) => boolean
+  /** Where a long press or right-click may open the system menu (selectable text). */
+  allowMenu?: (target: Element) => boolean
 }
 
 type PointerPoint = { pointerId: number; clientX: number; clientY: number }
+
+/** Whether some text is selected on the page. */
+export function hasSelection(): boolean {
+  const selection = window.getSelection()
+  return !!selection && !selection.isCollapsed
+}
 
 /** Two taps this close in time (ms) and distance (px) make a double tap. */
 export const DOUBLE_TAP_MS = 320
@@ -47,6 +60,8 @@ export function usePressGestures(handlers: Handlers) {
     timer: number
     release: () => void
     target: Element | null
+    /** Text was selected when the press began; it's dismissing that. */
+    selection: boolean
   } | null>(null)
   const lastGesture = useRef<Gesture>('none')
   const lastTap = useRef<{ at: number; x: number; y: number } | null>(null)
@@ -64,8 +79,23 @@ export function usePressGestures(handlers: Handlers) {
       return
     }
     if (cancelled) return
+    // The press selected text (a long press or a drag across words): leave it to the system.
+    if (hasSelection()) {
+      lastGesture.current = 'none'
+      return
+    }
     const gesture = classifyGesture(e.clientX - p.x, e.clientY - p.y, performance.now() - p.at)
     lastGesture.current = gesture
+    // A tap that dismissed a selection does nothing else, but a second tap
+    // straight after still makes a double tap.
+    if (p.selection) {
+      if (gesture === 'tap') {
+        lastTap.current = { at: performance.now(), x: p.x, y: p.y }
+        latest.current.onDismiss?.(p.target)
+      }
+      lastGesture.current = 'none'
+      return
+    }
     if (gesture === 'tap') {
       const now = performance.now()
       const before = lastTap.current
@@ -105,7 +135,7 @@ export function usePressGestures(handlers: Handlers) {
           // Without a hold handler a long press is just a slow tap.
           if (!press.current || !latest.current.onHoldStart) return
           press.current.held = true
-          latest.current.onHoldStart?.()
+          latest.current.onHoldStart?.(press.current.target)
         }, HOLD_MS)
         // Also end the press when it's released off the element (a mouse
         // dragged away), so a hold to read never gets stuck playing.
@@ -119,8 +149,13 @@ export function usePressGestures(handlers: Handlers) {
           window.removeEventListener('pointercancel', cancel)
         }
         const target = e.target instanceof Element ? e.target : null
-        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer, release, target }
-        latest.current.onPressStart?.()
+        // A press away from selected text dismisses it (the browser doesn't
+        // when the press lands on text that can't be selected).
+        const selection = hasSelection()
+        if (selection) window.getSelection()?.removeAllRanges()
+        press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, at, held: false, timer, release, target, selection }
+        // Dismissing a selection isn't the start of anything else.
+        if (!selection) latest.current.onPressStart?.()
       },
       onPointerMove: (e: React.PointerEvent) => {
         const p = press.current
@@ -130,10 +165,18 @@ export function usePressGestures(handlers: Handlers) {
           window.clearTimeout(p.timer)
         }
       },
+      // The browser's own double-click selection would pick whatever word
+      // is under the mouse by then; onDoubleTap decides instead.
+      onMouseDown: (e: React.MouseEvent) => {
+        if (e.detail >= 2) e.preventDefault()
+      },
       onPointerUp: (e: React.PointerEvent) => end(e),
       onPointerCancel: (e: React.PointerEvent) => end(e, true),
-      // A long press would otherwise open the system menu on touch screens.
-      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+      // A long press would otherwise open the system menu on touch screens,
+      // except on selectable text, where that menu has Look Up and Copy.
+      onContextMenu: (e: React.MouseEvent) => {
+        if (!(e.target instanceof Element && latest.current.allowMenu?.(e.target))) e.preventDefault()
+      },
     },
   }
 }

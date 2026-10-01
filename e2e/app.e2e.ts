@@ -182,7 +182,7 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   expect(await currentWord(page)).toBe(stopped)
 })
 
-test('tapping anywhere plays and pauses, and holding never selects text', async ({ page }) => {
+test('tapping anywhere plays and pauses, and dragging across the paused text selects it', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   // Let the page-open transition finish: taps during it go to the page root.
@@ -191,7 +191,7 @@ test('tapping anywhere plays and pauses, and holding never selects text', async 
   const corner = { x: stage.x + 20, y: stage.y + 20 }
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
-  await page.waitForTimeout(400) // two quick taps would be a double tap (define)
+  await page.waitForTimeout(400) // two quick taps would be a double tap (select)
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
   await page.waitForTimeout(400)
@@ -201,13 +201,14 @@ test('tapping anywhere plays and pauses, and holding never selects text', async 
   await expect(page.locator('.word')).toHaveText('Alice')
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
 
-  // A long press dragged across the paused text selects nothing.
+  // A drag across the paused text selects it (for Look Up or Copy), and isn't a swipe.
   const text = (await page.locator('.context p').boundingBox())!
   await page.mouse.move(text.x + 5, text.y + 10)
   await page.mouse.down()
   await page.mouse.move(text.x + text.width - 5, text.y + 10, { steps: 8 })
   await page.mouse.up()
-  expect(await page.evaluate('String(window.getSelection())')).toBe('')
+  expect(await page.evaluate('String(window.getSelection())')).not.toBe('')
+  await expect(page.locator('.word')).toHaveText('Alice')
 })
 
 test('the highlight and the line can each have their own colour', async ({ page }) => {
@@ -365,28 +366,10 @@ test('with Hold to read, nothing reads on a tap: the button, Space and Start rea
   await expect(reader).not.toHaveClass(/is-playing/)
 })
 
-// Double-tap to define, with the dictionary stubbed so tests don't need the network.
-async function stubDictionary(page: Page) {
-  const asked: string[] = []
-  await page.route('https://api.dictionaryapi.dev/**', (route) => {
-    const word = decodeURIComponent(route.request().url().split('/').pop()!)
-    asked.push(word)
-    if (word === 'hedge' || word === 'rabbit') {
-      return route.fulfill({
-        json: [{ word, phonetic: '/test/', meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: `The meaning of ${word}.`, example: `A ${word} here.` }] }] }],
-        headers: { 'access-control-allow-origin': '*' },
-      })
-    }
-    return route.fulfill({ status: 404, json: {}, headers: { 'access-control-allow-origin': '*' } })
-  })
-  await page.route('https://en.wiktionary.org/**', (route) =>
-    route.fulfill({ status: 404, json: {}, headers: { 'access-control-allow-origin': '*' } }),
-  )
-  return asked
-}
+// Look Up: the paused text can be selected, so the system dictionary works on it.
+const selected = (page: Page) => page.evaluate('String(window.getSelection()).trim()')
 
-test('double-tapping defines the word, while a single tap still plays and pauses at once', async ({ page }) => {
-  await stubDictionary(page)
+test('double-tapping selects the word for Look Up, while a single tap still plays and pauses at once', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.waitForFunction('document.getAnimations().length === 0')
@@ -398,86 +381,69 @@ test('double-tapping defines the word, while a single tap still plays and pauses
   const stage = (await page.locator('.stage').boundingBox())!
   await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
   await expect(page.locator('.reader')).toHaveClass(/is-playing/)
-  // (Two taps in quick succession would be a double tap.)
+  await expect(page.locator('.reader')).not.toHaveClass(/can-select/)
   await page.waitForTimeout(400)
   await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
   await page.waitForTimeout(400)
 
-  // Double-tap: reading pauses and the word's definition opens.
+  // Double-tap: reading pauses and the word is selected.
   await page.keyboard.press('ArrowLeft')
-  const shown = await page.locator('.word').textContent()
+  const shown = (await page.locator('.word').textContent())!
   await page.mouse.dblclick(stage.x + stage.width / 2, stage.y + 40)
-  const panel = page.getByRole('dialog', { name: /Definition of/ })
-  await expect(panel).toBeVisible()
+  await expect.poll(() => selected(page)).toBe(shown)
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
-  await expect(page.locator('.word')).toHaveText(shown!)
-  await page.getByRole('button', { name: 'Close definition' }).click()
+  await expect(page.locator('.word')).toHaveText(shown)
+
+  // Tapping the selection leaves it to the system (no play, no jump).
+  await page.locator('.context .current').click()
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
 
   // A word in the paused text: double-tap it.
+  await page.waitForTimeout(400)
   await page.locator('.context [data-i]', { hasText: 'hedge.' }).first().dblclick()
-  await expect(panel).toContainText('The meaning of hedge.')
-  await expect(panel).toContainText('A hedge here.')
-  await expect(panel).toContainText('From Free Dictionary')
+  await expect.poll(() => selected(page)).toBe('hedge')
+  await expect(page.locator('.word')).toHaveText('hedge.')
 })
 
-test('definitions in page mode, not found, and offline', async ({ page, context }) => {
-  const asked = await stubDictionary(page)
+test('the paused text is selectable, the playing text never', async ({ page }) => {
   await page.goto('./')
   await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  const selectability = (sel: string) => page.evaluate(`getComputedStyle(document.querySelector('${sel}')).userSelect`)
+  expect(await selectability('.context p')).toBe('text')
+  await page.keyboard.press('Space')
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  await page.keyboard.press('Space')
+
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
   await page.keyboard.press('Escape')
   await expect(page.locator('.popover')).toBeHidden()
-  const panel = page.getByRole('dialog', { name: /Definition of/ })
-
+  expect(await selectability('.page-text')).toBe('text')
   // Page mode: double-tap a word on the page.
   await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().dblclick()
-  await expect(panel).toContainText('The meaning of rabbit.')
-  await page.keyboard.press('Escape')
-  await expect(panel).toBeHidden()
-
-  // A word with no entry.
-  await page.locator('.page-text [data-i]', { hasText: /^Alice$/ }).first().dblclick()
-  await expect(panel).toContainText('No definition found for “alice”')
-  await page.keyboard.press('Escape')
-  await expect(panel).toBeHidden()
-
-  // Offline: a new word can't be looked up, but one already looked up still can.
-  await context.setOffline(true)
-  await page.unrouteAll()
-  await page.route(/dictionaryapi|wiktionary/, (route) => route.abort('internetdisconnected'))
-  await page.locator('.page-text [data-i]', { hasText: /^field\.$/ }).first().dblclick()
-  await expect(panel).toContainText('Couldn’t reach the dictionary')
-  await page.keyboard.press('Escape')
-  await expect(panel).toBeHidden()
-  await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().dblclick()
-  await expect(panel).toContainText('The meaning of rabbit.')
-  expect(asked.filter((w) => w === 'rabbit')).toHaveLength(1)
+  await expect.poll(() => selected(page)).toBe('rabbit')
+  // Playing clears it and turns selection off.
+  await page.keyboard.press('Space')
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  expect(await selectability('.page-text')).toBe('none')
 })
 
-test('double-tapping a word in the paused text defines that word, even as the text re-centres', async ({ page }) => {
-  await page.route('https://api.dictionaryapi.dev/**', (route) => {
-    const word = decodeURIComponent(route.request().url().split('/').pop()!)
-    return route.fulfill({
-      json: [{ word, meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: `The meaning of ${word}.` }] }] }],
-      headers: { 'access-control-allow-origin': '*' },
-    })
-  })
+test('double-tapping a word in the paused text selects that word, even as the text re-centres', async ({ page }) => {
   const words = Array.from({ length: 200 }, (_, i) => `word${i}${i % 8 === 7 ? '.' : ''}`)
   await page.goto('./')
   await upload(page, 'long.txt', words.join(' '))
   for (let i = 0; i < 100; i++) await page.keyboard.press('ArrowRight')
   // The first word of the paused text: jumping there re-centres the text.
   const first = page.locator('.context [data-i]').first()
-  const target = (await first.textContent())!.trim().replace(/\.$/, '')
+  const target = (await first.textContent())!.trim()
   await first.dblclick()
-  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText(`The meaning of ${target}.`)
-  await expect(page.locator('.word')).toHaveText(new RegExp(`^${target}\\.?$`))
+  await expect.poll(() => selected(page)).toBe(target.replace(/\.$/, ''))
+  await expect(page.locator('.word')).toHaveText(target)
 })
 
-test('with Hold to read, taps never move your place, and double-tap defines', async ({ page }) => {
-  await stubDictionary(page)
+test('with Hold to read, taps never move your place, and double-tap selects', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
@@ -488,6 +454,8 @@ test('with Hold to read, taps never move your place, and double-tap defines', as
   await page.waitForFunction('document.getAnimations().length === 0')
   for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
   await expect(page.locator('.word')).toHaveText('rabbit')
+  // A long press reads here, so the text only becomes selectable through a double-tap.
+  await expect(page.locator('.reader')).not.toHaveClass(/can-select/)
 
   const stage = (await page.locator('.stage').boundingBox())!
   const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
@@ -506,13 +474,17 @@ test('with Hold to read, taps never move your place, and double-tap defines', as
   }
   await expect(page.locator('.word')).toHaveText('rabbit')
 
-  // Double-tap: defines the word you're on, which stays put.
+  // Double-tap: selects the word you're on, which stays put.
   await page.waitForTimeout(400)
   await page.mouse.dblclick(spot.x, spot.y, { delay: 80 })
-  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText('The meaning of rabbit.')
+  await expect.poll(() => selected(page)).toBe('rabbit')
   await expect(page.locator('.word')).toHaveText('rabbit')
   await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
-  await page.keyboard.press('Escape')
+  // A press elsewhere only dismisses the selection; the next one reads.
+  await page.waitForTimeout(400)
+  await page.mouse.click(spot.x, spot.y, { delay: 120 })
+  await expect.poll(() => selected(page)).toBe('')
+  await expect(page.locator('.word')).toHaveText('rabbit')
 
   // Page mode, still Hold: double-tap a word on the page.
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
@@ -520,42 +492,25 @@ test('with Hold to read, taps never move your place, and double-tap defines', as
   await page.keyboard.press('Escape')
   await expect(page.locator('.popover')).toBeHidden()
   await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().dblclick({ delay: 80 })
-  await expect(page.getByRole('dialog', { name: /Definition of/ })).toContainText('The meaning of hedge.')
+  await expect.poll(() => selected(page)).toBe('hedge')
 })
 
-test('double-tapping with a finger opens the definition and it stays open', async ({ page }, testInfo) => {
+test('double-tapping with a finger selects the word', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'phone', 'touch only')
-  await stubDictionary(page)
   await page.goto('./')
   await upload(page)
   await page.waitForFunction('document.getAnimations().length === 0')
   for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).tap()
   await expect(page.locator('.word')).toHaveText('rabbit')
-  const panel = page.getByRole('dialog', { name: /Definition of/ })
 
-  // Real taps: the browser follows each with a click where the finger was,
-  // which lands on whatever is there by then (the sheet's backdrop).
   const stage = (await page.locator('.stage').boundingBox())!
   const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
   await page.touchscreen.tap(spot.x, spot.y)
   await page.touchscreen.tap(spot.x, spot.y)
-  await expect(panel).toBeVisible()
+  await expect.poll(() => selected(page)).toBe('rabbit')
   await page.waitForTimeout(600)
-  await expect(panel).toBeVisible()
-  await expect(panel).toContainText('The meaning of rabbit.')
-
-  // A word in the paused text, too.
-  await page.getByRole('button', { name: 'Close definition' }).tap()
-  await expect(panel).toBeHidden()
-  const hedge = (await page.locator('.context [data-i]', { hasText: 'hedge.' }).first().boundingBox())!
-  await page.touchscreen.tap(hedge.x + hedge.width / 2, hedge.y + hedge.height / 2)
-  await page.touchscreen.tap(hedge.x + hedge.width / 2, hedge.y + hedge.height / 2)
-  await page.waitForTimeout(600)
-  await expect(panel).toContainText('The meaning of hedge.')
-
-  // Tapping outside it still closes it.
-  await page.touchscreen.tap(20, 60)
-  await expect(panel).toBeHidden()
+  expect(await selected(page)).toBe('rabbit')
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
 
   // Hold to read, and page mode: the same.
   await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
@@ -564,9 +519,8 @@ test('double-tapping with a finger opens the definition and it stays open', asyn
   await page.getByRole('radio', { name: 'Hold', exact: true }).tap()
   await page.keyboard.press('Escape')
   await expect(page.locator('.popover')).toBeHidden()
-  const word = (await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().boundingBox())!
+  const word = (await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().boundingBox())!
   await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
   await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
-  await page.waitForTimeout(600)
-  await expect(panel).toContainText('The meaning of rabbit.')
+  await expect.poll(() => selected(page)).toBe('hedge')
 })
