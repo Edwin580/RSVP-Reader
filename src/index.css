@@ -116,7 +116,8 @@
 /* The reader fills the screen: don't let a swipe rubber-band the whole page. */
 /* Scrolling, but no pinch or double-tap zoom anywhere (see also main.tsx). */
 html { touch-action: pan-x pan-y; }
-html:has(.reader), body:has(.reader) { overscroll-behavior: none; overflow: hidden; }
+/* The reader exactly fills the window, and nothing behind it may scroll or bounce. */
+html:has(.reader), body:has(.reader) { height: 100%; overscroll-behavior: none; overflow: hidden; }
 body { margin: 0; background: var(--bg); }
 button, input, select { font: inherit; color: inherit; }
 button {
@@ -423,11 +424,12 @@ h1, h2, p { margin: 0; }
   /* Its own background, so the page colour behind it can change (see the
      settings sheet) without the reader changing with it. */
   background: var(--bg);
-  /* Pinned to the screen: in Safari (not added to the home screen) a page
-     exactly as tall as the window can still be scrolled and bounced, which
-     slid the reader and left a gap. */
-  position: fixed;
-  inset: 0;
+  /* In the page's flow, never position: fixed. Safari colours its top bar
+     from a fixed layer at the top of the page and keeps that colour, so a
+     fixed reader left the bar in the theme the book was opened with. The
+     page can't scroll or bounce anyway (see html:has(.reader)). */
+  height: 100vh;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: minmax(0, 1fr); /* never wider than the screen, whatever the content */
@@ -1193,8 +1195,10 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   /* Safari colours its top bar from the page background, so while the sheet
      is open that becomes the dimmed colour: the bar dims along with the page,
      and follows a theme picked here. The reader keeps its own colour. */
-  html:has(.settings-menu:not(.is-closing)),
-  html:has(.settings-menu:not(.is-closing)) body { background: var(--page-dimmed); }
+  html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)),
+  html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)) body {
+    background: var(--page-dimmed);
+  }
   .settings-menu {
     box-shadow: 0 0 0 100vmax var(--scrim);
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
