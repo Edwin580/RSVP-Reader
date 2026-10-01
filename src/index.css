@@ -885,6 +885,18 @@ h1, h2, p { margin: 0; }
 /* Page mode guide (Aa menu): the highlight, the line, or both. */
 .no-highlight .page-marker, .no-pacer .page-pacer { display: none; }
 
+/* Line focus: the lines around the one being read are blacked out while
+   reading, so nothing above or below pulls at the eye, and come back
+   faintly when paused so you can see where you are on the page. */
+/* The next line comes in quickly, so the eye never waits at a line break;
+   the one just read fades out more slowly. */
+.page-text [data-i] { transition: opacity 0.12s ease-out; }
+.page.has-focus .is-dim { opacity: 0.06; transition: opacity 0.4s ease; }
+.page.has-focus:not(.is-playing) .is-dim { opacity: 0.3; }
+@media (prefers-reduced-motion: reduce) {
+  .page-text [data-i] { transition: none; }
+}
+
 /* Chapters open on a fresh page, set lower, with the title as a heading. */
 .page-text.opens-chapter { padding-top: min(14vh, 5rem); }
 .page-heading {

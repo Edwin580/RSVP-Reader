@@ -22,6 +22,8 @@ interface Props {
   turnMs: number
   /** The highlight sweeps along the line like the pacer, instead of sitting on the word. */
   sweep?: boolean
+  /** Line focus: how many lines stay clear around the current one (0 = off); the rest black out. */
+  focusLines?: number
   onSeek: (index: number) => void
   /** Double-tap on a word: select it, for the system's Look Up, Copy and so on. */
   onSelectWord?: (index: number) => void
@@ -70,6 +72,7 @@ export function PageView({
   lineReturnMs,
   turnMs,
   sweep = false,
+  focusLines = 0,
   onSeek,
   onSelectWord,
   onToggle,
@@ -299,9 +302,33 @@ export function PageView({
     p.style.opacity = '1'
   }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing, sweep])
 
+  // Line focus: every word outside the lines around the current one is
+  // dimmed (almost hidden while reading, faint when paused; see the CSS).
+  // Only redone when the line, the page or the setting changes.
+  const focused = useRef<{ el: HTMLElement | null; key: string }>({ el: null, key: '' })
+  useLayoutEffect(() => {
+    const t = text.current
+    if (!t || measuring) return
+    const current = t.querySelector<HTMLElement>(`[data-i="${index}"]`)
+    const key = `${focusLines}:${current?.offsetTop ?? -1}`
+    if (focused.current.el === t && focused.current.key === key) return
+    focused.current = { el: t, key }
+    const spans = Array.from(t.querySelectorAll<HTMLElement>('[data-i]'))
+    if (!focusLines || !current) {
+      for (const s of spans) s.classList.remove('is-dim')
+      return
+    }
+    const tops = [...new Set(spans.map((s) => s.offsetTop))].sort((a, b) => a - b)
+    const line = tops.indexOf(current.offsetTop)
+    const reach = (focusLines - 1) / 2
+    const first = tops[Math.max(0, line - reach)]
+    const last = tops[Math.min(tops.length - 1, line + reach)]
+    for (const s of spans) s.classList.toggle('is-dim', s.offsetTop < first || s.offsetTop > last)
+  }, [index, page.start, measuring, content, focusLines])
+
   return (
     <div
-      className={`page${measuring ? ' is-measuring' : ''}`}
+      className={`page${measuring ? ' is-measuring' : ''}${focusLines ? ' has-focus' : ''}${playing ? ' is-playing' : ''}`}
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
       onPointerDown={() => {
