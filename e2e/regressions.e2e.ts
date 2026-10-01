@@ -180,8 +180,6 @@ test('Escape closes any sheet or panel, wherever the focus is, and never the boo
 })
 
 test("the ring around a tapped day in the stats calendar isn't clipped (#52)", async ({ page }) => {
-  // Reported: the bottom row looked clipped. The scrolling calendar cut off
-  // the ring drawn just outside a square, on the bottom row and the last week.
   await page.goto('./')
   await page.evaluate(`new Promise((done) => {
     const pad = (n) => String(n).padStart(2, '0')
