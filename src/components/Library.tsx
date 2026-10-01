@@ -86,12 +86,17 @@ export function Library({
   const [swiped, setSwiped] = useState<string | null>(null)
   useEffect(() => {
     if (!swiped) return
-    // Touching anywhere else puts it back.
+    // Touching anywhere else, or scrolling, puts it back.
     const close = (e: PointerEvent) => {
       if (!(e.target as Element).closest?.(`[data-book="${CSS.escape(swiped)}"]`)) setSwiped(null)
     }
+    const scrolled = () => setSwiped(null)
     document.addEventListener('pointerdown', close, true)
-    return () => document.removeEventListener('pointerdown', close, true)
+    window.addEventListener('scroll', scrolled, { passive: true })
+    return () => {
+      document.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('scroll', scrolled)
+    }
   }, [swiped])
   const shown = tab === 'read' ? read : reading
 
@@ -299,6 +304,10 @@ function saveTab(tab: Tab) {
 
 /** Past this (px), a swipe stops being a tap. */
 const SWIPE_START = 8
+/** A flick at least this fast (px per ms) opens or closes the row whatever its distance. */
+const FLICK_SPEED = 0.4
+/** Swiped past this share of the row's width, letting go marks the book (like Mail's full swipe). */
+const FULL_SWIPE = 0.6
 
 interface RowProps {
   book: BookMeta
@@ -317,12 +326,19 @@ interface RowProps {
 /**
  * A book on the shelf. With a mouse its actions sit at the end of the row;
  * on a touch screen they're behind it, and swiping the row left shows them,
- * like Mail (see the CSS).
+ * like Mail (see the CSS). Swiping all the way marks the book.
  */
 function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
-  const row = useRef<HTMLDivElement>(null)
+  const item = useRef<HTMLLIElement>(null)
   const actions = useRef<HTMLDivElement>(null)
-  const drag = useRef<{ x: number; y: number; from: number; sliding: boolean; offset: number } | null>(null)
+  const drag = useRef<{
+    x: number
+    y: number
+    from: number
+    sliding: boolean
+    offset: number
+    trail: { x: number; t: number }[]
+  } | null>(null)
   // Set by a swipe, so the tap that ends it doesn't open the book.
   const justSwiped = useRef(false)
 
@@ -333,18 +349,37 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
   const status =
     percent === 100 ? 'Finished' : percent === 0 ? (book.readAt ? 'Read' : `${left} to read`) : `${percent}% · ${left} left`
 
-  const width = () => actions.current?.offsetWidth ?? 0
+  /** How far the row slides to show its actions: two 5rem buttons (see the CSS). */
+  const open = () => 10 * parseFloat(getComputedStyle(document.documentElement).fontSize)
   const behind = () => actions.current && getComputedStyle(actions.current).position === 'absolute'
+  const show = (offset: number, full: boolean) => {
+    const el = item.current!
+    el.style.setProperty('--swipe', `${offset}px`)
+    el.style.setProperty('--reveal', String(Math.min(1, -offset / open())))
+    el.classList.toggle('is-full', full)
+  }
+  const settle = () => {
+    const el = item.current!
+    el.classList.remove('is-dragging', 'is-full')
+    el.style.removeProperty('--swipe')
+    el.style.removeProperty('--reveal')
+  }
 
   const down = (e: React.PointerEvent) => {
     justSwiped.current = false
     if (e.pointerType === 'mouse' || !behind()) return
-    drag.current = { x: e.clientX, y: e.clientY, from: swiped ? -width() : 0, sliding: false, offset: 0 }
+    drag.current = {
+      x: e.clientX,
+      y: e.clientY,
+      from: swiped ? -open() : 0,
+      sliding: false,
+      offset: 0,
+      trail: [{ x: e.clientX, t: e.timeStamp }],
+    }
   }
   const move = (e: React.PointerEvent) => {
     const d = drag.current
-    const el = row.current
-    if (!d || !el) return
+    if (!d) return
     const dx = e.clientX - d.x
     if (!d.sliding) {
       const dy = e.clientY - d.y
@@ -355,36 +390,54 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
         return
       }
       d.sliding = true
-      el.setPointerCapture(e.pointerId)
-      el.style.transition = 'none'
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      item.current!.classList.add('is-dragging')
     }
-    d.offset = Math.min(0, Math.max(-width(), d.from + dx))
-    el.style.transform = `translateX(${d.offset}px)`
+    d.trail = [...d.trail.filter((p) => e.timeStamp - p.t < 100), { x: e.clientX, t: e.timeStamp }]
+    const width = item.current!.offsetWidth
+    let offset = d.from + dx
+    // Past either end it follows the finger less and less, like a rubber band.
+    if (offset > 0) offset = Math.sqrt(offset) * 2
+    if (offset < -width) offset = -width - Math.sqrt(-width - offset) * 2
+    d.offset = offset
+    show(offset, -offset > width * FULL_SWIPE)
   }
-  const up = () => {
+  const up = (e: React.PointerEvent) => {
     const d = drag.current
-    const el = row.current
     drag.current = null
-    if (!d?.sliding || !el) return
+    if (!d?.sliding) return
     justSwiped.current = true
-    el.style.transition = ''
-    el.style.transform = ''
-    // Open if it's more than half way, a little less when it was opening.
-    onSwipe(d.offset < -width() * (d.from === 0 ? 0.35 : 0.65))
+    const width = item.current!.offsetWidth
+    if (e.type === 'pointerup' && -d.offset > width * FULL_SWIPE) {
+      // Slides the rest of the way, then the book moves shelves.
+      item.current!.classList.remove('is-dragging')
+      show(-width, true)
+      window.setTimeout(onMarkRead, 220)
+      return
+    }
+    const first = d.trail[0]
+    const last = d.trail[d.trail.length - 1]
+    const speed = last.t > first.t ? (last.x - first.x) / (last.t - first.t) : 0
+    settle()
+    if (speed < -FLICK_SPEED) onSwipe(true)
+    else if (speed > FLICK_SPEED) onSwipe(false)
+    else onSwipe(-d.offset > open() / 2)
   }
 
   return (
-    <li className={`shelf-item${swiped ? ' is-swiped' : ''}`} data-book={book.id}>
+    <li ref={item} className={`shelf-item${swiped ? ' is-swiped' : ''}`} data-book={book.id}>
       <div className="shelf-actions" ref={actions}>
         <button
           type="button"
-          className="icon-button shelf-action"
+          className="icon-button shelf-action shelf-mark"
           aria-label={read ? `Mark ${book.title} as unread` : `Mark ${book.title} as read`}
           title={read ? 'Mark as unread' : 'Mark as read'}
           onClick={onMarkRead}
         >
-          <Icon name={read ? 'unread' : 'check'} size={19} />
-          <span className="shelf-action-label">{read ? 'Unread' : 'Read'}</span>
+          <span className="shelf-action-inner">
+            <Icon name={read ? 'unread' : 'check'} size={19} />
+            <span className="shelf-action-label">{read ? 'Unread' : 'Read'}</span>
+          </span>
         </button>
         <button
           type="button"
@@ -393,13 +446,14 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
           title="Remove"
           onClick={onDelete}
         >
-          <Icon name="trash" size={19} />
-          <span className="shelf-action-label">Remove</span>
+          <span className="shelf-action-inner">
+            <Icon name="trash" size={19} />
+            <span className="shelf-action-label">Remove</span>
+          </span>
         </button>
       </div>
       <div
         className="shelf-row"
-        ref={row}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}

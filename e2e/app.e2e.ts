@@ -577,6 +577,26 @@ test('books can be marked as read and unread, by swiping on a phone', async ({ p
   await expect(shelf.locator('.shelf-meta')).toContainText('%')
 })
 
+test('on a phone, swiping a book all the way across marks it as read', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'Swiping is for touch screens')
+  await page.goto('./')
+  await upload(page, 'swiped.txt', 'A book to swipe away. It has a few words in it.')
+  await page.locator('.nav-button').click()
+  await page.waitForFunction('document.getAnimations().length === 0')
+  const box = (await page.locator('.shelf-row').boundingBox())!
+  const y = box.y + box.height / 2
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width - 10, y }] })
+  for (let i = 1; i <= 12; i++) {
+    const x = box.x + box.width - 10 - (box.width * 0.8 * i) / 12
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] })
+  }
+  await expect(page.locator('.shelf-item')).toHaveClass(/is-full/)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await expect(page.getByRole('tabpanel')).toContainText('Nothing in progress')
+  await expect(page.getByRole('tab', { name: /Read\b(?!ing)/ })).toContainText('1')
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {

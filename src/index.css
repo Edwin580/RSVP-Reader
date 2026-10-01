@@ -384,35 +384,70 @@ h1, h2, p { margin: 0; }
 .shelf-row { flex: 1; min-width: 0; display: flex; }
 .shelf-actions { order: 1; display: flex; flex-shrink: 0; }
 .shelf-action { color: var(--text-2); }
+.shelf-action-inner { display: grid; }
 .shelf-action-label { display: none; }
 /* On touch screens a row's actions are behind it, shown by swiping it left
-   (Library.tsx checks for position: absolute to allow the swipe). */
+   (Library.tsx checks for position: absolute to allow the swipe). While a
+   finger drags, --swipe is the row's offset and --reveal how far (0 to 1)
+   the actions are uncovered. */
+@property --reveal { syntax: '<number>'; inherits: true; initial-value: 0; }
 @media (pointer: coarse) {
-  .shelf-item { gap: 0; overflow: hidden; }
+  .shelf-item {
+    --swipe: 0px;
+    --reveal: 0;
+    --open: -10rem;
+    --ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+    gap: 0;
+    overflow: hidden;
+  }
+  .shelf-item.is-swiped { --swipe: var(--open); --reveal: 1; }
+  .shelf-item:has(.shelf-actions :focus-visible) { --swipe: var(--open); --reveal: 1; }
   .shelf-row {
     position: relative;
     z-index: 1;
     background: var(--bg);
     touch-action: pan-y;
-    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transform: translateX(var(--swipe));
+    transition: transform 0.4s var(--ease);
   }
-  .shelf-actions { position: absolute; inset: 0 0 0 auto; }
+  .shelf-actions {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: calc(-1 * var(--swipe));
+    transition: width 0.4s var(--ease), --reveal 0.4s var(--ease);
+  }
+  /* The two share what's uncovered, until each is 5rem wide. */
   .shelf-item .shelf-action {
-    align-content: center;
-    gap: 0.2rem;
-    width: 5rem;
+    flex: 1 1 0;
+    max-width: 5rem;
+    width: auto;
     height: 100%;
+    overflow: hidden;
     border-radius: 0;
     background: var(--text);
     color: var(--bg);
     font-size: 0.8rem;
     font-weight: 600;
+    transition: max-width 0.25s var(--ease), padding 0.25s var(--ease);
   }
+  /* The first action takes up any extra room, as Mail's does. */
+  .shelf-item .shelf-mark { max-width: none; }
   .shelf-item .shelf-remove { background: var(--red); }
+  /* Swiped far enough to mark the book: its button takes the whole row,
+     with its label at the row's edge. */
+  .shelf-item.is-full .shelf-remove { max-width: 0; }
+  .shelf-item.is-full .shelf-mark { justify-items: start; padding-left: 1.75rem; }
   .shelf-item .shelf-action:active { transform: none; opacity: 0.75; }
-  .shelf-action-label { display: block; }
-  .shelf-item.is-swiped .shelf-row,
-  .shelf-item:has(.shelf-actions :focus-visible) .shelf-row { transform: translateX(-10rem); }
+  .shelf-action-inner {
+    display: grid;
+    justify-items: center;
+    gap: 0.2rem;
+    opacity: var(--reveal);
+    transform: scale(calc(0.6 + 0.4 * var(--reveal)));
+  }
+  .shelf-action-label { display: block; white-space: nowrap; }
+  .shelf-item.is-dragging .shelf-row,
+  .shelf-item.is-dragging .shelf-actions { transition: none; }
 }
 .shelf-open {
   flex: 1;
