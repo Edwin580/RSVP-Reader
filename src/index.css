@@ -613,6 +613,15 @@ h1, h2, p { margin: 0; }
 .context { width: 100%; max-width: 36rem; margin: 0 auto; min-height: 0; }
 .context p { color: var(--text-2); font-family: var(--reading-font); font-size: 1.05rem; line-height: 1.65; overflow-wrap: anywhere; animation: fade-in 0.3s ease; }
 .context .current { color: var(--text); text-decoration: underline 2px var(--accent); text-underline-offset: 0.25em; }
+/* Paused, the text can be selected, so the system's Look Up, Copy and
+   Translate work on it (a long press on phones). Never while reading. */
+.can-select .context p,
+.can-select .page-text {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+.stage ::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); color: inherit; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 
@@ -1080,21 +1089,6 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .search-results .search-more { text-align: center; font-weight: 600; }
 .search-snippet { font-family: var(--reading-font); font-size: 1.05rem; line-height: 1.5; }
 
-/* ——— Definition (double-tap a word; reuses the search panel) ——— */
-.definition:focus { outline: none; }
-.definition-word { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.6rem; font-size: 1.6rem; }
-.definition-phonetic { font-family: var(--font); font-size: 0.9rem; font-weight: 400; color: var(--text-2); }
-.definition-body { padding: 0 1rem calc(1.25rem + var(--safe-bottom)); }
-.definition-body .search-hint { margin-inline: 0; }
-.definition-form { margin: 0.25rem 0 0.5rem; font-size: 0.9rem; color: var(--text-2); }
-.definition-form em { font-family: var(--serif); font-size: 1.08em; color: var(--text); }
-.definition-senses { display: grid; gap: 0.9rem; margin: 0.5rem 0 1rem; padding: 0; list-style: none; }
-.definition-senses li { display: grid; gap: 0.2rem; }
-.definition-pos { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
-.definition-text { font-family: var(--reading-font); font-size: 1.1rem; line-height: 1.45; }
-.definition-example { font-family: var(--reading-font); font-style: italic; color: var(--text-2); line-height: 1.45; }
-.definition-source { padding-top: 0.75rem; border-top: 1px solid var(--separator); font-size: 0.8rem; color: var(--text-2); }
-.definition-body a { color: var(--text); text-underline-offset: 2px; }
 
 /* ——— Bookmarks (reuses the search panel) ——— */
 /* On phones the bookmarks list is a bottom sheet sized to its content, like settings. */

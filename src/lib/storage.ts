@@ -1,5 +1,4 @@
 import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
-import type { Lookup } from './dictionary'
 import { storageName } from './preview'
 import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
@@ -11,15 +10,6 @@ import type { Book, BookMeta, Bookmark, Progress } from './types'
  */
 // Named from the app's old name (RSVP Reader); renaming it would lose everyone's saved books.
 const store = createStore(storageName('rsvp-reader'), 'kv')
-
-// Looked-up definitions live in their own database: they're a cache, so they
-// stay out of backups and can be cleared without touching any books.
-const dictionaryStore = createStore(storageName('chapter-dictionary'), 'kv')
-
-export const definitionCache = {
-  get: (word: string) => get<Lookup>(word, dictionaryStore),
-  set: (word: string, lookup: Lookup) => set(word, lookup, dictionaryStore),
-}
 
 const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`

@@ -64,7 +64,6 @@ const SHORTCUTS: [string, string][] = [
   ['↑ ↓', 'Speed'],
   ['/', 'Search'],
   ['B', 'Bookmark this spot'],
-  ['D', 'Define the word'],
   ['M', 'Word / page mode'],
   ['PgUp PgDn', 'Page (page mode)'],
   ['Esc', 'Library'],
