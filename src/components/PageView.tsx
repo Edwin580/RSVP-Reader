@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
 
@@ -20,6 +21,8 @@ interface Props {
   lineReturnMs: number
   turnMs: number
   onSeek: (index: number) => void
+  /** Double-tap on a word: select it, for the system's Look Up, Copy and so on. */
+  onSelectWord?: (index: number) => void
   onToggle: () => void
   /** Reports the visible page and the words that begin each line on it. */
   onPage: (start: number, end: number, lineStarts: Set<number>) => void
@@ -65,6 +68,7 @@ export function PageView({
   lineReturnMs,
   turnMs,
   onSeek,
+  onSelectWord,
   onToggle,
   onPage,
   navRef,
@@ -78,6 +82,8 @@ export function PageView({
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
   const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
   const known = useRef(new Map<number, number>())
+  const lastClick = useRef<{ i: number; at: number } | null>(null)
+  const selectionClick = useRef(false)
   const [page, setPage] = useState<{ start: number; end: number | null; turn: 'forward' | 'back' | null }>(() => ({
     start: pageAnchor(words, paragraphEnds, index),
     end: null,
@@ -283,10 +289,28 @@ export function PageView({
       className={`page${measuring ? ' is-measuring' : ''}`}
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
+      onPointerDown={() => {
+        selectionClick.current = hasSelection()
+      }}
+      onPointerUp={() => {
+        selectionClick.current ||= hasSelection()
+      }}
       onClick={(e) => {
+        // Text was just selected (a long press or a drag), or a tap is
+        // dismissing a selection: that's not a tap on the page.
+        if (selectionClick.current) return
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')
-        if (target) onSeek(Number(target.dataset.i))
-        else onToggle()
+        if (!target) return onToggle()
+        const i = Number(target.dataset.i)
+        // The same word tapped twice in quick succession: select it (the
+        // first tap has already jumped there).
+        const before = lastClick.current
+        const now = performance.now()
+        lastClick.current = { i, at: now }
+        if (before && before.i === i && now - before.at < DOUBLE_TAP_MS && onSelectWord) {
+          lastClick.current = null
+          onSelectWord(i)
+        } else onSeek(i)
       }}
     >
       <div

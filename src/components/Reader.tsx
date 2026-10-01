@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { usePressGestures } from '../hooks/usePressGestures'
+import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
@@ -149,14 +149,79 @@ export function Reader({
   // the text. A swipe still moves by sentence or page, measured from where
   // the press began.
   const pressFrom = useRef(0)
-  // Buttons and cards on the stage keep their own taps. In tap mode a word in
-  // the paused text jumps there instead of playing.
-  const ignorePress = (target: Element) =>
-    !!target.closest('button, a, input, select, .recap') || (!holdToRead && !!target.closest('.context [data-i]'))
+  // Buttons and cards on the stage keep their own taps, and so does selected
+  // text: a tap on it brings up the system's menu (Look Up, Copy, Translate).
+  const ignorePress = (target: Element) => !!target.closest('button, a, input, select, .recap') || onSelection(target)
+  const onSelection = (target: Element) => {
+    const word = target.closest('[data-i]')
+    return !!word && hasSelection() && !!window.getSelection()?.containsNode(word, true)
+  }
+  // Words in the paused text and on the page can be selected, for the
+  // system's Look Up. With Tap to play, a long press selects like anywhere
+  // else; with Hold to read a long press reads, so a double-tap selects.
+  const [selecting, setSelecting] = useState(false)
+  const canSelect = !playing && (!holdToRead || selecting)
+  const selectable = (target: Element) => canSelect && !!target.closest('.context [data-i], .page-text')
+  const selectAt = useRef<number | null>(null)
+  const selectWord = (i: number) => {
+    if (!words[i]) return
+    pause()
+    seek(i)
+    setSelecting(true)
+    selectAt.current = i
+  }
+  // Select once the word is on screen and selectable (after the render above).
+  useEffect(() => {
+    const i = selectAt.current
+    if (i === null) return
+    const span = document.querySelector(`.context [data-i="${i}"], .page-text [data-i="${i}"]`)
+    if (!span) return
+    selectAt.current = null
+    // Just the word, without its punctuation ("hedge", not "hedge."), so Look Up finds it.
+    const range = document.createRange()
+    const text = span.firstChild
+    const word = text?.textContent?.match(/^[^\p{L}\p{N}]*(.*?)[^\p{L}\p{N}]*$/su)
+    if (text && word?.[1]) {
+      const start = word[0].indexOf(word[1])
+      range.setStart(text, start)
+      range.setEnd(text, start + word[1].length)
+    } else range.selectNodeContents(span)
+    window.getSelection()?.removeAllRanges()
+    window.getSelection()?.addRange(range)
+  })
+  useEffect(() => {
+    const update = () => setSelecting(hasSelection())
+    document.addEventListener('selectionchange', update)
+    return () => document.removeEventListener('selectionchange', update)
+  }, [])
+  // A word in the paused text, if that's what a tap landed on.
+  const wordAt = (target: Element | null) => {
+    const el = target?.closest<HTMLElement>('.context [data-i]')
+    return el ? Number(el.dataset.i) : null
+  }
+  // Double-tap to select: the word that was showing (or tapped) at the first
+  // tap. The first tap acts straight away (play, pause or jump), so single
+  // taps never wait; the second pauses there and selects the word.
+  const tapIndex = useRef(0)
+  const onTapWord = (target: Element | null, act: () => void) => {
+    const tapped = wordAt(target)
+    tapIndex.current = tapped ?? index
+    if (tapped !== null) seek(tapped)
+    else act()
+  }
+  // Always the first tap's word: that tap may have jumped to it, moving the
+  // paused text, so the second tap can land on a different word.
+  const onDoubleTap = () => selectWord(tapIndex.current)
+  // A tap that only dismissed a selection didn't move anything, so a second
+  // tap straight after selects the word under it.
+  const onDismissTap = (target: Element | null) => {
+    tapIndex.current = wordAt(target) ?? index
+  }
   // While held, the controls get out of the way at once, and come straight
   // back on release (rather than fading after a couple of idle seconds).
   const [holding, setHolding] = useState(false)
   const startHold = () => {
+    window.getSelection()?.removeAllRanges()
     setHolding(true)
     play()
   }
@@ -178,10 +243,23 @@ export function Reader({
     },
     onPressEnd: endHold,
   }
+  const holdTaps = {
+    // A tap isn't a hold: undo the moment of reading it started, so tapping
+    // (or double-tapping to select) never moves your place. A tap on a word
+    // in the paused text jumps there instead.
+    onTap: (target: Element | null) => {
+      const tapped = wordAt(target)
+      tapIndex.current = tapped ?? pressFrom.current
+      seek(tapIndex.current)
+    },
+    onDoubleTap,
+    onDismiss: onDismissTap,
+  }
   const wordGestures = usePressGestures(
     holdToRead
       ? {
           ...holdHandlers,
+          ...holdTaps,
           onSwipe: (direction) =>
             seek(
               direction === 'left'
@@ -191,8 +269,16 @@ export function Reader({
         }
       : {
           ignore: ignorePress,
-          onTap: () => toggle(),
-          onHoldStart: () => {
+          allowMenu: selectable,
+          onTap: (target) => onTapWord(target, toggle),
+          onDoubleTap,
+          onDismiss: onDismissTap,
+          onHoldStart: (target) => {
+            // A long press on a word in the paused text selects it instead.
+            if (target && selectable(target)) {
+              resumeAfterGlance.current = false
+              return
+            }
             resumeAfterGlance.current = playing
             setGlancing(true)
             pause()
@@ -207,7 +293,15 @@ export function Reader({
   )
   // Page mode: swipe to turn pages, like an e-reader.
   const pageGestures = usePressGestures({
-    ...(holdToRead && holdHandlers),
+    ...(holdToRead && {
+      ...holdHandlers,
+      // Taps on words are the page's own (jump there, double-tap to select);
+      // a tap anywhere else just undoes its moment of reading.
+      onTap: (target: Element | null) => {
+        if (!target?.closest('[data-i]')) seek(pressFrom.current)
+      },
+    }),
+    allowMenu: selectable,
     onSwipe: (direction) => (direction === 'left' ? pageNav.current?.next() : pageNav.current?.previous()),
   })
 
@@ -445,7 +539,7 @@ export function Reader({
   )
 
   return (
-    <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}${holding && playing ? ' is-holding' : ''}`}>
+    <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}${holding && playing ? ' is-holding' : ''}${canSelect ? ' can-select' : ''}`}>
       <header className="reader-top chrome">
         <button type="button" className="nav-button" onClick={onClose}>
           <Icon name="chevronLeft" size={22} />
@@ -531,6 +625,7 @@ export function Reader({
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
             onSeek={seek}
+            onSelectWord={selectWord}
             onToggle={holdToRead ? noop : toggle}
             onPage={onPage}
             navRef={pageNav}
@@ -564,7 +659,6 @@ export function Reader({
                     <span
                       data-i={i}
                       className={[i === index && 'current', headingWords.has(i) && 'is-heading'].filter(Boolean).join(' ') || undefined}
-                      onClick={() => seek(i)}
                     >
                       {w}{' '}
                     </span>
@@ -698,6 +792,7 @@ export function Reader({
           </div>
         </div>
       </footer>
+
 
       {panel === 'bookmarks' && (
         <BookmarksPanel

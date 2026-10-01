@@ -182,7 +182,7 @@ test('hold to read plays only while the text is held', async ({ page }) => {
   expect(await currentWord(page)).toBe(stopped)
 })
 
-test('tapping anywhere plays and pauses, and holding never selects text', async ({ page }) => {
+test('tapping anywhere plays and pauses, and dragging across the paused text selects it', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   // Let the page-open transition finish: taps during it go to the page root.
@@ -191,21 +191,24 @@ test('tapping anywhere plays and pauses, and holding never selects text', async 
   const corner = { x: stage.x + 20, y: stage.y + 20 }
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  await page.waitForTimeout(400) // two quick taps would be a double tap (select)
   await page.mouse.click(corner.x, corner.y)
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  await page.waitForTimeout(400)
 
   // Tapping a word in the paused text jumps there instead of playing.
   await page.locator('.context [data-i]', { hasText: 'Alice' }).first().click()
   await expect(page.locator('.word')).toHaveText('Alice')
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
 
-  // A long press dragged across the paused text selects nothing.
+  // A drag across the paused text selects it (for Look Up or Copy), and isn't a swipe.
   const text = (await page.locator('.context p').boundingBox())!
   await page.mouse.move(text.x + 5, text.y + 10)
   await page.mouse.down()
   await page.mouse.move(text.x + text.width - 5, text.y + 10, { steps: 8 })
   await page.mouse.up()
-  expect(await page.evaluate('String(window.getSelection())')).toBe('')
+  expect(await page.evaluate('String(window.getSelection())')).not.toBe('')
+  await expect(page.locator('.word')).toHaveText('Alice')
 })
 
 test('old settings with both page guides off come back with both on', async ({ page }) => {
@@ -292,10 +295,10 @@ test('holding to read hides the controls at once and brings them back on release
   const stage = (await page.locator('.stage').boundingBox())!
   await page.mouse.move(stage.x + stage.width / 2, stage.y + 30)
   await page.mouse.down()
-  // Well before the usual two idle seconds.
-  await expect.poll(opacity, { timeout: 500 }).toBe(0)
+  // Gone well before the usual two idle seconds (hiding takes about 0.35s).
+  await expect.poll(opacity, { timeout: 1000 }).toBeLessThan(0.02)
   await page.mouse.up()
-  await expect.poll(opacity, { timeout: 500 }).toBe(1)
+  await expect.poll(opacity, { timeout: 1000 }).toBeGreaterThan(0.98)
 })
 
 test('with Hold to read, nothing reads on a tap: the button, Space and Start reading all wait for a hold', async ({ page }) => {
@@ -332,4 +335,163 @@ test('with Hold to read, nothing reads on a tap: the button, Space and Start rea
   await expect(page.locator('.session-active')).toContainText('left in session')
   await page.waitForTimeout(400)
   await expect(reader).not.toHaveClass(/is-playing/)
+})
+
+// Look Up: the paused text can be selected, so the system dictionary works on it.
+const selected = (page: Page) => page.evaluate('String(window.getSelection()).trim()')
+
+test('double-tapping selects the word for Look Up, while a single tap still plays and pauses at once', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  // Step to "rabbit" (word 3).
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  // A single tap plays straight away (no waiting to see if a second tap comes).
+  const stage = (await page.locator('.stage').boundingBox())!
+  await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  await expect(page.locator('.reader')).not.toHaveClass(/can-select/)
+  await page.waitForTimeout(400)
+  await page.mouse.click(stage.x + stage.width / 2, stage.y + 40)
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  await page.waitForTimeout(400)
+
+  // Double-tap: reading pauses and the word is selected.
+  await page.keyboard.press('ArrowLeft')
+  const shown = (await page.locator('.word').textContent())!
+  await page.mouse.dblclick(stage.x + stage.width / 2, stage.y + 40)
+  await expect.poll(() => selected(page)).toBe(shown)
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  await expect(page.locator('.word')).toHaveText(shown)
+
+  // Tapping the selection leaves it to the system (no play, no jump).
+  await page.locator('.context .current').click()
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+
+  // A word in the paused text: double-tap it.
+  await page.waitForTimeout(400)
+  await page.locator('.context [data-i]', { hasText: 'hedge.' }).first().dblclick()
+  await expect.poll(() => selected(page)).toBe('hedge')
+  await expect(page.locator('.word')).toHaveText('hedge.')
+})
+
+test('the paused text is selectable, the playing text never', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  const selectability = (sel: string) => page.evaluate(`getComputedStyle(document.querySelector('${sel}')).userSelect`)
+  expect(await selectability('.context p')).toBe('text')
+  await page.keyboard.press('Space')
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  await page.keyboard.press('Space')
+
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  expect(await selectability('.page-text')).toBe('text')
+  // Page mode: double-tap a word on the page.
+  await page.locator('.page-text [data-i]', { hasText: /^rabbit$/ }).first().dblclick()
+  await expect.poll(() => selected(page)).toBe('rabbit')
+  // Playing clears it and turns selection off.
+  await page.keyboard.press('Space')
+  await expect(page.locator('.reader')).toHaveClass(/is-playing/)
+  expect(await selectability('.page-text')).toBe('none')
+})
+
+test('double-tapping a word in the paused text selects that word, even as the text re-centres', async ({ page }) => {
+  const words = Array.from({ length: 200 }, (_, i) => `word${i}${i % 8 === 7 ? '.' : ''}`)
+  await page.goto('./')
+  await upload(page, 'long.txt', words.join(' '))
+  for (let i = 0; i < 100; i++) await page.keyboard.press('ArrowRight')
+  // The first word of the paused text: jumping there re-centres the text.
+  const first = page.locator('.context [data-i]').first()
+  const target = (await first.textContent())!.trim()
+  await first.dblclick()
+  await expect.poll(() => selected(page)).toBe(target.replace(/\.$/, ''))
+  await expect(page.locator('.word')).toHaveText(target)
+})
+
+test('with Hold to read, taps never move your place, and double-tap selects', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  await page.waitForFunction('document.getAnimations().length === 0')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  // A long press reads here, so the text only becomes selectable through a double-tap.
+  await expect(page.locator('.reader')).not.toHaveClass(/can-select/)
+
+  const stage = (await page.locator('.stage').boundingBox())!
+  const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
+  const opacity = () => page.evaluate(`Number(getComputedStyle(document.querySelector('.reader-bottom')).opacity)`)
+
+  // A quick press: the controls don't flicker, and the place doesn't move.
+  await page.mouse.move(spot.x, spot.y)
+  await page.mouse.down()
+  await page.waitForTimeout(150)
+  expect(await opacity()).toBe(1)
+  await page.mouse.up()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  for (let i = 0; i < 3; i++) {
+    await page.waitForTimeout(400)
+    await page.mouse.click(spot.x, spot.y, { delay: 120 })
+  }
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  // Double-tap: selects the word you're on, which stays put.
+  await page.waitForTimeout(400)
+  await page.mouse.dblclick(spot.x, spot.y, { delay: 80 })
+  await expect.poll(() => selected(page)).toBe('rabbit')
+  await expect(page.locator('.word')).toHaveText('rabbit')
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+  // A press elsewhere only dismisses the selection; the next one reads.
+  await page.waitForTimeout(400)
+  await page.mouse.click(spot.x, spot.y, { delay: 120 })
+  await expect.poll(() => selected(page)).toBe('')
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  // Page mode, still Hold: double-tap a word on the page.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().dblclick({ delay: 80 })
+  await expect.poll(() => selected(page)).toBe('hedge')
+})
+
+test('double-tapping with a finger selects the word', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'touch only')
+  await page.goto('./')
+  await upload(page)
+  await page.waitForFunction('document.getAnimations().length === 0')
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).tap()
+  await expect(page.locator('.word')).toHaveText('rabbit')
+
+  const stage = (await page.locator('.stage').boundingBox())!
+  const spot = { x: stage.x + stage.width / 2, y: stage.y + 40 }
+  await page.touchscreen.tap(spot.x, spot.y)
+  await page.touchscreen.tap(spot.x, spot.y)
+  await expect.poll(() => selected(page)).toBe('rabbit')
+  await page.waitForTimeout(600)
+  expect(await selected(page)).toBe('rabbit')
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+
+  // Hold to read, and page mode: the same.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
+  await page.getByRole('radio', { name: 'Page' }).tap()
+  await page.getByRole('button', { name: 'More settings' }).tap()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).tap()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+  const word = (await page.locator('.page-text [data-i]', { hasText: /^hedge\.$/ }).first().boundingBox())!
+  await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
+  await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
+  await expect.poll(() => selected(page)).toBe('hedge')
 })
