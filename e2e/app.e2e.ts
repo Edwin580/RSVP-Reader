@@ -499,6 +499,38 @@ test('the page number goes with the controls while holding to read', async ({ pa
   await expect.poll(opacity, { timeout: 1000 }).toBeGreaterThan(0.98)
 })
 
+test('the highlight glides along each line at a steady speed', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'long.txt', Array.from({ length: 400 }, (_, i) => `word${i}${i % 9 === 8 ? '.' : ''}`).join(' '))
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  await page.keyboard.press('Space')
+  await page.waitForTimeout(1500) // past the slower first few words
+  // Its speed every frame within a line: moving word by word made it uneven (about 37%).
+  const speeds = (await page.evaluate(`new Promise((done) => {
+    const m = document.querySelector('.page-marker')
+    const speeds = []
+    let last = null
+    const t0 = performance.now()
+    const tick = (t) => {
+      const r = m.getBoundingClientRect()
+      if (last && last.top === Math.round(r.top) && t > last.t) speeds.push((r.right - last.x) / (t - last.t))
+      last = { t, x: r.right, top: Math.round(r.top) }
+      if (t - t0 < 3000) requestAnimationFrame(tick)
+      else done(speeds)
+    }
+    requestAnimationFrame(tick)
+  })`)) as number[]
+  await page.keyboard.press('Space')
+  const mean = speeds.reduce((s, v) => s + v, 0) / speeds.length
+  const sd = Math.sqrt(speeds.reduce((s, v) => s + (v - mean) ** 2, 0) / speeds.length)
+  expect(speeds.length).toBeGreaterThan(30)
+  expect(mean).toBeGreaterThan(0)
+  expect(sd / mean).toBeLessThan(0.2)
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {

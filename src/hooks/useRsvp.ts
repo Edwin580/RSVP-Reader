@@ -82,7 +82,18 @@ export function useRsvp(
     [count],
   )
 
-  return { index, playing, play, pause, toggle, seek }
+  /**
+   * How long word `i` will be on screen if reading carries on from word
+   * `from` without a pause: its weight, the ramp-up after pressing play, and
+   * any extra delay. For drawing motion that keeps pace with the words.
+   */
+  const plannedMs = useCallback(
+    (i: number, from: number) =>
+      (60000 / wpm) * (weights[i] ?? 1) * (RAMP_UP[sincePlay.current + i - from] ?? 1) + (extraDelay?.(i) ?? 0),
+    [wpm, weights, extraDelay],
+  )
+
+  return { index, playing, play, pause, toggle, seek, plannedMs }
 }
 
 function clamp(i: number, length: number): number {
