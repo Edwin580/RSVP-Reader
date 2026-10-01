@@ -124,7 +124,7 @@ export function Reader({
     setSessionDone({ minutes: s.minutes, words: s.end - s.from + 1, landing: s.landing, where: chapterTitleAt(s.end) })
   }, [chapterTitleAt])
 
-  const { index, playing, toggle, play, pause, seek } = useRsvp(
+  const { index, playing, toggle, play, pause, seek, plannedMs } = useRsvp(
     timeline.weights,
     wpm,
     initialIndex,
@@ -621,9 +621,8 @@ export function Reader({
             playing={playing}
             scale={textScale}
             font={font}
-            wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
-            lineReturnMs={LINE_RETURN * (60000 / wpm)}
-            turnMs={PAGE_TURN_MS}
+            pace={60000 / wpm}
+            durationOf={(i) => plannedMs(i, index)}
             focusLines={settings.lineFocus === 'one' ? 1 : settings.lineFocus === 'three' ? 3 : 0}
             onSeek={seek}
             onSelectWord={selectWord}
