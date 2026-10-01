@@ -1,19 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-
-const STORY = [
-  'Chapter 1',
-  '',
-  'The rabbit ran across the field. Alice followed it to a hole under the hedge. She looked in and saw nothing but darkness.',
-  '',
-  'Chapter 2',
-  '',
-  'Down she went, past cupboards and shelves. The fall seemed to last for ever, and she wondered where she would land.',
-].join('\n')
-
-async function upload(page: Page, name = 'story.txt', text = STORY) {
-  await page.locator('input[type=file]').first().setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(text) })
-  await expect(page.locator('.reader')).toBeVisible()
-}
+import { upload } from './helpers.ts'
 
 const currentWord = (page: Page) => page.locator('.word').textContent()
 
@@ -529,6 +515,67 @@ test('the highlight glides along each line at a steady speed', async ({ page }) 
   expect(speeds.length).toBeGreaterThan(30)
   expect(mean).toBeGreaterThan(0)
   expect(sd / mean).toBeLessThan(0.2)
+})
+
+test('the status bar dims with sheets and follows a theme picked in one', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'phone sheets')
+  await page.goto('./')
+  await upload(page)
+  const bar = () => page.evaluate(`[...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content).join(' ')`)
+  await expect.poll(bar).toBe('#fbfaf7')
+  // Safari colours its top bar from a fixed layer at the top of the page and
+  // keeps that colour, so the reader must never be one (it stuck the bar in
+  // the theme the book was opened with).
+  expect(await page.evaluate(`getComputedStyle(document.querySelector('.reader')).position`)).not.toBe('fixed')
+
+  // The Aa sheet dims the page, and the status bar with it.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
+  await expect.poll(bar).toBe('#b5b4b2')
+  // Sepia picked in the sheet: dimmed sepia straight away, plain sepia once it's closed.
+  await page.getByRole('radio', { name: 'Sepia' }).tap()
+  await expect.poll(bar).toBe('#bbaf99')
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect.poll(bar).toBe('#f4e8d0')
+
+  // Bookmarks (and search) too.
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).tap()
+  await expect.poll(bar).toBe('#bbaf99')
+  await page.keyboard.press('Escape')
+  await expect.poll(bar).toBe('#f4e8d0')
+})
+
+test('reading stats show the last year as squares, shaded by time read', async ({ page }) => {
+  await page.goto('./')
+  // Today 25 minutes, yesterday 3, two days ago nothing.
+  await page.evaluate(`new Promise((done) => {
+    const pad = (n) => String(n).padStart(2, '0')
+    const key = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+    const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return key(d) }
+    const days = { [ago(0)]: { ms: 25 * 60000, words: 7000 }, [ago(1)]: { ms: 3 * 60000, words: 800 } }
+    const req = indexedDB.open('rsvp-reader')
+    req.onupgradeneeded = () => req.result.createObjectStore('kv')
+    req.onsuccess = () => {
+      const tx = req.result.transaction('kv', 'readwrite')
+      tx.objectStore('kv').put({ days }, 'stats')
+      tx.oncomplete = () => done()
+    }
+  })`)
+  await page.reload()
+  await page.locator('.stats-toggle').click()
+  const grid = page.getByRole('list', { name: 'Reading each day, the last year' })
+  // 53 weeks, Sunday to Saturday, up to today.
+  const today = new Date().getDay()
+  await expect(grid.getByRole('button')).toHaveCount(52 * 7 + today + 1)
+  const cells = grid.getByRole('button')
+  const last = cells.last()
+  await expect(last).toHaveClass(/level-3/) // 25 minutes
+  await expect(last).toHaveClass(/is-today/)
+  await expect(cells.nth(52 * 7 + today - 1)).toHaveClass(/level-1/) // 3 minutes
+  await expect(page.locator('.stats-picked')).toContainText('25 min, 7,000 words')
+  // Tap a day for its numbers.
+  await cells.nth(52 * 7 + today - 1).click()
+  await expect(page.locator('.stats-picked')).toContainText('3 min, 800 words')
+  await expect(cells.nth(52 * 7 + today - 1)).toHaveAttribute('aria-pressed', 'true')
 })
 
 test('old settings with both page guides off come back with both on', async ({ page }) => {

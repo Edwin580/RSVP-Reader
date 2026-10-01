@@ -27,6 +27,17 @@ const CONTEXT_WORDS = 7
 const NO_RESULT: SearchResult = { matches: [], related: [], totalMatches: 0, totalRelated: 0 }
 
 export function SearchPanel({ bookSearch, words, chapters, names, position, closing, onSelect, onClose }: Props) {
+  // Escape closes it wherever the focus is (not only inside the panel),
+  // and never reaches the reader, where it would close the book.
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', esc, { capture: true })
+    return () => window.removeEventListener('keydown', esc, { capture: true })
+  }, [onClose])
   const [query, setQuery] = useState('')
   const [limit, setLimit] = useState(PAGE)
   // The query the current results belong to, so stale results are never shown as fresh.
@@ -113,12 +124,6 @@ export function SearchPanel({ bookSearch, words, chapters, names, position, clos
         role="dialog"
         aria-label="Search in book"
         onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.stopPropagation()
-            onClose()
-          }
-        }}
       >
         <div className="search-bar">
           <input

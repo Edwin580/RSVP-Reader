@@ -83,3 +83,38 @@ export function lastDays(stats: ReadingStats, today: Date, count = 7): DayPoint[
   }
   return days
 }
+
+/** Minutes a day needs for each shade in the calendar: some, 10, 20 and 40 minutes. */
+const LEVELS_MS = [1, 10 * 60_000, 20 * 60_000, 40 * 60_000]
+
+/** How dark a day's square is, 0 (no reading) to 4. Fixed steps, so a shade means the same every week. */
+export function readingLevel(ms: number): 0 | 1 | 2 | 3 | 4 {
+  let level = 0
+  for (const min of LEVELS_MS) if (ms >= min) level++
+  return level as 0 | 1 | 2 | 3 | 4
+}
+
+/**
+ * The last `weeks` weeks as calendar columns, like a GitHub contribution
+ * graph: each week runs Sunday to Saturday, oldest first, and ends with the
+ * week containing `today`. Days after today are null.
+ */
+export function calendarWeeks(stats: ReadingStats, today: Date, weeks = 26): (DayPoint | null)[][] {
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  const firstSunday = new Date(end.getFullYear(), end.getMonth(), end.getDate() - end.getDay() - (weeks - 1) * 7)
+  const columns: (DayPoint | null)[][] = []
+  for (let w = 0; w < weeks; w++) {
+    const column: (DayPoint | null)[] = []
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(firstSunday.getFullYear(), firstSunday.getMonth(), firstSunday.getDate() + w * 7 + d)
+      if (date > end) {
+        column.push(null)
+        continue
+      }
+      const day = stats.days[dayKey(date)]
+      column.push({ date, ms: day?.ms ?? 0, words: day?.words ?? 0 })
+    }
+    columns.push(column)
+  }
+  return columns
+}
