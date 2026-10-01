@@ -219,9 +219,7 @@ h1, h2, p { margin: 0; }
 }
 .stats-card {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 1rem 1.5rem;
-  align-items: end;
+  gap: 0.9rem;
   margin-top: 0.5rem;
   padding: 1rem 0;
   border-top: 1px solid var(--separator);
@@ -229,20 +227,79 @@ h1, h2, p { margin: 0; }
   animation: stats-open 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes stats-open { from { opacity: 0; transform: translateY(-4px); } }
-.stats-week { display: flex; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
-.stats-week li { display: grid; justify-items: center; gap: 0.3rem; }
-.stats-bar-track { display: flex; align-items: flex-end; width: 14px; height: 56px; }
-.stats-bar { width: 100%; border-radius: 1px; background: color-mix(in srgb, var(--text-2) 45%, transparent); }
-.stats-bar.is-empty { height: 4px; background: var(--fill); }
-.stats-week .is-today .stats-bar:not(.is-empty) { background: var(--text); }
-.stats-day { font-size: 0.7rem; color: var(--text-2); }
-.stats-week .is-today .stats-day { color: var(--text); font-weight: 700; }
-.stats-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem 1rem; margin: 0; }
+
+/* The last year as squares, like a GitHub contribution graph: a column
+   per week (Sunday at the top), shaded by how long you read that day in the
+   focus colour. */
+.stats-calendar {
+  --cell: 11px;
+  --gap: 3px;
+  --month-row: 14px;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.stats-weekdays {
+  display: grid;
+  grid-template-rows: repeat(7, var(--cell));
+  row-gap: var(--gap);
+  margin-top: calc(var(--month-row) + var(--gap));
+  font-size: 0.625rem;
+  line-height: var(--cell);
+  color: var(--text-2);
+}
+.stats-scroll { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.stats-scroll::-webkit-scrollbar { display: none; }
+.stats-months {
+  display: grid;
+  grid-template-columns: repeat(var(--weeks), var(--cell));
+  column-gap: var(--gap);
+  height: var(--month-row);
+  margin-bottom: var(--gap);
+  font-size: 0.625rem;
+  line-height: var(--month-row);
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.stats-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, var(--cell));
+  grid-template-columns: repeat(var(--weeks), var(--cell));
+  gap: var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stats-cell {
+  display: block;
+  width: var(--cell, 10px);
+  height: var(--cell, 10px);
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--fill);
+}
+.stats-cell.level-1 { background: color-mix(in srgb, var(--accent) 22%, var(--fill)); }
+.stats-cell.level-2 { background: color-mix(in srgb, var(--accent) 45%, var(--fill)); }
+.stats-cell.level-3 { background: color-mix(in srgb, var(--accent) 70%, var(--fill)); }
+.stats-cell.level-4 { background: var(--accent); }
+.stats-grid .stats-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 45%, transparent); }
+.stats-grid .stats-cell[aria-pressed='true'] { outline: 1.5px solid var(--text); outline-offset: 1px; }
+.stats-key { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: 0.75rem; color: var(--text-2); }
+.stats-picked { margin: 0; min-width: 0; color: var(--text); font-variant-numeric: tabular-nums; }
+.stats-legend { display: inline-flex; flex: none; align-items: center; gap: 3px; }
+.stats-legend .stats-cell { --cell: 10px; }
+.stats-legend .stats-cell:first-child { margin-left: 3px; }
+.stats-legend .stats-cell:last-child { margin-right: 3px; }
+
+.stats-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem 1rem; margin: 0; }
 .stats-figures dt { font-size: 0.75rem; color: var(--text-2); }
 .stats-figures dd { margin: 0; font-family: var(--serif); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 420px) {
-  .stats-card { grid-template-columns: 1fr; }
-  .stats-week { justify-content: space-between; }
+  .stats-calendar { --cell: 10px; --gap: 2px; }
+  .stats-figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats-key { flex-wrap: wrap; }
 }
 .visually-hidden {
   position: absolute;

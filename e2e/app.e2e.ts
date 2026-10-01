@@ -472,6 +472,40 @@ test('the status bar dims with sheets and follows a theme picked in one', async 
   await expect.poll(bar).toBe('#f4e8d0')
 })
 
+test('reading stats show the last year as squares, shaded by time read', async ({ page }) => {
+  await page.goto('./')
+  // Today 25 minutes, yesterday 3, two days ago nothing.
+  await page.evaluate(`new Promise((done) => {
+    const pad = (n) => String(n).padStart(2, '0')
+    const key = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+    const ago = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return key(d) }
+    const days = { [ago(0)]: { ms: 25 * 60000, words: 7000 }, [ago(1)]: { ms: 3 * 60000, words: 800 } }
+    const req = indexedDB.open('rsvp-reader')
+    req.onupgradeneeded = () => req.result.createObjectStore('kv')
+    req.onsuccess = () => {
+      const tx = req.result.transaction('kv', 'readwrite')
+      tx.objectStore('kv').put({ days }, 'stats')
+      tx.oncomplete = () => done()
+    }
+  })`)
+  await page.reload()
+  await page.locator('.stats-toggle').click()
+  const grid = page.getByRole('list', { name: 'Reading each day, the last year' })
+  // 53 weeks, Sunday to Saturday, up to today.
+  const today = new Date().getDay()
+  await expect(grid.getByRole('button')).toHaveCount(52 * 7 + today + 1)
+  const cells = grid.getByRole('button')
+  const last = cells.last()
+  await expect(last).toHaveClass(/level-3/) // 25 minutes
+  await expect(last).toHaveClass(/is-today/)
+  await expect(cells.nth(52 * 7 + today - 1)).toHaveClass(/level-1/) // 3 minutes
+  await expect(page.locator('.stats-picked')).toContainText('25 min, 7,000 words')
+  // Tap a day for its numbers.
+  await cells.nth(52 * 7 + today - 1).click()
+  await expect(page.locator('.stats-picked')).toContainText('3 min, 800 words')
+  await expect(cells.nth(52 * 7 + today - 1)).toHaveAttribute('aria-pressed', 'true')
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
