@@ -387,7 +387,7 @@ export function PageView({
         {content}
       </div>
       <div className="page-measure" ref={measurer} aria-hidden="true" />
-      <div className="page-folio" aria-label={number ? `Page ${number.page} of ${number.total}` : undefined}>
+      <div className="page-folio chrome" aria-label={number ? `Page ${number.page} of ${number.total}` : undefined}>
         {number && `${number.page} of ${number.total}`}
       </div>
     </div>

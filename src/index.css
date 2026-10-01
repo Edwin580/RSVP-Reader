@@ -863,7 +863,8 @@ h1, h2, p { margin: 0; }
   pointer-events: none;
   overflow: hidden;
 }
-/* The page number, like a printed book: small, at the foot of the page. */
+/* The page number, like a printed book: small, at the foot of the page. It's
+   part of the controls (.chrome), so it goes with them while you read. */
 .page-folio {
   position: absolute;
   left: 0;

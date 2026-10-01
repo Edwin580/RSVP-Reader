@@ -367,6 +367,27 @@ test('page mode has fixed, numbered pages, the same however you get to them', as
   expect(await first()).toBe('Chapter')
 })
 
+test('the page number goes with the controls while holding to read', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  const folio = page.locator('.page-folio')
+  await expect(folio).toHaveText(/^1 of \d+$/)
+  const opacity = () => page.evaluate(`Number(getComputedStyle(document.querySelector('.page-folio')).opacity)`)
+
+  const box = (await page.locator('.page').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect.poll(opacity, { timeout: 1000 }).toBeLessThan(0.02)
+  await page.mouse.up()
+  await expect.poll(opacity, { timeout: 1000 }).toBeGreaterThan(0.98)
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
