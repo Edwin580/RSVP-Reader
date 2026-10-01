@@ -178,3 +178,38 @@ test('Escape closes any sheet or panel, wherever the focus is, and never the boo
     await expect(page.locator('.reader'), `${name}: still in the book`).toBeVisible()
   }
 })
+
+test("the ring around a tapped day in the stats calendar isn't clipped (#52)", async ({ page }) => {
+  // Reported: the bottom row looked clipped. The scrolling calendar cut off
+  // the ring drawn just outside a square, on the bottom row and the last week.
+  await page.goto('./')
+  await page.evaluate(`new Promise((done) => {
+    const pad = (n) => String(n).padStart(2, '0')
+    const d = new Date()
+    const key = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+    const req = indexedDB.open('rsvp-reader')
+    req.onupgradeneeded = () => req.result.createObjectStore('kv')
+    req.onsuccess = () => {
+      const tx = req.result.transaction('kv', 'readwrite')
+      tx.objectStore('kv').put({ days: { [key]: { ms: 20 * 60000, words: 5000 } } }, 'stats')
+      tx.oncomplete = () => done()
+    }
+  })`)
+  await page.reload()
+  await page.locator('.stats-toggle').click()
+  const cells = page.locator('.stats-grid .stats-cell')
+  // The last Saturday shown (bottom row) and today (last week).
+  const today = new Date().getDay()
+  for (const index of [(await cells.count()) - today - 2, (await cells.count()) - 1]) {
+    await cells.nth(index).click()
+    const fits = await page.evaluate(`(() => {
+      const cell = document.querySelectorAll('.stats-grid .stats-cell')[${index}]
+      const box = document.querySelector('.stats-scroll').getBoundingClientRect()
+      const r = cell.getBoundingClientRect()
+      const style = getComputedStyle(cell)
+      const ring = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset)
+      return r.left - ring >= box.left && r.right + ring <= box.right && r.top - ring >= box.top && r.bottom + ring <= box.bottom
+    })()`)
+    expect(fits, `square ${index}`).toBe(true)
+  }
+})
