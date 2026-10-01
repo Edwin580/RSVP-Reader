@@ -237,6 +237,20 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
                     onClick={() => set({ accent: a.value })}
                   />
                 ))}
+                {/* Any colour: the system colour picker, behind a colour-wheel swatch. */}
+                <label
+                  className={`swatch swatch-custom${settings.accent === 'custom' ? ' is-checked' : ''}`}
+                  title="Custom color"
+                  style={settings.accent === 'custom' ? ({ '--swatch': settings.customColor } as React.CSSProperties) : undefined}
+                >
+                  <input
+                    type="color"
+                    aria-label="Custom color"
+                    value={settings.customColor}
+                    onClick={() => settings.accent !== 'custom' && set({ accent: 'custom' })}
+                    onChange={(e) => set({ accent: 'custom', customColor: e.target.value.toLowerCase() })}
+                  />
+                </label>
               </div>
             </div>
 
