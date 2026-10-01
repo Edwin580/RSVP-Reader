@@ -82,9 +82,15 @@ export class Pagination {
     return { page: before + this.starts[k].indexOf(page.start) + 1, total }
   }
 
-  /** Find more pages until `stop()` says to, or until all are known. Returns `complete`. */
-  work(stop: () => boolean): boolean {
-    for (let k = 0; k < this.sections.length; k++) {
+  /**
+   * Find more pages until `stop()` says to, or until all are known. Works
+   * outwards from the chapter with word `near` (the reader's place), so the
+   * chapters either side are ready before they're reached. Returns `complete`.
+   */
+  work(stop: () => boolean, near = 0): boolean {
+    const here = this.sectionOf(Math.min(Math.max(near, 0), Math.max(this.length - 1, 0)))
+    const order = this.sections.map((_, k) => k).sort((a, b) => Math.abs(a - here) - Math.abs(b - here) || a - b)
+    for (const k of order) {
       while (!this.done[k]) {
         if (stop()) return false
         this.extend(k)

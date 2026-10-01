@@ -143,13 +143,20 @@ export function PageView({
 
   // The rest of the book is paginated a little at a time in the background,
   // so the page count and numbers appear shortly after opening.
+  // It starts around the reader's place, so turning into the next or
+  // previous chapter never has to stop and measure it first.
+  const place = useRef(index)
+  useEffect(() => {
+    place.current = index
+  })
   useEffect(() => {
     let timer = 0
     const work = () => {
       const p = pagination.current
       if (!p) return
       const until = performance.now() + 12
-      if (p.work(() => performance.now() > until)) setPage((shown) => shown && { ...shown, number: p.number(shown) })
+      if (p.work(() => performance.now() > until, place.current))
+        setPage((shown) => shown && { ...shown, number: p.number(shown) })
       else timer = window.setTimeout(work, 30)
     }
     timer = window.setTimeout(work, 300)
@@ -182,11 +189,18 @@ export function PageView({
       relayout()
     })
     observer.observe(el)
+    // Only the font the page is set in; other faces loading later (an italic,
+    // a bold heading) don't move the text, so the pages stay as they are.
     const fonts = document.fonts
-    fonts?.addEventListener?.('loadingdone', relayout)
+    const fontLoaded = (e: Event) => {
+      const family = getComputedStyle(el).fontFamily.split(',')[0].trim().replace(/["']/g, '')
+      const loaded = (e as FontFaceSetLoadEvent).fontfaces ?? []
+      if (loaded.some((f) => f.family.replace(/["']/g, '') === family)) relayout()
+    }
+    fonts?.addEventListener?.('loadingdone', fontLoaded)
     return () => {
       observer.disconnect()
-      fonts?.removeEventListener?.('loadingdone', relayout)
+      fonts?.removeEventListener?.('loadingdone', fontLoaded)
     }
   }, [])
   const layout = `${scale} ${font}`
@@ -205,7 +219,8 @@ export function PageView({
         if (next) onSeek(next.start)
       },
       previous: () => {
-        const previous = page && pagination.current?.previous(page)
+        if (!page) return
+        const previous = pagination.current?.previous(page)
         onSeek(previous ? previous.start : 0)
       },
     }

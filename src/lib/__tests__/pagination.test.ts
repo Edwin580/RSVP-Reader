@@ -60,6 +60,15 @@ describe('Pagination', () => {
     expect(p.number(p.pageAt(55))).toEqual({ page: 6, total: 10 })
   })
 
+  it('works outwards from the reading position, so the chapters either side come first', () => {
+    const { measured, measure } = tenAPage()
+    // Five chapters of 20 words; reading in the fourth (words 60-79).
+    const p = new Pagination(100, [20, 40, 60, 80], measure)
+    let budget = 6
+    p.work(() => budget-- <= 0, 65)
+    expect(measured).toEqual([60, 70, 40, 50, 80, 90])
+  })
+
   it('always moves on, even if nothing fits', () => {
     const p = new Pagination(3, [], () => -1)
     expect(p.pageAt(0)).toEqual({ start: 0, end: 0 })
