@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addReading, dayKey, EMPTY_STATS, lastDays, summarize } from '../stats'
+import { addReading, calendarWeeks, dayKey, EMPTY_STATS, lastDays, readingLevel, summarize } from '../stats'
 
 const day = (d: number) => new Date(2026, 8, d, 12) // September 2026, local noon
 const MIN = 60_000
@@ -48,5 +48,35 @@ describe('lastDays', () => {
     expect(days).toHaveLength(7)
     expect(days.map((d) => d.date.getDate())).toEqual([4, 5, 6, 7, 8, 9, 10])
     expect(days.map((d) => d.words)).toEqual([0, 0, 0, 0, 200, 0, 900])
+  })
+})
+
+describe('reading calendar', () => {
+  it('shades each day by how long you read, in fixed steps', () => {
+    expect(readingLevel(0)).toBe(0)
+    expect(readingLevel(30_000)).toBe(1)
+    expect(readingLevel(10 * MIN)).toBe(2)
+    expect(readingLevel(25 * MIN)).toBe(3)
+    expect(readingLevel(90 * MIN)).toBe(4)
+  })
+
+  it('lays the weeks out Sunday to Saturday, ending with this week', () => {
+    // 1 October 2026 is a Thursday.
+    const today = new Date(2026, 9, 1, 15)
+    let s = addReading(EMPTY_STATS, today, 12 * MIN, 3000)
+    s = addReading(s, new Date(2026, 8, 27, 9), 2 * MIN, 400) // the Sunday before
+    const weeks = calendarWeeks(s, today, 4)
+    expect(weeks).toHaveLength(4)
+    expect(weeks.every((w) => w.length === 7)).toBe(true)
+    // Every column starts on a Sunday; the first is three weeks before this one.
+    expect(weeks[0][0]!.date.getDay()).toBe(0)
+    expect(dayKey(weeks[0][0]!.date)).toBe('2026-09-06')
+    // This week: Sunday the 27th to today, then nothing.
+    const thisWeek = weeks[3]
+    expect(dayKey(thisWeek[0]!.date)).toBe('2026-09-27')
+    expect(thisWeek[0]!.ms).toBe(2 * MIN)
+    expect(dayKey(thisWeek[4]!.date)).toBe('2026-10-01')
+    expect(thisWeek[4]!.words).toBe(3000)
+    expect(thisWeek.slice(5)).toEqual([null, null])
   })
 })
