@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
 import type { Accent, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
@@ -122,6 +123,8 @@ function Choice<T extends string>({
  */
 export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
+  const sheet = useRef<HTMLDivElement>(null)
+  useSheetDrag(sheet, onClose)
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', esc)
@@ -149,7 +152,8 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           the page and keeps that colour, so a dim backdrop there left the bar
           in the old theme after changing it here. */}
       <div className={`popover-backdrop is-clear${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
-      <div className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
+      <div ref={sheet} className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
+        <div className="sheet-handle" aria-hidden="true" />
         <div className="setting">
           <span className="setting-name">Mode</span>
           <Choice label="Reading mode" options={MODES} value={settings.mode} onChange={(mode) => set({ mode })} />
