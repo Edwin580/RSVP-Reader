@@ -1,6 +1,4 @@
 import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
-import type { Lookup } from './dictionary'
-import { guideColor, type GuideColor } from './guideColor'
 import { storageName } from './preview'
 import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
@@ -12,15 +10,6 @@ import type { Book, BookMeta, Bookmark, Progress } from './types'
  */
 // Named from the app's old name (RSVP Reader); renaming it would lose everyone's saved books.
 const store = createStore(storageName('rsvp-reader'), 'kv')
-
-// Looked-up definitions live in their own database: they're a cache, so they
-// stay out of backups and can be cleared without touching any books.
-const dictionaryStore = createStore(storageName('chapter-dictionary'), 'kv')
-
-export const definitionCache = {
-  get: (word: string) => get<Lookup>(word, dictionaryStore),
-  set: (word: string, lookup: Lookup) => set(word, lookup, dictionaryStore),
-}
 
 const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
@@ -146,7 +135,7 @@ export interface Settings {
   theme: Theme
   /** Typeface for the book's text; the controls always use the system font. */
   font: ReadingFont
-  /** Colour of the focus letter, page marker and pacer. */
+  /** The one colour for the focus letter, the page highlight, the pacer line and the underline. */
   accent: Accent
   /**
    * Page mode: how the current word is marked. 'highlight' is a soft box on
@@ -157,9 +146,6 @@ export interface Settings {
   /** Page mode's highlight: 'word' sits on the current word, 'sweep' fills the line up to it at reading pace. */
   highlightStyle: HighlightStyle
   /** Page mode's highlight: 'auto' follows the focus colour, or a '#rrggbb' of your own. */
-  highlightColor: GuideColor
-  /** The pacer line and current-word underline: 'auto' follows the focus colour, or a '#rrggbb'. */
-  lineColor: GuideColor
   /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
   playControl: PlayControl
 }
@@ -167,15 +153,14 @@ export interface Settings {
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
-export type Accent = 'red' | 'blue' | 'green' | 'purple'
+export type Accent = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 export type PlayControl = 'tap' | 'hold'
 export type PageGuide = 'highlight' | 'pacer' | 'both'
-export type { GuideColor }
 export type HighlightStyle = 'word' | 'sweep'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
-export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+export const ACCENTS: Accent[] = ['red', 'yellow', 'green', 'blue', 'purple', 'pink']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both']
 export const HIGHLIGHT_STYLES: HighlightStyle[] = ['word', 'sweep']
@@ -190,8 +175,6 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: 'red',
   pageGuide: 'both',
   highlightStyle: 'word',
-  highlightColor: 'auto',
-  lineColor: 'auto',
   playControl: 'tap',
 }
 
@@ -213,8 +196,6 @@ export function loadSettings(): Settings {
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
       highlightStyle: oneOf(HIGHLIGHT_STYLES, saved.highlightStyle, DEFAULT_SETTINGS.highlightStyle),
-      highlightColor: guideColor(saved.highlightColor),
-      lineColor: guideColor(saved.lineColor),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {
