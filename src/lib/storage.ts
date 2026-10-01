@@ -143,9 +143,6 @@ export interface Settings {
    * There's always one, so you never lose your place on the page.
    */
   pageGuide: PageGuide
-  /** Page mode's highlight: 'word' sits on the current word, 'sweep' fills the line up to it at reading pace. */
-  highlightStyle: HighlightStyle
-  /** Page mode's highlight: 'auto' follows the focus colour, or a '#rrggbb' of your own. */
   /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
   playControl: PlayControl
 }
@@ -156,14 +153,12 @@ export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 export type PlayControl = 'tap' | 'hold'
 export type PageGuide = 'highlight' | 'pacer' | 'both'
-export type HighlightStyle = 'word' | 'sweep'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'yellow', 'green', 'blue', 'purple', 'pink']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both']
-export const HIGHLIGHT_STYLES: HighlightStyle[] = ['word', 'sweep']
 
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
@@ -174,7 +169,6 @@ export const DEFAULT_SETTINGS: Settings = {
   font: 'serif',
   accent: 'red',
   pageGuide: 'both',
-  highlightStyle: 'word',
   playControl: 'tap',
 }
 
@@ -195,7 +189,6 @@ export function loadSettings(): Settings {
       font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
-      highlightStyle: oneOf(HIGHLIGHT_STYLES, saved.highlightStyle, DEFAULT_SETTINGS.highlightStyle),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {

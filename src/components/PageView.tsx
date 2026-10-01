@@ -20,8 +20,6 @@ interface Props {
   /** Extra time the reader adds to the first word of a line, and of a new page. */
   lineReturnMs: number
   turnMs: number
-  /** The highlight sweeps along the line like the pacer, instead of sitting on the word. */
-  sweep?: boolean
   onSeek: (index: number) => void
   /** Double-tap on a word: select it, for the system's Look Up, Copy and so on. */
   onSelectWord?: (index: number) => void
@@ -69,7 +67,6 @@ export function PageView({
   wordMs,
   lineReturnMs,
   turnMs,
-  sweep = false,
   onSeek,
   onSelectWord,
   onToggle,
@@ -221,13 +218,21 @@ export function PageView({
     [ends, headingStarts, page.start, last, words],
   )
 
-  // Move the highlight and pacer to the current word.
-  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number; sweep: boolean } | null>(null)
+  // Move the highlight and the line to the current word. Both work like a
+  // highlighter pen drawn along the line: they cover the line from its first
+  // word up to the end of the current one, and while playing their end moves
+  // steadily through each word over exactly the time it's shown, so they
+  // never stop. They grow with a transform (scaleX) rather than a width, so
+  // the browser animates them off the main thread and they stay smooth
+  // while the page re-renders for each word.
+  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number; lineWidth: number } | null>(null)
   useLayoutEffect(() => {
     const m = marker.current
     const p = pacer.current
-    if (!m || !p || measuring) return
-    const span = text.current?.querySelector<HTMLElement>(`[data-i="${index}"]`)
+    const t = text.current
+    if (!m || !p || !t || measuring) return
+    const at = (i: number) => t.querySelector<HTMLElement>(`[data-i="${i}"]`)
+    const span = at(index)
     if (!span) {
       m.style.opacity = p.style.opacity = '0'
       return
@@ -241,63 +246,61 @@ export function PageView({
     const before = prev.current
     const newPage = !before || before.start !== page.start
     const newLine = !newPage && before.top !== top
-    // Anything but reading on to the next word on the same line restarts the
-    // pacer here. Staying on the same word (pausing, say) keeps it as it is.
-    const restart = newPage || newLine || before.sweep !== sweep || (before.index !== index - 1 && before.index !== index)
-    const lineLeft = restart ? left : before.lineLeft
-    prev.current = { index, top, start: page.start, lineLeft, sweep }
+    // Anything but reading on to the next word restarts the sweep at this
+    // word. Staying on the same word (pausing, say) keeps it as it is.
+    const restart = newPage || newLine || (before.index !== index - 1 && before.index !== index)
+    // The line runs from its first word to its last.
+    let lineLeft = before?.lineLeft ?? left
+    let lineWidth = before?.lineWidth ?? width
+    if (newPage || newLine) {
+      let first = span
+      let last = span
+      for (let s = at(index - 1); s && s.offsetTop === top; s = at(Number(s.dataset.i) - 1)) first = s
+      for (let s = at(index + 1); s && s.offsetTop === top; s = at(Number(s.dataset.i) + 1)) last = s
+      lineLeft = first.offsetLeft
+      lineWidth = Math.max(last.offsetLeft + last.offsetWidth - lineLeft, 1)
+    }
+    prev.current = { index, top, start: page.start, lineLeft, lineWidth }
     // How long this word is actually on screen, including the reader's extra beats.
     const shownMs = Math.max(wordMs + (newPage && before ? turnMs : newLine ? lineReturnMs : 0), 16)
 
-    // Pacer, and the highlight when it sweeps: a bar whose end moves steadily
-    // through the current word over exactly the time it's shown, so it never
-    // stops while playing. It fills the line from where reading started on it.
-    const target = left + width - lineLeft
-    const sweepTo = (el: HTMLElement, y: number, h: number) => {
+    // `pad` widens the highlight a little past the words at both ends.
+    const sweep = (el: HTMLElement, y: number, h: number, pad: number) => {
+      const x = lineLeft - pad
+      const w = lineWidth + pad * 2
+      const to = (left + width + pad - x) / w
+      const place = (f: number) => `translate(${x}px, ${y}px) scaleX(${Math.min(Math.max(f, 0), 1)})`
+      el.style.width = `${w}px`
+      el.style.height = `${h}px`
       if (restart) {
+        // Covered at once up to the current word (or through it, paused).
         el.style.transition = 'none'
-        el.style.transform = `translate(${lineLeft}px, ${y}px)`
-        el.style.width = playing ? '0px' : `${target}px`
+        el.style.transform = place(playing ? (left + pad - x) / w : to)
         void el.offsetWidth
       }
-      el.style.height = `${h}px`
       if (playing) {
-        el.style.transition = `width ${shownMs}ms linear`
-        el.style.width = `${target}px`
+        el.style.transition = `transform ${shownMs}ms linear`
+        el.style.transform = place(to)
       } else if (!restart) {
         el.style.transition = 'none'
-        el.style.width = `${target}px`
+        el.style.transform = place(to)
       }
     }
-    sweepTo(p, top + height - 2, 2)
-
-    if (sweep) {
-      // Highlight: like a highlighter pen drawn along the line at reading pace.
-      sweepTo(m, top, height)
-    } else {
-      // Highlight: a soft box that eases from word to word.
-      const glide = Math.min(wordMs * 0.5, 160)
-      m.style.transition = newPage || newLine ? 'none' : `transform ${glide}ms cubic-bezier(0.4, 0, 0.2, 1), width ${glide}ms cubic-bezier(0.4, 0, 0.2, 1)`
-      m.style.transform = `translate(${left}px, ${top}px)`
-      m.style.width = `${width}px`
-      m.style.height = `${height}px`
-    }
+    sweep(p, top + height - 2, 2, 0)
+    sweep(m, top, height, 3)
 
     if (newPage) {
       // Appear once the new page has slid in, so the eye lands on it.
       for (const el of [m, p]) {
         el.style.opacity = '0'
         void el.offsetWidth
+        const delay = TURN_MS - 60
+        el.style.transition = `opacity 180ms ease-out ${delay}ms, transform ${Math.max(shownMs - delay, 16)}ms linear ${delay}ms`
       }
-      const delay = TURN_MS - 60
-      const fade = `opacity 180ms ease-out ${delay}ms`
-      const grow = `${fade}, width ${Math.max(shownMs - delay, 16)}ms linear ${delay}ms`
-      m.style.transition = sweep ? grow : fade
-      p.style.transition = grow
     }
     m.style.opacity = '1'
     p.style.opacity = '1'
-  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing, sweep])
+  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing])
 
   return (
     <div
