@@ -61,7 +61,7 @@ export function Library({
   const restoreInput = useRef<HTMLInputElement>(null)
   const dragging = useWindowFileDrag((file) => !busy && onUpload(file))
 
-  // Most recently read (or added) first.
+  // Most recently read (or added) first; finished books go on their own shelf.
   const sorted = useMemo(
     () =>
       [...books].sort(
@@ -69,6 +69,51 @@ export function Library({
           Math.max(progress[b.id]?.updatedAt ?? 0, b.addedAt) - Math.max(progress[a.id]?.updatedAt ?? 0, a.addedAt),
       ),
     [books, progress],
+  )
+  const fractionRead = (book: BookMeta) =>
+    book.wordCount > 1 ? (progress[book.id]?.index ?? 0) / (book.wordCount - 1) : 0
+  // Finished: shown as 100%, so at (or within half a percent of) the end.
+  const finished = (book: BookMeta) => Math.round(fractionRead(book) * 100) === 100
+  const reading = sorted.filter((b) => !finished(b))
+  const read = sorted.filter(finished)
+
+  const shelf = (list: BookMeta[]) => (
+    <ul className="shelf">
+      {list.map((book) => {
+        const fraction = fractionRead(book)
+        const percent = Math.round(fraction * 100)
+        const format = book.fileName.split('.').pop()?.toUpperCase()
+        const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
+        const status = percent === 0 ? `${left} to read` : percent === 100 ? 'Finished' : `${percent}% · ${left} left`
+        return (
+          <li key={book.id} className="shelf-item">
+            <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
+              <Cover book={book} />
+              <span className="shelf-text">
+                <span className="shelf-title">{book.title}</span>
+                <span className="shelf-meta muted">
+                  {format} · {book.wordCount.toLocaleString()} words · {status}
+                </span>
+                <span className="bar" aria-hidden="true">
+                  <span style={{ width: `${percent}%` }} />
+                </span>
+              </span>
+            </button>
+            <button
+              type="button"
+              className="icon-button shelf-remove"
+              aria-label={`Remove ${book.title}`}
+              title="Remove"
+              onClick={() => {
+                if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
+              }}
+            >
+              <Icon name="trash" size={19} />
+            </button>
+          </li>
+        )
+      })}
+    </ul>
   )
 
   const choose = () => input.current?.click()
@@ -151,47 +196,17 @@ export function Library({
         </section>
       )}
 
+      {reading.length > 0 && (
+        <section aria-labelledby="shelf-reading">
+          <h2 id="shelf-reading">Your books</h2>
+          {shelf(reading)}
+        </section>
+      )}
 
-      {sorted.length > 0 && (
-        <section>
-          <h2>Your books</h2>
-          <ul className="shelf">
-            {sorted.map((book) => {
-              const at = progress[book.id]?.index ?? 0
-              const fraction = book.wordCount > 1 ? at / (book.wordCount - 1) : 0
-              const percent = Math.round(fraction * 100)
-              const format = book.fileName.split('.').pop()?.toUpperCase()
-              const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
-              const status = percent === 0 ? `${left} to read` : percent === 100 ? 'Finished' : `${percent}% · ${left} left`
-              return (
-                <li key={book.id} className="shelf-item">
-                  <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
-                    <Cover book={book} />
-                    <span className="shelf-text">
-                      <span className="shelf-title">{book.title}</span>
-                      <span className="shelf-meta muted">
-                        {format} · {book.wordCount.toLocaleString()} words · {status}
-                      </span>
-                      <span className="bar" aria-hidden="true">
-                        <span style={{ width: `${percent}%` }} />
-                      </span>
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-button shelf-remove"
-                    aria-label={`Remove ${book.title}`}
-                    title="Remove"
-                    onClick={() => {
-                      if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
-                    }}
-                  >
-                    <Icon name="trash" size={19} />
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+      {read.length > 0 && (
+        <section aria-labelledby="shelf-read">
+          <h2 id="shelf-read">Read</h2>
+          {shelf(read)}
         </section>
       )}
 

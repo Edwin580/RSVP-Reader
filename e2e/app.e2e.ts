@@ -506,6 +506,24 @@ test('reading stats show the last year as squares, shaded by time read', async (
   await expect(cells.nth(52 * 7 + today - 1)).toHaveAttribute('aria-pressed', 'true')
 })
 
+test('finished books move to their own Read section in the library', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'finished.txt', 'A short book. It ends quickly.')
+  const slider = page.getByRole('slider')
+  const last = Number(await slider.getAttribute('aria-valuemax'))
+  for (let i = 0; i < last; i++) await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await page.locator('.nav-button').click()
+  await upload(page, 'unread.txt', 'Another book, not read yet. It has a few more words in it.')
+  await page.locator('.nav-button').click()
+
+  const reading = page.getByRole('region', { name: 'Your books' })
+  const read = page.getByRole('region', { name: 'Read' })
+  await expect(reading.locator('.shelf-title')).toHaveText(['unread'])
+  await expect(read.locator('.shelf-title')).toHaveText(['finished'])
+  await expect(read.locator('.shelf-meta')).toContainText('Finished')
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
