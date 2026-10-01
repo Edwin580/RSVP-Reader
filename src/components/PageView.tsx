@@ -15,11 +15,14 @@ interface Props {
   scale: number
   /** The reading font setting; pages are re-measured when it changes. */
   font?: string
-  /** How long the current word is shown, so the marker moves at reading pace. */
-  wordMs: number
-  /** Extra time the reader adds to the first word of a line, and of a new page. */
-  lineReturnMs: number
-  turnMs: number
+  /** Milliseconds per unit of word weight (60000 / wpm); a change re-plans the motion. */
+  pace: number
+  /**
+   * How long word i will be on screen if reading carries on from here,
+   * including the reader's extra beats (line starts, page turns, the
+   * ramp-up after pressing play), so the motion keeps pace with the words.
+   */
+  durationOf: (i: number) => number
   /** Line focus: how many lines stay clear around the current one (0 = off); the rest black out. */
   focusLines?: number
   onSeek: (index: number) => void
@@ -66,9 +69,8 @@ export function PageView({
   playing,
   scale,
   font,
-  wordMs,
-  lineReturnMs,
-  turnMs,
+  pace,
+  durationOf,
   focusLines = 0,
   onSeek,
   onSelectWord,
@@ -221,14 +223,32 @@ export function PageView({
     [ends, headingStarts, page.start, last, words],
   )
 
-  // Move the highlight and the line to the current word. Both work like a
-  // highlighter pen drawn along the line: they cover the line from its first
-  // word up to the end of the current one, and while playing their end moves
-  // steadily through each word over exactly the time it's shown, so they
-  // never stop. They grow with a transform (scaleX) rather than a width, so
-  // the browser animates them off the main thread and they stay smooth
-  // while the page re-renders for each word.
-  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number; lineWidth: number } | null>(null)
+  // Move the highlight and the line along with the reading. Both cover the
+  // line from its first word up to the current one, like a highlighter pen.
+  //
+  // While reading they glide at one steady speed along each whole line: one
+  // linear motion from where reading is to the end of the line, timed from
+  // the words left on it. Moving word by word (a new motion per word, each
+  // at its own speed) looked jagged. The motion is only re-planned when
+  // something changes: a new line or page, a jump, play or pause, a new
+  // speed, or the reading falling out of step with the plan. They grow with
+  // a transform (scaleX), so the browser animates them off the main thread.
+  const timing = useRef(durationOf)
+  useLayoutEffect(() => {
+    timing.current = durationOf
+  })
+  // The current glide: when it set off, and when each word on the line is due.
+  const glide = useRef<{ at: number; due: Map<number, number> } | null>(null)
+  const prev = useRef<{
+    index: number
+    top: number
+    start: number
+    lineLeft: number
+    lineWidth: number
+    lineEnd: number
+    playing: boolean
+    pace: number
+  } | null>(null)
   useLayoutEffect(() => {
     const m = marker.current
     const p = pacer.current
@@ -249,45 +269,71 @@ export function PageView({
     const before = prev.current
     const newPage = !before || before.start !== page.start
     const newLine = !newPage && before.top !== top
-    // Anything but reading on to the next word restarts the sweep at this
-    // word. Staying on the same word (pausing, say) keeps it as it is.
+    // Anything but reading on to the next word restarts at this word.
+    // Staying on the same word (pausing, say) keeps it as it is.
     const restart = newPage || newLine || (before.index !== index - 1 && before.index !== index)
     // The line runs from its first word to its last.
     let lineLeft = before?.lineLeft ?? left
     let lineWidth = before?.lineWidth ?? width
-    if (newPage || newLine) {
+    let lineEnd = before?.lineEnd ?? index
+    if (newPage || newLine || !before) {
       let first = span
       let last = span
       for (let s = at(index - 1); s && s.offsetTop === top; s = at(Number(s.dataset.i) - 1)) first = s
       for (let s = at(index + 1); s && s.offsetTop === top; s = at(Number(s.dataset.i) + 1)) last = s
       lineLeft = first.offsetLeft
       lineWidth = Math.max(last.offsetLeft + last.offsetWidth - lineLeft, 1)
+      lineEnd = Number(last.dataset.i)
     }
-    prev.current = { index, top, start: page.start, lineLeft, lineWidth }
-    // How long this word is actually on screen, including the reader's extra beats.
-    const shownMs = Math.max(wordMs + (newPage && before ? turnMs : newLine ? lineReturnMs : 0), 16)
+    const startedPlaying = playing && !before?.playing
+    const newPace = !!before && before.pace !== pace
+    prev.current = { index, top, start: page.start, lineLeft, lineWidth, lineEnd, playing, pace }
+    const delay = newPage && before ? TURN_MS - 60 : 0
+    // A word arriving well before or after the plan said (the reading
+    // stalled, or the tab was in the background): set off again from here.
+    // Words that are simply shown longer or shorter than their width (a
+    // pause at a full stop) are expected; the glide evens out by line end.
+    const due = glide.current?.due.get(index)
+    const outOfStep = due === undefined || Math.abs(performance.now() - due) > 250
+    const replan = playing && (restart || startedPlaying || newPace || outOfStep)
+    // Time left on this line, from the start of the current word, and when each word is due.
+    let remaining = 0
+    if (replan) {
+      const at = performance.now() + delay
+      const dueAt = new Map<number, number>()
+      for (let i = index; i <= lineEnd; i++) {
+        dueAt.set(i, at + remaining)
+        remaining += timing.current(i)
+      }
+      glide.current = { at, due: dueAt }
+    }
+    remaining = Math.max(remaining, 16)
+    if (!playing) glide.current = null
 
     // `pad` widens the highlight a little past the words at both ends.
     const sweep = (el: HTMLElement, y: number, h: number, pad: number) => {
       const x = lineLeft - pad
       const w = lineWidth + pad * 2
-      const to = (left + width + pad - x) / w
+      const wordStart = (left + pad - x) / w
+      const wordEnd = (left + width + pad - x) / w
       const place = (f: number) => `translate(${x}px, ${y}px) scaleX(${Math.min(Math.max(f, 0), 1)})`
       el.style.width = `${w}px`
       el.style.height = `${h}px`
-      if (restart) {
-        // Covered at once up to the current word (or through it, paused).
-        el.style.transition = 'none'
-        el.style.transform = place(playing ? (left + pad - x) / w : to)
-        void el.offsetWidth
+      if (!playing) {
+        // Paused: covered through the current word, eased there if it was moving.
+        el.style.transition = restart ? 'none' : 'transform 150ms ease-out'
+        el.style.transform = place(wordEnd)
+        return
       }
-      if (playing) {
-        el.style.transition = `transform ${shownMs}ms linear`
-        el.style.transform = place(to)
-      } else if (!restart) {
-        el.style.transition = 'none'
-        el.style.transform = place(to)
-      }
+      if (!replan) return
+      // From the start of this word, or (same line, just re-timed) from
+      // wherever it is right now, so it never jumps.
+      const now = new DOMMatrixReadOnly(getComputedStyle(el).transform).a
+      el.style.transition = 'none'
+      el.style.transform = place(restart || startedPlaying ? wordStart : now)
+      void el.offsetWidth
+      el.style.transition = `transform ${Math.max(remaining - delay, 16)}ms linear ${delay}ms`
+      el.style.transform = place(1)
     }
     sweep(p, top + height - 2, 2, 0)
     sweep(m, top, height, 3)
@@ -295,15 +341,15 @@ export function PageView({
     if (newPage) {
       // Appear once the new page has slid in, so the eye lands on it.
       for (const el of [m, p]) {
+        const motion = el.style.transition
         el.style.opacity = '0'
         void el.offsetWidth
-        const delay = TURN_MS - 60
-        el.style.transition = `opacity 180ms ease-out ${delay}ms, transform ${Math.max(shownMs - delay, 16)}ms linear ${delay}ms`
+        el.style.transition = `opacity 180ms ease-out ${TURN_MS - 60}ms${motion.startsWith('transform') ? `, ${motion}` : ''}`
       }
     }
     m.style.opacity = '1'
     p.style.opacity = '1'
-  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing])
+  }, [index, page.start, measuring, content, playing, pace])
 
   // Line focus: every word outside the lines around the current one is
   // dimmed (almost hidden while reading, faint when paused; see the CSS).
