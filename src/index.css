@@ -1193,8 +1193,10 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   /* Safari colours its top bar from the page background, so while the sheet
      is open that becomes the dimmed colour: the bar dims along with the page,
      and follows a theme picked here. The reader keeps its own colour. */
-  html:has(.settings-menu:not(.is-closing)),
-  html:has(.settings-menu:not(.is-closing)) body { background: var(--page-dimmed); }
+  html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)),
+  html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)) body {
+    background: var(--page-dimmed);
+  }
   .settings-menu {
     box-shadow: 0 0 0 100vmax var(--scrim);
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
