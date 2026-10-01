@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 
 export interface ChapterOption {
   title: string
@@ -39,6 +40,8 @@ function lastMinutes(): number {
  * with a quick pick) or up to a chapter end. Both show where you'll stop.
  */
 export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartChapter, onClose }: Props) {
+  const sheet = useRef<HTMLDivElement>(null)
+  useSheetDrag(sheet, onClose)
   const [tab, setTab] = useState<'time' | 'chapter'>('time')
   const [minutes, setMinutes] = useState(lastMinutes)
 
@@ -62,7 +65,8 @@ export function SessionMenu({ landsFor, chapters, closing, onStartTime, onStartC
   return (
     <>
       <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
-      <div className={`popover opens-up session-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Read for">
+      <div ref={sheet} className={`popover opens-up session-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Read for">
+        <div className="sheet-handle" aria-hidden="true" />
         <p className="session-title">Read for</p>
         {chapters.length > 0 && (
           <div className="segmented" role="radiogroup" aria-label="Read for a time or to a chapter end">

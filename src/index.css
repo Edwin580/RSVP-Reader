@@ -114,7 +114,7 @@
 
 * { box-sizing: border-box; }
 /* The reader fills the screen: don't let a swipe rubber-band the whole page. */
-html:has(.reader), body:has(.reader) { overscroll-behavior: none; }
+html:has(.reader), body:has(.reader) { overscroll-behavior: none; overflow: hidden; }
 body { margin: 0; background: var(--bg); }
 button, input, select { font: inherit; color: inherit; }
 button {
@@ -421,8 +421,11 @@ h1, h2, p { margin: 0; }
   /* Its own background, so the page colour behind it can change (see the
      settings sheet) without the reader changing with it. */
   background: var(--bg);
-  height: 100vh;
-  height: 100dvh;
+  /* Pinned to the screen: in Safari (not added to the home screen) a page
+     exactly as tall as the window can still be scrolled and bounced, which
+     slid the reader and left a gap. */
+  position: fixed;
+  inset: 0;
   display: grid;
   grid-template-rows: auto 1fr auto;
   grid-template-columns: minmax(0, 1fr); /* never wider than the screen, whatever the content */
@@ -914,6 +917,7 @@ h1, h2, p { margin: 0; }
   animation: fade-in 0.15s ease;
 }
 .popover-backdrop { position: fixed; inset: 0; z-index: 19; }
+.sheet-handle { display: none; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .setting-stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
 .setting-name { font-family: var(--serif); font-size: 1.1rem; font-weight: 500; white-space: nowrap; }
@@ -1158,6 +1162,16 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+  /* The grab handle: pull the sheet down to put it away (useSheetDrag). */
+  .sheet-handle {
+    display: block;
+    justify-self: center;
+    width: 36px;
+    height: 5px;
+    margin: -0.6rem 0 -0.4rem;
+    border-radius: 3px;
+    background: var(--separator);
+  }
   /* The settings sheet dims the page with a shadow, not a backdrop (see
      SettingsMenu), so it follows a theme change made in it. */
   .popover-backdrop.is-clear { background: none; }

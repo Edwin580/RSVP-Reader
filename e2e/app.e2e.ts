@@ -316,6 +316,46 @@ test('the highlight sweeps along the whole line and grows like the underline', a
   expect(grew).toBeGreaterThanOrEqual(6)
 })
 
+test('on phones the settings sheet can be pulled down to put it away, and the page never scrolls', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'touch only')
+  await page.goto('./')
+  await upload(page)
+  const cdp = await page.context().newCDPSession(page)
+  const drag = async (x: number, from: number, to: number, steps: number, pause = 16) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y: from }] })
+    for (let i = 1; i <= steps; i++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: from + ((to - from) * i) / steps }] })
+      await page.waitForTimeout(pause)
+    }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  }
+  const sheet = page.locator('.settings-menu')
+  const scrolled = () => page.evaluate('document.scrollingElement.scrollTop + document.scrollingElement.scrollHeight - innerHeight')
+
+  // A short pull springs back.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
+  await page.waitForTimeout(400)
+  let box = (await sheet.boundingBox())!
+  await drag(box.x + box.width / 2, box.y + 10, box.y + 50, 6)
+  await page.waitForTimeout(400)
+  await expect(sheet).toBeVisible()
+  expect(Math.abs((await sheet.boundingBox())!.y - box.y)).toBeLessThan(2)
+
+  // A longer pull puts it away.
+  await drag(box.x + box.width / 2, box.y + 10, box.y + 200, 10)
+  await expect(sheet).toBeHidden()
+
+  // So does a quick flick, even a short one (80px, under the 90px that a slow pull needs).
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
+  await page.waitForTimeout(400)
+  box = (await sheet.boundingBox())!
+  await drag(box.x + box.width / 2, box.y + 10, box.y + 130, 3, 0)
+  await expect(sheet).toBeHidden()
+
+  // Nothing behind it scrolls.
+  expect(await scrolled()).toBe(0)
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
