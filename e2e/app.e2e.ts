@@ -413,6 +413,78 @@ test('on phones the settings sheet can be pulled down to put it away, and the pa
   expect(await scrolled()).toBe(0)
 })
 
+test('page mode has fixed, numbered pages, the same however you get to them', async ({ page }) => {
+  const para = (from: number, n: number) =>
+    Array.from({ length: n }, (_, k) => `w${from + k}${(k + 1) % 9 === 0 ? '.' : ''}`).join(' ')
+  const text = ['Chapter 1', '', para(0, 400), '', para(400, 400), '', 'Chapter 2', '', para(800, 600)].join('\n')
+  await page.goto('./')
+  await upload(page, 'pages.txt', text)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+
+  const folio = page.locator('.page-folio')
+  const first = () => page.locator('.page > .page-text [data-i]').first().textContent()
+  await expect(folio).toHaveText(/^1 of \d+$/)
+  const total = Number((await folio.textContent())!.split(' of ')[1])
+  expect(total).toBeGreaterThan(4)
+
+  // Forward three pages, noting where each starts and a word mid-way down page 4.
+  const starts = [await first()]
+  for (let n = 2; n <= 4; n++) {
+    await page.keyboard.press('PageDown')
+    await expect(folio).toHaveText(`${n} of ${total}`)
+    starts.push(await first())
+  }
+  const words = page.locator('.page > .page-text [data-i]')
+  const middle = (await words.nth(Math.floor((await words.count()) / 2)).textContent())!.replace(/\.$/, '')
+
+  // Back again: the very same pages.
+  for (let n = 3; n >= 1; n--) {
+    await page.keyboard.press('PageUp')
+    await expect(folio).toHaveText(`${n} of ${total}`)
+    expect(await first()).toBe(starts[n - 1])
+  }
+
+  // Straight to that word with search: the same page 4, not a page starting there.
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await page.getByLabel('Search text').fill(middle)
+  await page.locator('.search-results button').first().click()
+  await expect(page.locator('.search-panel')).toBeHidden()
+  await expect(folio).toHaveText(`4 of ${total}`)
+  expect(await first()).toBe(starts[3])
+
+  // A chapter always starts on a new page, with its title at the top.
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await page.getByLabel('Search text').fill('w800')
+  await page.locator('.search-results button').first().click()
+  await expect(page.locator('.search-panel')).toBeHidden()
+  await expect(page.locator('.page > .page-text .page-heading').first()).toHaveText(/Chapter 2/)
+  expect(await first()).toBe('Chapter')
+})
+
+test('the page number goes with the controls while holding to read', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Hold', exact: true }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  const folio = page.locator('.page-folio')
+  await expect(folio).toHaveText(/^1 of \d+$/)
+  const opacity = () => page.evaluate(`Number(getComputedStyle(document.querySelector('.page-folio')).opacity)`)
+
+  const box = (await page.locator('.page').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await expect.poll(opacity, { timeout: 1000 }).toBeLessThan(0.02)
+  await page.mouse.up()
+  await expect.poll(opacity, { timeout: 1000 }).toBeGreaterThan(0.98)
+})
+
 test('the highlight glides along each line at a steady speed', async ({ page }) => {
   await page.goto('./')
   await upload(page, 'long.txt', Array.from({ length: 400 }, (_, i) => `word${i}${i % 9 === 8 ? '.' : ''}`).join(' '))

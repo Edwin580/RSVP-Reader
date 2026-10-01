@@ -691,7 +691,7 @@ h1, h2, p { margin: 0; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 
-.reader-bottom { width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
+.reader-bottom { position: relative; width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
 
 .scrubber {
   position: relative;
@@ -742,8 +742,16 @@ h1, h2, p { margin: 0; }
   pointer-events: none;
 }
 .jump-back {
+  /* Floats above the controls rather than pushing them up, so the reading
+     area keeps its size (and page mode its pages) while it shows. */
+  position: absolute;
+  bottom: 100%;
+  left: 1rem;
+  right: 1rem;
+  z-index: 2;
+  width: fit-content;
   display: flex;
-  max-width: 100%;
+  max-width: calc(100% - 2rem);
   align-items: center;
   gap: 0.25rem;
   margin: 0 auto 0.4rem;
@@ -766,6 +774,10 @@ h1, h2, p { margin: 0; }
   margin-top: 0.25rem;
 }
 .deck-meta { display: flex; flex-direction: column; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+/* One line each, always: wrapping as the numbers grow would make the
+   controls taller and the reading area shorter (and re-flow page mode). */
+.deck-meta { min-width: 0; max-width: 100%; }
+.deck-meta > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* The time-left line opens "Read for…" (timed sessions). */
 .deck-meta-wrap { position: relative; justify-self: start; min-width: 0; }
 .session-open {
@@ -904,6 +916,36 @@ h1, h2, p { margin: 0; }
 .page-text p { margin: 0 0 0.9em; }
 .page-text { position: relative; } /* positioned so text paints above the marker */
 .page.is-measuring .page-text { visibility: hidden; }
+/* Pages are measured in a hidden copy of the text area, which stops short of
+   the page number at the foot (see measurePage). */
+.page { --folio: 1.75rem; }
+.page-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--folio);
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+/* The page number, like a printed book: small, at the foot of the page. It's
+   part of the controls (.chrome), so it goes with them while you read. */
+.page-folio {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--folio);
+  display: grid;
+  place-items: end center;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-2);
+  pointer-events: none;
+}
 
 /* Page turns: the old page (a copy in .page-ghost) slides out while the new
    one slides in, so there's never a blank page. Reversed when going back. */
