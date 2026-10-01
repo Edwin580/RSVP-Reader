@@ -64,11 +64,12 @@ export function useRsvp(
     return () => window.clearTimeout(timer)
   }, [playing, index, wpm, weights, count, extraDelay, stopAt])
 
+  // At the end of the book there's nothing left to play; it stays there.
   const play = useCallback(() => {
+    if (index >= count - 1) return
     sincePlay.current = 0
-    setIndexState((i) => (i >= count - 1 ? 0 : i))
     setPlaying(true)
-  }, [count])
+  }, [index, count])
 
   const pause = useCallback(() => setPlaying(false), [])
 

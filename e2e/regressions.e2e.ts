@@ -211,3 +211,16 @@ test("the ring around a tapped day in the stats calendar isn't clipped (#52)", a
     expect(fits, `square ${index}`).toBe(true)
   }
 })
+
+test('playing at the end of a book stays at the end instead of starting over (#53)', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  const slider = page.getByRole('slider')
+  const last = Number(await slider.getAttribute('aria-valuemax'))
+  for (let i = 0; i < last; i++) await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await page.keyboard.press('Space')
+  await page.waitForTimeout(500)
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await expect(page.locator('.reader')).not.toHaveClass(/is-playing/)
+})
