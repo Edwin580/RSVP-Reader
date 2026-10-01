@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
 import { IS_PREVIEW, PREVIEW_PR } from '../lib/preview'
 import { formatMinutes } from '../lib/rsvp'
+import { fractionRead, isRead } from '../lib/shelf'
 import type { ReadingStats as Stats } from '../lib/stats'
 import type { BookMeta, Progress } from '../lib/types'
 import { Icon } from './Icon'
@@ -24,6 +25,8 @@ interface Props {
   onUpload: (file: File) => void
   onOpen: (id: string) => void
   onDelete: (id: string) => void
+  /** Move a book to the Read shelf, or back. */
+  onMarkRead: (book: BookMeta, read: boolean) => void
   onBackup: () => void
   onRestore: (file: File) => void
 }
@@ -54,6 +57,7 @@ export function Library({
   onUpload,
   onOpen,
   onDelete,
+  onMarkRead,
   onBackup,
   onRestore,
 }: Props) {
@@ -61,7 +65,7 @@ export function Library({
   const restoreInput = useRef<HTMLInputElement>(null)
   const dragging = useWindowFileDrag((file) => !busy && onUpload(file))
 
-  // Most recently read (or added) first; finished books go on their own shelf.
+  // Most recently read (or added) first.
   const sorted = useMemo(
     () =>
       [...books].sort(
@@ -70,51 +74,26 @@ export function Library({
       ),
     [books, progress],
   )
-  const fractionRead = (book: BookMeta) =>
-    book.wordCount > 1 ? (progress[book.id]?.index ?? 0) / (book.wordCount - 1) : 0
-  // Finished: shown as 100%, so at (or within half a percent of) the end.
-  const finished = (book: BookMeta) => Math.round(fractionRead(book) * 100) === 100
-  const reading = sorted.filter((b) => !finished(b))
-  const read = sorted.filter(finished)
-
-  const shelf = (list: BookMeta[]) => (
-    <ul className="shelf">
-      {list.map((book) => {
-        const fraction = fractionRead(book)
-        const percent = Math.round(fraction * 100)
-        const format = book.fileName.split('.').pop()?.toUpperCase()
-        const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
-        const status = percent === 0 ? `${left} to read` : percent === 100 ? 'Finished' : `${percent}% · ${left} left`
-        return (
-          <li key={book.id} className="shelf-item">
-            <button type="button" className="shelf-open" onClick={() => onOpen(book.id)}>
-              <Cover book={book} />
-              <span className="shelf-text">
-                <span className="shelf-title">{book.title}</span>
-                <span className="shelf-meta muted">
-                  {format} · {book.wordCount.toLocaleString()} words · {status}
-                </span>
-                <span className="bar" aria-hidden="true">
-                  <span style={{ width: `${percent}%` }} />
-                </span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className="icon-button shelf-remove"
-              aria-label={`Remove ${book.title}`}
-              title="Remove"
-              onClick={() => {
-                if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
-              }}
-            >
-              <Icon name="trash" size={19} />
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
+  const reading = sorted.filter((b) => !isRead(b, progress[b.id]))
+  const read = sorted.filter((b) => isRead(b, progress[b.id]))
+  const [tab, setTab] = useState<Tab>(loadTab)
+  const pickTab = (next: Tab) => {
+    setTab(next)
+    setSwiped(null)
+    saveTab(next)
+  }
+  // The row swiped open to show its actions, if any.
+  const [swiped, setSwiped] = useState<string | null>(null)
+  useEffect(() => {
+    if (!swiped) return
+    // Touching anywhere else puts it back.
+    const close = (e: PointerEvent) => {
+      if (!(e.target as Element).closest?.(`[data-book="${CSS.escape(swiped)}"]`)) setSwiped(null)
+    }
+    document.addEventListener('pointerdown', close, true)
+    return () => document.removeEventListener('pointerdown', close, true)
+  }, [swiped])
+  const shown = tab === 'read' ? read : reading
 
   const choose = () => input.current?.click()
   // The time the library was shown, for "backed up yesterday" and the nudge below.
@@ -196,17 +175,56 @@ export function Library({
         </section>
       )}
 
-      {reading.length > 0 && (
-        <section aria-labelledby="shelf-reading">
-          <h2 id="shelf-reading">Your books</h2>
-          {shelf(reading)}
-        </section>
-      )}
-
-      {read.length > 0 && (
-        <section aria-labelledby="shelf-read">
-          <h2 id="shelf-read">Read</h2>
-          {shelf(read)}
+      {sorted.length > 0 && (
+        <section className="shelves">
+          <div className="shelf-tabs" role="tablist" aria-label="Shelves">
+            {TABS.map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`tab-${id}`}
+                aria-selected={tab === id}
+                aria-controls="shelf-panel"
+                onClick={() => pickTab(id)}
+              >
+                {label}
+                <span className="shelf-count">{(id === 'read' ? read : reading).length}</span>
+              </button>
+            ))}
+          </div>
+          <div id="shelf-panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+            {shown.length === 0 ? (
+              <p className="shelf-empty muted">
+                {tab === 'read'
+                  ? 'Books you finish, or mark as read, go here.'
+                  : 'Nothing in progress. Add a book, or pick one from Read to start again.'}
+              </p>
+            ) : (
+              <ul className="shelf">
+                {shown.map((book) => (
+                  <ShelfRow
+                    key={book.id}
+                    book={book}
+                    progress={progress[book.id]}
+                    wpm={wpm}
+                    read={tab === 'read'}
+                    swiped={swiped === book.id}
+                    onSwipe={(open) => setSwiped(open ? book.id : null)}
+                    onOpen={() => onOpen(book.id)}
+                    onMarkRead={() => {
+                      setSwiped(null)
+                      onMarkRead(book, tab !== 'read')
+                    }}
+                    onDelete={() => {
+                      if (confirm(`Remove "${book.title}" from your library?`)) onDelete(book.id)
+                      else setSwiped(null)
+                    }}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
       )}
 
@@ -254,6 +272,161 @@ export function Library({
         />
       </footer>
     </main>
+  )
+}
+
+type Tab = 'reading' | 'read'
+const TABS: [Tab, string][] = [
+  ['reading', 'Reading'],
+  ['read', 'Read'],
+]
+const TAB_KEY = 'library-tab'
+// Kept for the session, so coming back from a book lands on the same shelf.
+function loadTab(): Tab {
+  try {
+    return sessionStorage.getItem(TAB_KEY) === 'read' ? 'read' : 'reading'
+  } catch {
+    return 'reading'
+  }
+}
+function saveTab(tab: Tab) {
+  try {
+    sessionStorage.setItem(TAB_KEY, tab)
+  } catch {
+    // Not kept; fine.
+  }
+}
+
+/** Past this (px), a swipe stops being a tap. */
+const SWIPE_START = 8
+
+interface RowProps {
+  book: BookMeta
+  progress: Progress | undefined
+  wpm: number
+  /** On the Read shelf (so its action is "Unread"). */
+  read: boolean
+  /** Swiped open, showing its actions. */
+  swiped: boolean
+  onSwipe: (open: boolean) => void
+  onOpen: () => void
+  onMarkRead: () => void
+  onDelete: () => void
+}
+
+/**
+ * A book on the shelf. With a mouse its actions sit at the end of the row;
+ * on a touch screen they're behind it, and swiping the row left shows them,
+ * like Mail (see the CSS).
+ */
+function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
+  const row = useRef<HTMLDivElement>(null)
+  const actions = useRef<HTMLDivElement>(null)
+  const drag = useRef<{ x: number; y: number; from: number; sliding: boolean; offset: number } | null>(null)
+  // Set by a swipe, so the tap that ends it doesn't open the book.
+  const justSwiped = useRef(false)
+
+  const fraction = fractionRead(book, progress)
+  const percent = Math.round(fraction * 100)
+  const format = book.fileName.split('.').pop()?.toUpperCase()
+  const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
+  const status =
+    percent === 100 ? 'Finished' : percent === 0 ? (book.readAt ? 'Read' : `${left} to read`) : `${percent}% · ${left} left`
+
+  const width = () => actions.current?.offsetWidth ?? 0
+  const behind = () => actions.current && getComputedStyle(actions.current).position === 'absolute'
+
+  const down = (e: React.PointerEvent) => {
+    justSwiped.current = false
+    if (e.pointerType === 'mouse' || !behind()) return
+    drag.current = { x: e.clientX, y: e.clientY, from: swiped ? -width() : 0, sliding: false, offset: 0 }
+  }
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current
+    const el = row.current
+    if (!d || !el) return
+    const dx = e.clientX - d.x
+    if (!d.sliding) {
+      const dy = e.clientY - d.y
+      if (Math.abs(dx) < SWIPE_START && Math.abs(dy) < SWIPE_START) return
+      // Mostly up or down: the page scrolls instead.
+      if (Math.abs(dy) > Math.abs(dx)) {
+        drag.current = null
+        return
+      }
+      d.sliding = true
+      el.setPointerCapture(e.pointerId)
+      el.style.transition = 'none'
+    }
+    d.offset = Math.min(0, Math.max(-width(), d.from + dx))
+    el.style.transform = `translateX(${d.offset}px)`
+  }
+  const up = () => {
+    const d = drag.current
+    const el = row.current
+    drag.current = null
+    if (!d?.sliding || !el) return
+    justSwiped.current = true
+    el.style.transition = ''
+    el.style.transform = ''
+    // Open if it's more than half way, a little less when it was opening.
+    onSwipe(d.offset < -width() * (d.from === 0 ? 0.35 : 0.65))
+  }
+
+  return (
+    <li className={`shelf-item${swiped ? ' is-swiped' : ''}`} data-book={book.id}>
+      <div className="shelf-actions" ref={actions}>
+        <button
+          type="button"
+          className="icon-button shelf-action"
+          aria-label={read ? `Mark ${book.title} as unread` : `Mark ${book.title} as read`}
+          title={read ? 'Mark as unread' : 'Mark as read'}
+          onClick={onMarkRead}
+        >
+          <Icon name={read ? 'unread' : 'check'} size={19} />
+          <span className="shelf-action-label">{read ? 'Unread' : 'Read'}</span>
+        </button>
+        <button
+          type="button"
+          className="icon-button shelf-action shelf-remove"
+          aria-label={`Remove ${book.title}`}
+          title="Remove"
+          onClick={onDelete}
+        >
+          <Icon name="trash" size={19} />
+          <span className="shelf-action-label">Remove</span>
+        </button>
+      </div>
+      <div
+        className="shelf-row"
+        ref={row}
+        onPointerDown={down}
+        onPointerMove={move}
+        onPointerUp={up}
+        onPointerCancel={up}
+        onClickCapture={(e) => {
+          if (!justSwiped.current && !swiped) return
+          // A swipe's last touch, or a tap on a swiped-open row (which closes it).
+          justSwiped.current = false
+          e.preventDefault()
+          e.stopPropagation()
+          if (swiped) onSwipe(false)
+        }}
+      >
+        <button type="button" className="shelf-open" onClick={onOpen}>
+          <Cover book={book} />
+          <span className="shelf-text">
+            <span className="shelf-title">{book.title}</span>
+            <span className="shelf-meta muted">
+              {format} · {book.wordCount.toLocaleString()} words · {status}
+            </span>
+            <span className="bar" aria-hidden="true">
+              <span style={{ width: `${percent}%` }} />
+            </span>
+          </span>
+        </button>
+      </div>
+    </li>
   )
 }
 

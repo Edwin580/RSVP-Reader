@@ -506,7 +506,7 @@ test('reading stats show the last year as squares, shaded by time read', async (
   await expect(cells.nth(52 * 7 + today - 1)).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('finished books move to their own Read section in the library', async ({ page }) => {
+test('finished books move to the Read shelf in the library', async ({ page }) => {
   await page.goto('./')
   await upload(page, 'finished.txt', 'A short book. It ends quickly.')
   const slider = page.getByRole('slider')
@@ -517,11 +517,64 @@ test('finished books move to their own Read section in the library', async ({ pa
   await upload(page, 'unread.txt', 'Another book, not read yet. It has a few more words in it.')
   await page.locator('.nav-button').click()
 
-  const reading = page.getByRole('region', { name: 'Your books' })
-  const read = page.getByRole('region', { name: 'Read' })
-  await expect(reading.locator('.shelf-title')).toHaveText(['unread'])
-  await expect(read.locator('.shelf-title')).toHaveText(['finished'])
-  await expect(read.locator('.shelf-meta')).toContainText('Finished')
+  const shelf = page.getByRole('tabpanel')
+  await expect(page.getByRole('tab', { name: /Reading/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(shelf.locator('.shelf-title')).toHaveText(['unread'])
+  await page.getByRole('tab', { name: /Read\b(?!ing)/ }).click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['finished'])
+  await expect(shelf.locator('.shelf-meta')).toContainText('Finished')
+
+  // The shelf picked is still showing after reading a book.
+  await shelf.locator('.shelf-open').click()
+  await page.locator('.nav-button').click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['finished'])
+})
+
+test('books can be marked as read and unread, by swiping on a phone', async ({ page }, testInfo) => {
+  await page.goto('./')
+  await upload(page, 'middle.txt', 'A book that is only started. It has a few words in it, and then a few more.')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await page.locator('.nav-button').click()
+  const shelf = page.getByRole('tabpanel')
+  const readTab = page.getByRole('tab', { name: /Read\b(?!ing)/ })
+  const readingTab = page.getByRole('tab', { name: /Reading/ })
+
+  const act = async (name: RegExp) => {
+    const button = shelf.getByRole('button', { name })
+    if (testInfo.project.name === 'phone') {
+      // Behind the row until it's swiped left.
+      const onTop = async () => {
+        const r = (await button.boundingBox())!
+        return page.evaluate(`!!document.elementFromPoint(${r.x + r.width / 2}, ${r.y + r.height / 2})?.closest('.shelf-action')`)
+      }
+      await page.waitForFunction('document.getAnimations().length === 0')
+      expect(await onTop()).toBe(false)
+      const box = (await shelf.locator('.shelf-row').boundingBox())!
+      const y = box.y + box.height / 2
+      const cdp = await page.context().newCDPSession(page)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width - 20, y }] })
+      for (let i = 1; i <= 8; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x + box.width - 20 - i * 25, y }] })
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await page.waitForFunction('document.getAnimations().length === 0')
+      expect(await onTop()).toBe(true)
+    }
+    await button.click()
+  }
+
+  await act(/as read/)
+  await expect(shelf).toContainText('Nothing in progress')
+  await expect(readTab).toContainText('1')
+  await readTab.click()
+  // It keeps its place.
+  await expect(shelf.locator('.shelf-meta')).toContainText('%')
+  await act(/as unread/)
+  await expect(shelf).toContainText('Books you finish')
+  await readingTab.click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['middle'])
+  await expect(shelf.locator('.shelf-meta')).toContainText('%')
 })
 
 test('old settings with both page guides off come back with both on', async ({ page }) => {

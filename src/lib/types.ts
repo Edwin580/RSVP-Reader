@@ -26,6 +26,8 @@ export interface BookMeta {
   addedAt: number
   /** Cover thumbnail as a data URL, for EPUBs with a cover image and PDFs (first page). */
   cover?: string
+  /** When the reader marked it as read, so it's on the Read shelf wherever they stopped. */
+  readAt?: number
 }
 
 export interface Progress {

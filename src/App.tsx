@@ -7,6 +7,7 @@ import { applyAppearance } from './lib/appearance'
 import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
+import { readToEnd } from './lib/shelf'
 import { EMPTY_STATS } from './lib/stats'
 import * as storage from './lib/storage'
 import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
@@ -57,8 +58,10 @@ export default function App() {
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
     setBookmarks(await storage.loadBookmarks(book.id))
-    // Resume from the start of the sentence so there's context to pick up from.
-    const startIndex = saved ? sentenceStart(book.words, saved.index) : 0
+    // Resume from the start of the sentence so there's context to pick up from,
+    // except in a finished book, which would then no longer be finished.
+    const finished = readToEnd({ wordCount: book.words.length }, saved)
+    const startIndex = !saved ? 0 : finished ? saved.index : sentenceStart(book.words, saved.index)
     navigate('forward', () => setOpen({ book, startIndex, lastReadAt: saved?.updatedAt }))
   }, [])
 
@@ -146,6 +149,13 @@ export default function App() {
     await refreshLibrary()
   }
 
+  const handleMarkRead = async (book: BookMeta, read: boolean) => {
+    await storage.setRead(book.id, read)
+    // A book read to the end goes back to the start, or it would stay on the Read shelf.
+    if (!read && readToEnd(book, progress[book.id])) await storage.saveProgress(book.id, 0)
+    await refreshLibrary()
+  }
+
   const bookId = open?.demo ? undefined : open?.book.id
   const handleProgress = useCallback(
     (index: number) => {
@@ -210,6 +220,7 @@ export default function App() {
         onUpload={handleUpload}
         onOpen={handleOpen}
         onDelete={handleDelete}
+        onMarkRead={handleMarkRead}
         onBackup={handleBackup}
         onRestore={handleRestore}
       />

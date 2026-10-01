@@ -22,17 +22,30 @@ export async function listBooks(): Promise<BookMeta[]> {
 
 export async function saveBook({ cover, ...book }: Book, fileName: string): Promise<BookMeta> {
   const library = await listBooks()
+  const existing = library.find((b) => b.id === book.id)
   const meta: BookMeta = {
     id: book.id,
     title: book.title,
     fileName,
     wordCount: book.words.length,
-    addedAt: library.find((b) => b.id === book.id)?.addedAt ?? Date.now(),
+    addedAt: existing?.addedAt ?? Date.now(),
     ...(cover && { cover }),
+    ...(existing?.readAt && { readAt: existing.readAt }),
   }
   await set(bookKey(book.id), book, store)
   await set(LIBRARY_KEY, [meta, ...library.filter((b) => b.id !== book.id)], store)
   return meta
+}
+
+/** Mark a book as read (or not), keeping the reading position. */
+export async function setRead(id: string, read: boolean): Promise<void> {
+  const library = await listBooks()
+  const marked = library.map((book) => {
+    if (book.id !== id) return book
+    const { readAt: _, ...rest } = book
+    return read ? { ...rest, readAt: Date.now() } : rest
+  })
+  await set(LIBRARY_KEY, marked, store)
 }
 
 export function loadBook(id: string): Promise<Book | undefined> {
