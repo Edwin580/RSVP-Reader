@@ -211,33 +211,31 @@ test('tapping anywhere plays and pauses, and dragging across the paused text sel
   await expect(page.locator('.word')).toHaveText('Alice')
 })
 
-test('the highlight and the line can each have their own colour', async ({ page }) => {
+test('one colour sets the focus letter, highlight and line; yellow highlights like a highlighter', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
   await page.getByRole('button', { name: 'More settings' }).click()
-  const highlight = page.getByRole('radiogroup', { name: 'Highlight color' })
-  const line = page.getByRole('radiogroup', { name: 'Line color' })
-  await expect(highlight.getByRole('radio', { name: /^Auto/ })).toHaveAttribute('aria-checked', 'true')
+  const color = page.getByRole('radiogroup', { name: 'Color' })
+  await expect(color.getByRole('radio')).toHaveCount(6)
+  await expect(color.getByRole('radio', { name: 'Red' })).toHaveAttribute('aria-checked', 'true')
 
-  await highlight.getByRole('radio', { name: 'Yellow' }).click()
-  await page.getByLabel('Line color: pick any color').fill('#123456')
-  await expect(line.getByRole('radio', { name: /^Auto/ })).toHaveAttribute('aria-checked', 'false')
+  await color.getByRole('radio', { name: 'Yellow' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
-  await expect(page.locator('.page-marker')).toHaveCSS('background-color', 'color(srgb 1 0.839216 0.0392157 / 0.38)')
-  await expect(page.locator('.page-pacer')).toHaveCSS('background-color', 'rgb(18, 52, 86)')
+  await expect(page.locator('.page-marker')).toHaveCSS('background-color', 'rgba(255, 214, 10, 0.42)')
+  await expect(page.locator('.page-pacer')).toHaveCSS('background-color', 'rgb(135, 87, 0)')
 
-  // Kept after a reload, and Auto goes back to the focus colour.
+  // Kept after a reload.
   await page.reload()
   await page.locator('.shelf-open').click()
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  await expect(highlight.getByRole('radio', { name: 'Yellow' })).toHaveAttribute('aria-checked', 'true')
-  await line.getByRole('radio', { name: /^Auto/ }).click()
+  await expect(color.getByRole('radio', { name: 'Yellow' })).toHaveAttribute('aria-checked', 'true')
+  await color.getByRole('radio', { name: 'Blue' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
-  await expect(page.locator('.page-pacer')).toHaveCSS('background-color', 'rgb(179, 38, 30)')
+  await expect(page.locator('.page-pacer')).toHaveCSS('background-color', 'rgb(31, 79, 180)')
 })
 
 test('old settings with both page guides off come back with both on', async ({ page }) => {

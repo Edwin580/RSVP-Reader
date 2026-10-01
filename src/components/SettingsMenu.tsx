@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, GuideColor, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -49,84 +49,19 @@ const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
   { value: 'sans', label: 'Sans' },
 ]
 
-/** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
+/**
+ * The one reading colour: focus letter, page highlight, pacer line and
+ * underline. Swatch colours; the CSS (data-accent) holds the light and dark
+ * shades used in the reader.
+ */
 const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
   { value: 'red', label: 'Red', color: '#b3261e' },
-  { value: 'blue', label: 'Blue', color: '#1f4fb4' },
+  { value: 'yellow', label: 'Yellow', color: '#f2c230' },
   { value: 'green', label: 'Green', color: '#1d6b43' },
+  { value: 'blue', label: 'Blue', color: '#1f4fb4' },
   { value: 'purple', label: 'Purple', color: '#6a3fb0' },
+  { value: 'pink', label: 'Pink', color: '#d0437f' },
 ]
-
-/** Highlighter shades: soft enough to read through once mixed into the page. */
-const HIGHLIGHT_PRESETS: { color: GuideColor; label: string }[] = [
-  { color: '#ffd60a', label: 'Yellow' },
-  { color: '#4cd07d', label: 'Green' },
-  { color: '#5aa9ff', label: 'Blue' },
-  { color: '#ff7eb6', label: 'Pink' },
-]
-
-/** Ink shades that show as a thin line on light and dark pages. */
-const LINE_PRESETS: { color: GuideColor; label: string }[] = [
-  { color: '#2f6fdf', label: 'Blue' },
-  { color: '#23935a', label: 'Green' },
-  { color: '#e8710a', label: 'Orange' },
-  { color: '#d6336c', label: 'Pink' },
-]
-
-/** Auto (the focus colour), a few presets, and any colour from the system picker. */
-function ColorChoice({
-  label,
-  presets,
-  value,
-  onChange,
-}: {
-  label: string
-  presets: { color: GuideColor; label: string }[]
-  value: GuideColor
-  onChange: (value: GuideColor) => void
-}) {
-  const custom = value !== 'auto' && !presets.some((p) => p.color === value)
-  return (
-    <div className="swatches" role="radiogroup" aria-label={label}>
-      <button
-        type="button"
-        role="radio"
-        className="swatch swatch-auto"
-        aria-checked={value === 'auto'}
-        aria-label="Auto, matches the focus color"
-        title="Auto (focus color)"
-        onClick={() => onChange('auto')}
-      >
-        A
-      </button>
-      {presets.map((p) => (
-        <button
-          key={p.color}
-          type="button"
-          role="radio"
-          className="swatch"
-          aria-checked={value === p.color}
-          aria-label={p.label}
-          title={p.label}
-          style={{ '--swatch': p.color } as React.CSSProperties}
-          onClick={() => onChange(p.color)}
-        />
-      ))}
-      <label
-        className={`swatch swatch-custom${custom ? ' is-custom' : ''}`}
-        title="Pick any color"
-        style={custom ? ({ '--swatch': value } as React.CSSProperties) : undefined}
-      >
-        <input
-          type="color"
-          aria-label={`${label}: pick any color`}
-          value={value === 'auto' ? presets[0].color : value}
-          onChange={(e) => onChange(e.target.value.toLowerCase() as GuideColor)}
-        />
-      </label>
-    </div>
-  )
-}
 
 const SHORTCUTS: [string, string][] = [
   ['Space', 'Play / pause'],
@@ -273,9 +208,9 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
               />
             </div>
 
-            <div className="setting">
-              <span className="setting-name">Focus color</span>
-              <div className="swatches" role="radiogroup" aria-label="Focus color">
+            <div className="setting setting-stack">
+              <span className="setting-name">Color</span>
+              <div className="swatches" role="radiogroup" aria-label="Color">
                 {ACCENT_OPTIONS.map((a) => (
                   <button
                     key={a.value}
@@ -290,26 +225,6 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
                   />
                 ))}
               </div>
-            </div>
-
-            {settings.mode === 'page' && (
-              <div className="setting setting-stack">
-                <span className="setting-name">Highlight color</span>
-                <ColorChoice
-                  label="Highlight color"
-                  presets={HIGHLIGHT_PRESETS}
-                  value={settings.highlightColor}
-                  onChange={(highlightColor) => set({ highlightColor })}
-                />
-              </div>
-            )}
-
-            <div className="setting setting-stack">
-              <span className="setting-name">Line color</span>
-              <ColorChoice label="Line color" presets={LINE_PRESETS} value={settings.lineColor} onChange={(lineColor) => set({ lineColor })} />
-              <span className="hint">
-                {settings.mode === 'page' ? 'The pacer line under the text' : 'The underline on the current word when paused'}
-              </span>
             </div>
 
             <dl className="shortcuts">

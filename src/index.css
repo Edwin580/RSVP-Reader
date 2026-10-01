@@ -36,6 +36,8 @@
   --accent-l: #b3261e;
   --accent-d: #ff6f5e;
   --accent: var(--accent-l);
+  /* The page highlight: a tint of the colour, or a highlighter shade. */
+  --mark: color-mix(in srgb, var(--accent) 18%, transparent);
   /* One corner for controls and cards, a larger one only for sheets that
      rise from the bottom of a phone. */
   --radius: 4px;
@@ -110,6 +112,10 @@
 :root[data-accent='blue'] { --accent-l: #1f4fb4; --accent-d: #7ea2ff; }
 :root[data-accent='green'] { --accent-l: #1d6b43; --accent-d: #5fc48e; }
 :root[data-accent='purple'] { --accent-l: #6a3fb0; --accent-d: #b595f5; }
+:root[data-accent='pink'] { --accent-l: #b3306b; --accent-d: #ff7eb6; }
+/* Yellow: amber ink so the focus letter and line stay readable on paper,
+   and a true highlighter yellow for the page highlight. */
+:root[data-accent='yellow'] { --accent-l: #875700; --accent-d: #f2c230; --mark: color-mix(in srgb, #ffd60a 42%, transparent); }
 :root[data-font='sans'] { --reading-font: var(--font); }
 
 * { box-sizing: border-box; }
@@ -580,7 +586,7 @@ h1, h2, p { margin: 0; }
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
-.glance .current { text-decoration: underline 2px var(--line, var(--accent)); text-underline-offset: 0.25em; }
+.glance .current { text-decoration: underline 2px var(--accent); text-underline-offset: 0.25em; }
 .glance .is-heading, .context .is-heading { font-weight: 650; color: var(--text); }
 .glance .ahead { color: var(--text-2); }
 /* "Previously…" when coming back to a book after a while. */
@@ -612,7 +618,7 @@ h1, h2, p { margin: 0; }
 
 .context { width: 100%; max-width: 36rem; margin: 0 auto; min-height: 0; }
 .context p { color: var(--text-2); font-family: var(--reading-font); font-size: 1.05rem; line-height: 1.65; overflow-wrap: anywhere; animation: fade-in 0.3s ease; }
-.context .current { color: var(--text); text-decoration: underline 2px var(--line, var(--accent)); text-underline-offset: 0.25em; }
+.context .current { color: var(--text); text-decoration: underline 2px var(--accent); text-underline-offset: 0.25em; }
 /* Paused, the text can be selected, so the system's Look Up, Copy and
    Translate work on it (a long press on phones). Never while reading. */
 .can-select .context p,
@@ -856,8 +862,7 @@ h1, h2, p { margin: 0; }
   top: 0;
   left: 0;
   border-radius: 2px;
-  /* A colour of your own (Aa › More settings) sets --highlight-fill. */
-  background: var(--highlight-fill, color-mix(in srgb, var(--accent) 18%, transparent));
+  background: var(--mark);
   margin: 0 -3px;
   padding: 0 3px;
   box-sizing: content-box;
@@ -871,7 +876,7 @@ h1, h2, p { margin: 0; }
   top: 0;
   left: 0;
   height: 2px;
-  background: var(--line, var(--accent));
+  background: var(--accent);
   pointer-events: none;
   opacity: 0;
   will-change: transform, width;
@@ -958,25 +963,7 @@ h1, h2, p { margin: 0; }
   background: var(--swatch);
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 2px var(--separator);
 }
-.swatch-auto {
-  display: grid;
-  place-items: center;
-  background: var(--fill);
-  color: var(--accent);
-  font-size: 0.875rem;
-  font-weight: 700;
-}
-/* Any colour: a colour wheel until one is picked, then that colour. */
-.swatch-custom {
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-  background: conic-gradient(#ff5f5f, #ffd60a, #4cd07d, #5aa9ff, #b06cff, #ff5f5f);
-}
-.swatch-custom.is-custom { background: var(--swatch); }
-.swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
-.swatch-custom:has(input:focus-visible) { outline: 2px solid var(--text); outline-offset: 4px; }
-.swatch[aria-checked='true'], .swatch-custom.is-custom { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.swatch[aria-checked='true'] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
 .shortcuts { display: grid; gap: 0.3rem; margin: 0; padding-top: 0.9rem; border-top: 1px solid var(--separator); }
 .shortcuts div { display: flex; justify-content: space-between; align-items: center; }
 .shortcuts dd { margin: 0; font-size: 0.875rem; color: var(--text-2); }

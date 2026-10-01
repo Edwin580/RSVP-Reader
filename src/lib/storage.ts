@@ -1,5 +1,4 @@
 import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
-import { guideColor, type GuideColor } from './guideColor'
 import { storageName } from './preview'
 import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
@@ -136,7 +135,7 @@ export interface Settings {
   theme: Theme
   /** Typeface for the book's text; the controls always use the system font. */
   font: ReadingFont
-  /** Colour of the focus letter, page marker and pacer. */
+  /** The one colour for the focus letter, the page highlight, the pacer line and the underline. */
   accent: Accent
   /**
    * Page mode: how the current word is marked. 'highlight' is a soft box on
@@ -144,10 +143,6 @@ export interface Settings {
    * There's always one, so you never lose your place on the page.
    */
   pageGuide: PageGuide
-  /** Page mode's highlight: 'auto' follows the focus colour, or a '#rrggbb' of your own. */
-  highlightColor: GuideColor
-  /** The pacer line and current-word underline: 'auto' follows the focus colour, or a '#rrggbb'. */
-  lineColor: GuideColor
   /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
   playControl: PlayControl
 }
@@ -155,14 +150,13 @@ export interface Settings {
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
-export type Accent = 'red' | 'blue' | 'green' | 'purple'
+export type Accent = 'red' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink'
 export type PlayControl = 'tap' | 'hold'
 export type PageGuide = 'highlight' | 'pacer' | 'both'
-export type { GuideColor }
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
-export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+export const ACCENTS: Accent[] = ['red', 'yellow', 'green', 'blue', 'purple', 'pink']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both']
 
@@ -175,8 +169,6 @@ export const DEFAULT_SETTINGS: Settings = {
   font: 'serif',
   accent: 'red',
   pageGuide: 'both',
-  highlightColor: 'auto',
-  lineColor: 'auto',
   playControl: 'tap',
 }
 
@@ -197,8 +189,6 @@ export function loadSettings(): Settings {
       font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
-      highlightColor: guideColor(saved.highlightColor),
-      lineColor: guideColor(saved.lineColor),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {
