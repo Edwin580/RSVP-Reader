@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, HighlightStyle, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -42,11 +42,6 @@ const FOCUS_OPTIONS: { value: LineFocus; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'one', label: '1 line' },
   { value: 'three', label: '3 lines' },
-]
-
-const HIGHLIGHT_STYLE_OPTIONS: { value: HighlightStyle; label: string; hint: string }[] = [
-  { value: 'word', label: 'Word', hint: 'Sits on the word being read' },
-  { value: 'sweep', label: 'Sweep', hint: 'Fills the line up to the word, at reading pace' },
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -139,8 +134,6 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
     return () => window.removeEventListener('keydown', esc)
   }, [onClose])
 
-  // The highlight's own settings, only when there's a highlight on the page.
-  const showHighlight = settings.mode === 'page' && (settings.pageGuide === 'highlight' || settings.pageGuide === 'both')
   const set = (change: Partial<Settings>) => onSettings({ ...settings, ...change })
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
@@ -252,19 +245,6 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
                 ))}
               </div>
             </div>
-
-            {showHighlight && (
-              <div className="setting setting-stack">
-                <span className="setting-name">Highlight</span>
-                <Choice
-                  label="Highlight style"
-                  options={HIGHLIGHT_STYLE_OPTIONS}
-                  value={settings.highlightStyle}
-                  onChange={(highlightStyle) => set({ highlightStyle })}
-                />
-                <span className="hint">{HIGHLIGHT_STYLE_OPTIONS.find((h) => h.value === settings.highlightStyle)?.hint}</span>
-              </div>
-            )}
 
             <dl className="shortcuts">
               {SHORTCUTS.map(([key, action]) => (
