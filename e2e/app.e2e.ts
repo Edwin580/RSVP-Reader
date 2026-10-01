@@ -326,6 +326,26 @@ test('the highlight sweeps along the whole line and grows like the underline', a
   expect(samples.some((s) => s.midWord)).toBe(true)
 })
 
+test('pinching never zooms the page', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'touch only')
+  await page.goto('./')
+  const cdp = await page.context().newCDPSession(page)
+  const pinch = async (scaleFactor: number) => {
+    await cdp.send('Input.synthesizePinchGesture', { x: 200, y: 300, scaleFactor, relativeSpeed: 800 })
+    await page.waitForTimeout(300)
+  }
+  const scale = () => page.evaluate('visualViewport.scale')
+  // The library, both ways.
+  await pinch(2)
+  expect(await scale()).toBe(1)
+  await pinch(0.5)
+  expect(await scale()).toBe(1)
+  // And while reading.
+  await upload(page)
+  await pinch(2)
+  expect(await scale()).toBe(1)
+})
+
 test('the focus color can be any colour', async ({ page }) => {
   await page.goto('./')
   await upload(page)

@@ -114,6 +114,8 @@
 
 * { box-sizing: border-box; }
 /* The reader fills the screen: don't let a swipe rubber-band the whole page. */
+/* Scrolling, but no pinch or double-tap zoom anywhere (see also main.tsx). */
+html { touch-action: pan-x pan-y; }
 html:has(.reader), body:has(.reader) { overscroll-behavior: none; }
 body { margin: 0; background: var(--bg); }
 button, input, select { font: inherit; color: inherit; }
