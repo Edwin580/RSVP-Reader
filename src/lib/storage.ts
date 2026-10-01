@@ -137,6 +137,8 @@ export interface Settings {
   font: ReadingFont
   /** Colour of the focus letter, page marker and pacer. */
   accent: Accent
+  /** The colour picked for accent 'custom', as '#rrggbb'. */
+  customColor: string
   /**
    * Page mode: how the current word is marked. 'highlight' is a soft box on
    * the word, 'pacer' a thin line sweeping along under the line, 'both' both,
@@ -155,14 +157,14 @@ export interface Settings {
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
-export type Accent = 'red' | 'blue' | 'green' | 'purple'
+export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
 export type PlayControl = 'tap' | 'hold'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
-export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
+export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
@@ -175,10 +177,14 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   font: 'serif',
   accent: 'red',
+  customColor: '#c2410c',
   pageGuide: 'both',
   lineFocus: 'off',
   playControl: 'tap',
 }
+
+/** A plain '#rrggbb' colour, the only kind the colour picker gives and the page accepts. */
+export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
 
 const oneOf = <T,>(options: readonly T[], value: unknown, fallback: T): T =>
   options.includes(value as T) ? (value as T) : fallback
@@ -196,6 +202,7 @@ export function loadSettings(): Settings {
       // sans saved from then moves to the new serif; a later pick sticks.
       font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
+      customColor: isHexColor(saved.customColor) ? saved.customColor.toLowerCase() : DEFAULT_SETTINGS.customColor,
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
       lineFocus: oneOf(LINE_FOCUSES, saved.lineFocus, DEFAULT_SETTINGS.lineFocus),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
