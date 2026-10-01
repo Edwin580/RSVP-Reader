@@ -46,7 +46,9 @@ The parts that deserve a careful look: tricky logic, trade-offs, behavior change
 What was run and what it showed: unit tests added or changed, manual or browser checks (devices, modes, formats), and anything not tested.
 ```
 
-- Screenshots or short tables are welcome inside these sections when they help, especially for UI changes.
+- Keep it short: a few plain sentences per section. Use lists, bold, tables and code formatting only where they make something clearer, not by default.
+- Write in a neutral voice ("Pages are numbered", "The test checks…"), not "I".
+- Screenshots are welcome when the change is visible, especially for UI changes.
 - Do not include a Claude session link (`claude.ai/code/session_…`) in PR titles or descriptions.
 - Keep titles short and descriptive.
 
