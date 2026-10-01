@@ -581,6 +581,7 @@ export function Reader({
             wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
+            sweep={settings.highlightStyle === 'sweep'}
             onSeek={seek}
             onDefine={openDefinition}
             onToggle={holdToRead ? noop : toggle}

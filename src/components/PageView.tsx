@@ -20,6 +20,8 @@ interface Props {
   /** Extra time the reader adds to the first word of a line, and of a new page. */
   lineReturnMs: number
   turnMs: number
+  /** The highlight sweeps along the line like the pacer, instead of sitting on the word. */
+  sweep?: boolean
   onSeek: (index: number) => void
   /** Double-tap on a word: look it up. */
   onDefine?: (index: number) => void
@@ -67,6 +69,7 @@ export function PageView({
   wordMs,
   lineReturnMs,
   turnMs,
+  sweep = false,
   onSeek,
   onDefine,
   onToggle,
@@ -218,7 +221,7 @@ export function PageView({
   )
 
   // Move the highlight and pacer to the current word.
-  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number } | null>(null)
+  const prev = useRef<{ index: number; top: number; start: number; lineLeft: number; sweep: boolean } | null>(null)
   useLayoutEffect(() => {
     const m = marker.current
     const p = pacer.current
@@ -239,35 +242,44 @@ export function PageView({
     const newLine = !newPage && before.top !== top
     // Anything but reading on to the next word on the same line restarts the
     // pacer here. Staying on the same word (pausing, say) keeps it as it is.
-    const restart = newPage || newLine || (before.index !== index - 1 && before.index !== index)
+    const restart = newPage || newLine || before.sweep !== sweep || (before.index !== index - 1 && before.index !== index)
     const lineLeft = restart ? left : before.lineLeft
-    prev.current = { index, top, start: page.start, lineLeft }
+    prev.current = { index, top, start: page.start, lineLeft, sweep }
     // How long this word is actually on screen, including the reader's extra beats.
     const shownMs = Math.max(wordMs + (newPage && before ? turnMs : newLine ? lineReturnMs : 0), 16)
 
-    // Highlight: a soft box that eases from word to word.
-    const glide = Math.min(wordMs * 0.5, 160)
-    m.style.transition = newPage || newLine ? 'none' : `transform ${glide}ms cubic-bezier(0.4, 0, 0.2, 1), width ${glide}ms cubic-bezier(0.4, 0, 0.2, 1)`
-    m.style.transform = `translate(${left}px, ${top}px)`
-    m.style.width = `${width}px`
-    m.style.height = `${height}px`
-
-    // Pacer: a line under the text whose end moves steadily through the
-    // current word over exactly the time it's shown, so it never stops
-    // while playing. It fills the line from where reading started on it.
+    // Pacer, and the highlight when it sweeps: a bar whose end moves steadily
+    // through the current word over exactly the time it's shown, so it never
+    // stops while playing. It fills the line from where reading started on it.
     const target = left + width - lineLeft
-    if (restart) {
-      p.style.transition = 'none'
-      p.style.transform = `translate(${lineLeft}px, ${top + height - 2}px)`
-      p.style.width = playing ? '0px' : `${target}px`
-      void p.offsetWidth
+    const sweepTo = (el: HTMLElement, y: number, h: number) => {
+      if (restart) {
+        el.style.transition = 'none'
+        el.style.transform = `translate(${lineLeft}px, ${y}px)`
+        el.style.width = playing ? '0px' : `${target}px`
+        void el.offsetWidth
+      }
+      el.style.height = `${h}px`
+      if (playing) {
+        el.style.transition = `width ${shownMs}ms linear`
+        el.style.width = `${target}px`
+      } else if (!restart) {
+        el.style.transition = 'none'
+        el.style.width = `${target}px`
+      }
     }
-    if (playing) {
-      p.style.transition = `width ${shownMs}ms linear`
-      p.style.width = `${target}px`
-    } else if (!restart) {
-      p.style.transition = 'none'
-      p.style.width = `${target}px`
+    sweepTo(p, top + height - 2, 2)
+
+    if (sweep) {
+      // Highlight: like a highlighter pen drawn along the line at reading pace.
+      sweepTo(m, top, height)
+    } else {
+      // Highlight: a soft box that eases from word to word.
+      const glide = Math.min(wordMs * 0.5, 160)
+      m.style.transition = newPage || newLine ? 'none' : `transform ${glide}ms cubic-bezier(0.4, 0, 0.2, 1), width ${glide}ms cubic-bezier(0.4, 0, 0.2, 1)`
+      m.style.transform = `translate(${left}px, ${top}px)`
+      m.style.width = `${width}px`
+      m.style.height = `${height}px`
     }
 
     if (newPage) {
@@ -276,12 +288,15 @@ export function PageView({
         el.style.opacity = '0'
         void el.offsetWidth
       }
-      m.style.transition = `opacity 180ms ease-out ${TURN_MS - 60}ms`
-      p.style.transition = `opacity 180ms ease-out ${TURN_MS - 60}ms, width ${Math.max(shownMs - (TURN_MS - 60), 16)}ms linear ${TURN_MS - 60}ms`
+      const delay = TURN_MS - 60
+      const fade = `opacity 180ms ease-out ${delay}ms`
+      const grow = `${fade}, width ${Math.max(shownMs - delay, 16)}ms linear ${delay}ms`
+      m.style.transition = sweep ? grow : fade
+      p.style.transition = grow
     }
     m.style.opacity = '1'
     p.style.opacity = '1'
-  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing])
+  }, [index, page.start, measuring, wordMs, lineReturnMs, turnMs, content, playing, sweep])
 
   return (
     <div

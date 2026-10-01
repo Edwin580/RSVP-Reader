@@ -239,6 +239,37 @@ test('the highlight and the line can each have their own colour', async ({ page 
   await expect(page.locator('.page-pacer')).toHaveCSS('background-color', 'rgb(179, 38, 30)')
 })
 
+test('the highlight can sweep along the line instead of sitting on the word', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  const style = page.getByRole('radiogroup', { name: 'Highlight style' })
+  await expect(style.getByRole('radio', { name: 'Word' })).toHaveAttribute('aria-checked', 'true')
+  await style.getByRole('radio', { name: 'Sweep' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+
+  // From the start of the line to the end of the current word ("rabbit").
+  const marker = page.locator('.page-marker')
+  const first = page.locator('.page-text [data-i="2"]')
+  const current = page.locator('.page-text [data-i="3"]')
+  await expect(first).toHaveText('The')
+  await expect(current).toHaveText('rabbit')
+  await expect
+    .poll(async () => {
+      const [m, a, b] = await Promise.all([marker.boundingBox(), first.boundingBox(), current.boundingBox()])
+      return Math.round(m!.x + 3 - a!.x) === 0 && Math.abs(m!.x + m!.width - 3 - (b!.x + b!.width)) < 2
+    })
+    .toBe(true)
+
+  // Hidden with the guide set to the line only.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'Line' }).click()
+  await expect(style).toBeHidden()
+})
+
 test('old settings with both page guides off come back with both on', async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem('migrated')) {
