@@ -19,8 +19,10 @@ const SECTIONS: Section[] = [
     paragraphs: [
       'Before you start',
       'This is a short sample so you can see how reading works here. Press play, or tap anywhere on the screen, and the text will appear one word at a time, always in the same spot, so your eyes can stay still.',
-      'Tap again to pause, and the words around you appear so you can find your place. Missed something? Hold anywhere to glance back at the last two sentences, and let go to carry on. Swipe left or right to move a sentence at a time. While paused, long-press any word to look it up. Use the plus and minus buttons to change your speed. Rather read only while your thumb is down? In the Aa menu, set Play with to Hold, and reading pauses as soon as you let go.',
-      'Open the Aa menu to switch to page mode, where the whole page stays in view and a marker follows along as you read. You can also search for any word or phrase. Try searching for rabbit.',
+      'Tap again to pause, and the words around you appear so you can find your place. Missed something? Hold anywhere to glance back at the last two sentences, and let go to carry on. Swipe left or right to move a sentence at a time, and use the plus and minus buttons to change your speed.',
+      'While paused, long-press any word to look it up with your device’s own dictionary, or double-tap it to select it. Rather read only while your thumb is down? In the Aa menu, under More settings, set Play with to Hold, and reading pauses as soon as you let go.',
+      'Prefer whole pages? Choose Page in the Aa menu. A soft highlight and a thin line sweep along each line at your speed, and the page turns by itself; swipe to turn it yourself. Guide picks the highlight, the line, both or neither, and Line focus blacks out the lines around the one you are reading.',
+      'Search finds any word or phrase: try rabbit. Open it before typing to see the people and places you have met so far. The bookmark button saves your spot, and tapping the time left under the progress bar sets up a timed reading session.',
       'When you are ready, add a book of your own from the library. It stays on your device.',
     ],
   },
