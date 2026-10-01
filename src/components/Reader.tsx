@@ -610,7 +610,7 @@ export function Reader({
               e.preventDefault()
             }
           }}
-          className={`stage stage-page${settings.pageGuide === 'pacer' ? ' no-highlight' : ''}${settings.pageGuide === 'highlight' ? ' no-pacer' : ''}`}
+          className={`stage stage-page${settings.pageGuide === 'pacer' || settings.pageGuide === 'none' ? ' no-highlight' : ''}${settings.pageGuide === 'highlight' || settings.pageGuide === 'none' ? ' no-pacer' : ''}`}
         >
           <PageView
             words={words}
@@ -624,6 +624,7 @@ export function Reader({
             wordMs={(60000 / wpm) * (timeline.weights[index] ?? 1)}
             lineReturnMs={LINE_RETURN * (60000 / wpm)}
             turnMs={PAGE_TURN_MS}
+            focusLines={settings.lineFocus === 'one' ? 1 : settings.lineFocus === 'three' ? 3 : 0}
             onSeek={seek}
             onSelectWord={selectWord}
             onToggle={holdToRead ? noop : toggle}

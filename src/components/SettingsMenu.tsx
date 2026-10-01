@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -35,6 +35,13 @@ const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
   { value: 'highlight', label: 'Highlight' },
   { value: 'pacer', label: 'Line' },
   { value: 'both', label: 'Both' },
+  { value: 'none', label: 'None' },
+]
+
+const FOCUS_OPTIONS: { value: LineFocus; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'one', label: '1 line' },
+  { value: 'three', label: '3 lines' },
 ]
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -152,6 +159,18 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           <div className="setting setting-stack">
             <span className="setting-name">Guide</span>
             <Choice label="Guide" options={GUIDE_OPTIONS} value={settings.pageGuide} onChange={(pageGuide) => set({ pageGuide })} />
+          </div>
+        )}
+
+        {settings.mode === 'page' && (
+          <div className="setting setting-stack">
+            <span className="setting-name">Line focus</span>
+            <Choice label="Line focus" options={FOCUS_OPTIONS} value={settings.lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
+            <span className="hint">
+              {settings.lineFocus === 'off'
+                ? 'Black out the lines around the one you’re reading'
+                : 'The rest of the page shows faintly when you pause'}
+            </span>
           </div>
         )}
 

@@ -139,10 +139,15 @@ export interface Settings {
   accent: Accent
   /**
    * Page mode: how the current word is marked. 'highlight' is a soft box on
-   * the word, 'pacer' a thin line sweeping along under the line, 'both' both.
-   * There's always one, so you never lose your place on the page.
+   * the word, 'pacer' a thin line sweeping along under the line, 'both' both,
+   * 'none' neither, for reading the page as it is.
    */
   pageGuide: PageGuide
+  /**
+   * Page mode: black out all but the line being read ('one'), or it and the
+   * lines either side ('three').
+   */
+  lineFocus: LineFocus
   /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
   playControl: PlayControl
 }
@@ -152,13 +157,15 @@ export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple'
 export type PlayControl = 'tap' | 'hold'
-export type PageGuide = 'highlight' | 'pacer' | 'both'
+export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
+export type LineFocus = 'off' | 'one' | 'three'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
-export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both']
+export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
+export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
 
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
@@ -169,6 +176,7 @@ export const DEFAULT_SETTINGS: Settings = {
   font: 'serif',
   accent: 'red',
   pageGuide: 'both',
+  lineFocus: 'off',
   playControl: 'tap',
 }
 
@@ -189,6 +197,7 @@ export function loadSettings(): Settings {
       font: oneOf(FONTS, saved.v >= 2 || saved.font !== 'sans' ? saved.font : undefined, DEFAULT_SETTINGS.font),
       accent: oneOf(ACCENTS, saved.accent, DEFAULT_SETTINGS.accent),
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
+      lineFocus: oneOf(LINE_FOCUSES, saved.lineFocus, DEFAULT_SETTINGS.lineFocus),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
     }
   } catch {

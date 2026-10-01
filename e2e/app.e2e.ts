@@ -91,7 +91,58 @@ test('unsupported files show a clear error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Chapter reads EPUB, PDF, TXT and Markdown files')
 })
 
-test('page mode guide: highlight, line or both, never neither', async ({ page }) => {
+test('page mode guide can be none, for reading the page as it is', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'None' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.page-marker')).toBeHidden()
+  await expect(page.locator('.page-pacer')).toBeHidden()
+})
+
+test('line focus blacks out the other lines while reading and shows them faintly when paused', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'long.txt', Array.from({ length: 300 }, (_, i) => `word${i}`).join(' '))
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page' }).click()
+  const focus = page.getByRole('radiogroup', { name: 'Line focus' })
+  await expect(focus.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true')
+  await focus.getByRole('radio', { name: '1 line' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  for (let i = 0; i < 20; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+
+  // Visible: exactly the words on the current word's line.
+  const lineOf = (i: number) => `document.querySelector('.page-text [data-i="${i}"]').offsetTop`
+  const check = `(() => {
+    const top = ${lineOf(20)}
+    return [...document.querySelectorAll('.page-text [data-i]')].every((s) => s.classList.contains('is-dim') === (s.offsetTop !== top))
+  })()`
+  await expect.poll(() => page.evaluate(check)).toBe(true)
+  // The last word on the page, well away from the current line.
+  const opacity = () => page.evaluate(`Number(getComputedStyle([...document.querySelectorAll('.page-text [data-i]')].at(-1)).opacity)`)
+  await expect.poll(opacity).toBeCloseTo(0.3, 1)
+  await page.keyboard.press('Space')
+  await expect.poll(opacity).toBeCloseTo(0.06, 1)
+  await page.keyboard.press('Space')
+
+  // Three lines: the line before and after stay clear too.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await focus.getByRole('radio', { name: '3 lines' }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  const lines = `[...new Set([...document.querySelectorAll('.page-text [data-i]:not(.is-dim)')].map((s) => s.offsetTop))].length`
+  await expect.poll(() => page.evaluate(lines)).toBe(3)
+
+  // Off: nothing dimmed.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+})
+
+test('page mode guide: highlight, line or both', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
