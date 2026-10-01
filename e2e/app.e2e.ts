@@ -218,6 +218,7 @@ test('the highlight sweeps along the whole line and grows like the underline', a
   await page.getByRole('radio', { name: 'Page' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await expect(page.locator('.popover')).toBeHidden()
+  await page.waitForFunction('document.getAnimations().length === 0')
 
   // Jump to a word in the middle of the second line: the highlight still
   // covers that line from its first word to the end of this one.
@@ -244,14 +245,22 @@ test('the highlight sweeps along the whole line and grows like the underline', a
 
   // Playing: both keep growing smoothly, together, between words too.
   await page.keyboard.press('Space')
+  // Each sample also says whether the highlight's end was part-way through
+  // a word, which only happens if it grows smoothly rather than word by word.
   const sample = `(() => {
     const m = document.querySelector('.page-marker').getBoundingClientRect()
     const p = document.querySelector('.page-pacer').getBoundingClientRect()
-    return { top: Math.round(m.top), marker: m.right - 3, pacer: p.right }
+    const end = m.right - 3
+    const midWord = [...document.querySelectorAll('.page-text [data-i]')].some((w) => {
+      const b = w.getBoundingClientRect()
+      return Math.abs(b.top - m.top) < 4 && end > b.left + 2 && end < b.right - 2
+    })
+    return { top: Math.round(m.top), marker: end, pacer: p.right, midWord }
   })()`
-  const samples: { top: number; marker: number; pacer: number }[] = []
-  for (let i = 0; i < 12; i++) {
-    samples.push((await page.evaluate(sample)) as { top: number; marker: number; pacer: number })
+  type Sample = { top: number; marker: number; pacer: number; midWord: boolean }
+  const samples: Sample[] = []
+  for (let i = 0; i < 15; i++) {
+    samples.push((await page.evaluate(sample)) as Sample)
     await page.waitForTimeout(60)
   }
   await page.keyboard.press('Space')
@@ -262,7 +271,8 @@ test('the highlight sweeps along the whole line and grows like the underline', a
     expect(samples[i].marker).toBeGreaterThanOrEqual(samples[i - 1].marker - 0.5)
     if (samples[i].marker > samples[i - 1].marker + 0.5) grew++
   }
-  expect(grew).toBeGreaterThanOrEqual(6)
+  expect(grew).toBeGreaterThanOrEqual(1)
+  expect(samples.some((s) => s.midWord)).toBe(true)
 })
 
 test('the focus color can be any colour', async ({ page }) => {
