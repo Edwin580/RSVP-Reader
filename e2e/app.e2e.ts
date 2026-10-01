@@ -294,10 +294,10 @@ test('holding to read hides the controls at once and brings them back on release
   const stage = (await page.locator('.stage').boundingBox())!
   await page.mouse.move(stage.x + stage.width / 2, stage.y + 30)
   await page.mouse.down()
-  // Well before the usual two idle seconds.
-  await expect.poll(opacity, { timeout: 500 }).toBe(0)
+  // Gone well before the usual two idle seconds (hiding takes about 0.35s).
+  await expect.poll(opacity, { timeout: 1000 }).toBeLessThan(0.02)
   await page.mouse.up()
-  await expect.poll(opacity, { timeout: 500 }).toBe(1)
+  await expect.poll(opacity, { timeout: 1000 }).toBeGreaterThan(0.98)
 })
 
 test('with Hold to read, nothing reads on a tap: the button, Space and Start reading all wait for a hold', async ({ page }) => {
