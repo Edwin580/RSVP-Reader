@@ -465,6 +465,10 @@ test('the status bar dims with sheets and follows a theme picked in one', async 
   await upload(page)
   const bar = () => page.evaluate(`[...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content).join(' ')`)
   await expect.poll(bar).toBe('#fbfaf7')
+  // Safari colours its top bar from a fixed layer at the top of the page and
+  // keeps that colour, so the reader must never be one (it stuck the bar in
+  // the theme the book was opened with).
+  expect(await page.evaluate(`getComputedStyle(document.querySelector('.reader')).position`)).not.toBe('fixed')
 
   // The Aa sheet dims the page, and the status bar with it.
   await page.getByRole('button', { name: 'Reading settings', exact: true }).tap()
