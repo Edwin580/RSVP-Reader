@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { upload } from './helpers.ts'
+import { STORY, upload } from './helpers.ts'
 
 const currentWord = (page: Page) => page.locator('.word').textContent()
 
@@ -522,7 +522,7 @@ test('finished books move to the Read shelf in the library', async ({ page }) =>
   await expect(shelf.locator('.shelf-title')).toHaveText(['unread'])
   await page.getByRole('tab', { name: /Read\b(?!ing)/ }).click()
   await expect(shelf.locator('.shelf-title')).toHaveText(['finished'])
-  await expect(shelf.locator('.shelf-meta')).toContainText('Finished')
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
 
   // The shelf picked is still showing after reading a book.
   await shelf.locator('.shelf-open').click()
@@ -548,6 +548,8 @@ test('books can be marked as read and unread, by swiping on a phone', async ({ p
         const r = (await button.boundingBox())!
         return page.evaluate(`!!document.elementFromPoint(${r.x + r.width / 2}, ${r.y + r.height / 2})?.closest('.shelf-action')`)
       }
+      // Once back from the book: touches go to the page transition until it ends.
+      await expect(shelf.locator('.shelf-row')).toBeVisible()
       await page.waitForFunction('document.getAnimations().length === 0')
       expect(await onTop()).toBe(false)
       const box = (await shelf.locator('.shelf-row').boundingBox())!
@@ -558,8 +560,7 @@ test('books can be marked as read and unread, by swiping on a phone', async ({ p
         await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x + box.width - 20 - i * 25, y }] })
       }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-      await page.waitForFunction('document.getAnimations().length === 0')
-      expect(await onTop()).toBe(true)
+      await expect.poll(onTop).toBe(true)
     }
     await button.click()
   }
@@ -568,13 +569,83 @@ test('books can be marked as read and unread, by swiping on a phone', async ({ p
   await expect(shelf).toContainText('Nothing in progress')
   await expect(readTab).toContainText('1')
   await readTab.click()
-  // It keeps its place.
-  await expect(shelf.locator('.shelf-meta')).toContainText('%')
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
   await act(/as unread/)
   await expect(shelf).toContainText('Books you finish')
   await readingTab.click()
   await expect(shelf.locator('.shelf-title')).toHaveText(['middle'])
+  // It kept its place.
   await expect(shelf.locator('.shelf-meta')).toContainText('%')
+})
+
+test('a book on the Read shelf stays there while looked through, and goes back to Reading once read again', async ({ page }) => {
+  await page.goto('./')
+  const readTab = page.getByRole('tab', { name: /Read\b(?!ing)/ })
+  const readingTab = page.getByRole('tab', { name: /Reading/ })
+  const shelf = page.getByRole('tabpanel')
+  const open = async () => {
+    await shelf.locator('.shelf-open').click()
+    await expect(page.locator('.reader')).toBeVisible()
+  }
+  const close = async () => {
+    await page.locator('.nav-button').click()
+    await expect(page.locator('.shelf-tabs')).toBeVisible()
+  }
+  const counts = async (reading: string, read: string) => {
+    await expect(readingTab.locator('.shelf-count')).toHaveText(reading)
+    await expect(readTab.locator('.shelf-count')).toHaveText(read)
+  }
+  const rewind = async () => {
+    const slider = page.getByRole('slider')
+    const at = Number(await slider.getAttribute('aria-valuenow'))
+    await page.keyboard.press('ArrowLeft')
+    await expect(slider).toHaveAttribute('aria-valuenow', String(at - 1))
+  }
+  const readABit = async () => {
+    await page.getByRole('button', { name: 'Play', exact: true }).click()
+    await page.waitForTimeout(400)
+    await page.getByRole('button', { name: 'Pause', exact: true }).click()
+  }
+
+  // Read to the end: on the Read shelf.
+  await upload(page, 'ended.txt', STORY)
+  const slider = page.getByRole('slider')
+  const last = Number(await slider.getAttribute('aria-valuemax'))
+  for (let i = 0; i < last; i++) await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await close()
+  await counts('0', '1')
+  await readTab.click()
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
+
+  // Opened and rewound, it stays read.
+  await open()
+  await rewind()
+  await close()
+  await counts('0', '1')
+
+  // Read again, it's back in progress, where it was left.
+  await open()
+  await readABit()
+  await close()
+  await counts('1', '0')
+  await readingTab.click()
+  await expect(shelf.locator('.shelf-meta')).toContainText('%')
+
+  // The same for a book marked as read part way through.
+  await open()
+  await close()
+  await shelf.getByRole('button', { name: /as read/ }).dispatchEvent('click')
+  await counts('0', '1')
+  await readTab.click()
+  await open()
+  await rewind()
+  await close()
+  await counts('0', '1')
+  await open()
+  await readABit()
+  await close()
+  await counts('1', '0')
 })
 
 test('on a phone, swiping a book all the way across marks it as read', async ({ page }, testInfo) => {
@@ -582,6 +653,7 @@ test('on a phone, swiping a book all the way across marks it as read', async ({ 
   await page.goto('./')
   await upload(page, 'swiped.txt', 'A book to swipe away. It has a few words in it.')
   await page.locator('.nav-button').click()
+  await expect(page.locator('.shelf-row')).toBeVisible()
   await page.waitForFunction('document.getAnimations().length === 0')
   const box = (await page.locator('.shelf-row').boundingBox())!
   const y = box.y + box.height / 2

@@ -32,6 +32,8 @@ interface Props {
   onBookmarks: (bookmarks: Bookmark[]) => void
   /** Reports reading time (while playing) and words read, for statistics. */
   onReadingTime: (ms: number, words: number) => void
+  /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
+  onPlay?: () => void
   onClose: () => void
 }
 
@@ -61,6 +63,7 @@ export function Reader({
   bookmarks,
   onBookmarks,
   onReadingTime,
+  onPlay,
   onClose,
 }: Props) {
   const { words, chapters } = book
@@ -384,6 +387,9 @@ export function Reader({
   }, [index])
 
   useReadingTime(playing, index, wpm, onReadingTime)
+  useEffect(() => {
+    if (playing) onPlay?.()
+  }, [playing, onPlay])
   useEffect(() => () => onProgress(current.current), [onProgress])
 
   const setWpm = (next: number) => onSettings({ ...settings, wpm: Math.max(MIN_WPM, Math.min(MAX_WPM, next)) })

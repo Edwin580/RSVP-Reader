@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
 import { Toast, type ToastMessage } from './components/Toast'
@@ -7,7 +7,7 @@ import { applyAppearance } from './lib/appearance'
 import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
-import { readToEnd } from './lib/shelf'
+import { atEnd, readToEnd } from './lib/shelf'
 import { EMPTY_STATS } from './lib/stats'
 import * as storage from './lib/storage'
 import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
@@ -37,6 +37,8 @@ export default function App() {
   // Whether the browser has promised not to clear our storage (null = unknown).
   const [storageKept, setStorageKept] = useState<boolean | null>(null)
   const [settings, setSettings] = useState(storage.loadSettings)
+  // Where the open book is, to tell on closing whether it was finished.
+  const lastIndex = useRef(0)
 
   const refreshLibrary = useCallback(async () => {
     const list = await storage.listBooks()
@@ -62,6 +64,7 @@ export default function App() {
     // except in a finished book, which would then no longer be finished.
     const finished = readToEnd({ wordCount: book.words.length }, saved)
     const startIndex = !saved ? 0 : finished ? saved.index : sentenceStart(book.words, saved.index)
+    lastIndex.current = startIndex
     navigate('forward', () => setOpen({ book, startIndex, lastReadAt: saved?.updatedAt }))
   }, [])
 
@@ -159,10 +162,27 @@ export default function App() {
   const bookId = open?.demo ? undefined : open?.book.id
   const handleProgress = useCallback(
     (index: number) => {
+      lastIndex.current = index
       if (bookId) storage.saveProgress(bookId, index).catch(() => {})
     },
     [bookId],
   )
+
+  // A book on the Read shelf stays there while it's only looked through
+  // (opened, rewound, searched) and goes back to Reading once it's read
+  // again. Closing a book at its end puts it on the Read shelf.
+  const readAt = books.find((b) => b.id === bookId)?.readAt
+  const handlePlay = useCallback(() => {
+    if (!bookId || readAt === undefined) return
+    setBooks((list) => list.map((b) => (b.id === bookId ? { ...b, readAt: undefined } : b)))
+    storage.setRead(bookId, false).catch(() => {})
+  }, [bookId, readAt])
+  const handleClose = async () => {
+    if (bookId && readAt === undefined && atEnd(open!.book.words.length, lastIndex.current)) {
+      await storage.setRead(bookId, true)
+    }
+    await refreshLibrary()
+  }
 
   const handleBookmarks = (next: Bookmark[]) => {
     setBookmarks(next)
@@ -196,9 +216,10 @@ export default function App() {
         bookmarks={bookmarks}
         onBookmarks={handleBookmarks}
         onReadingTime={handleReadingTime}
+        onPlay={handlePlay}
         onClose={() => {
           navigate('back', () => setOpen(null))
-          refreshLibrary().catch(() => {})
+          handleClose().catch(() => {})
         }}
       />
     )

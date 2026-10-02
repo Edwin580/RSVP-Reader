@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { ACCEPTED_EXTENSIONS } from '../lib/parsers'
 import { IS_PREVIEW, PREVIEW_PR } from '../lib/preview'
 import { formatMinutes } from '../lib/rsvp'
@@ -75,7 +76,10 @@ export function Library({
     [books, progress],
   )
   const reading = sorted.filter((b) => !isRead(b, progress[b.id]))
-  const read = sorted.filter((b) => isRead(b, progress[b.id]))
+  // Most recently read first.
+  const read = sorted
+    .filter((b) => isRead(b, progress[b.id]))
+    .sort((a, b) => (b.readAt ?? progress[b.id]?.updatedAt ?? 0) - (a.readAt ?? progress[a.id]?.updatedAt ?? 0))
   const [tab, setTab] = useState<Tab>(loadTab)
   const pickTab = (next: Tab) => {
     setTab(next)
@@ -213,6 +217,7 @@ export function Library({
                     book={book}
                     progress={progress[book.id]}
                     wpm={wpm}
+                    now={now}
                     read={tab === 'read'}
                     swiped={swiped === book.id}
                     onSwipe={(open) => setSwiped(open ? book.id : null)}
@@ -313,6 +318,8 @@ interface RowProps {
   book: BookMeta
   progress: Progress | undefined
   wpm: number
+  /** The time the library was shown, for "Read today". */
+  now: number
   /** On the Read shelf (so its action is "Unread"). */
   read: boolean
   /** Swiped open, showing its actions. */
@@ -328,7 +335,7 @@ interface RowProps {
  * on a touch screen they're behind it, and swiping the row left shows them,
  * like Mail (see the CSS). Swiping all the way marks the book.
  */
-function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
+function ShelfRow({ book, progress, wpm, now, read, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
   const item = useRef<HTMLLIElement>(null)
   const actions = useRef<HTMLDivElement>(null)
   const drag = useRef<{
@@ -339,6 +346,9 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
     offset: number
     trail: { x: number; t: number }[]
   } | null>(null)
+  // In React state, not set on the element, so a re-render mid-swipe keeps them.
+  const [dragging, setDragging] = useState(false)
+  const [full, setFull] = useState(false)
   // Set by a swipe, so the tap that ends it doesn't open the book.
   const justSwiped = useRef(false)
 
@@ -346,8 +356,13 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
   const percent = Math.round(fraction * 100)
   const format = book.fileName.split('.').pop()?.toUpperCase()
   const left = formatMinutes(((1 - fraction) * book.wordCount) / wpm)
-  const status =
-    percent === 100 ? 'Finished' : percent === 0 ? (book.readAt ? 'Read' : `${left} to read`) : `${percent}% · ${left} left`
+  const status = read
+    ? book.readAt
+      ? `Read ${formatDate(book.readAt, now)}`
+      : 'Finished'
+    : percent === 0
+      ? `${left} to read`
+      : `${percent}% · ${left} left`
 
   /** How far the row slides to show its actions: two 5rem buttons (see the CSS). */
   const open = () => 10 * parseFloat(getComputedStyle(document.documentElement).fontSize)
@@ -356,11 +371,15 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
     const el = item.current!
     el.style.setProperty('--swipe', `${offset}px`)
     el.style.setProperty('--reveal', String(Math.min(1, -offset / open())))
-    el.classList.toggle('is-full', full)
+    setFull(full)
   }
   const settle = () => {
     const el = item.current!
-    el.classList.remove('is-dragging', 'is-full')
+    // Transitions back on before the row moves, so it animates into place.
+    flushSync(() => {
+      setDragging(false)
+      setFull(false)
+    })
     el.style.removeProperty('--swipe')
     el.style.removeProperty('--reveal')
   }
@@ -391,7 +410,7 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
       }
       d.sliding = true
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-      item.current!.classList.add('is-dragging')
+      flushSync(() => setDragging(true))
     }
     d.trail = [...d.trail.filter((p) => e.timeStamp - p.t < 100), { x: e.clientX, t: e.timeStamp }]
     const width = item.current!.offsetWidth
@@ -410,7 +429,7 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
     const width = item.current!.offsetWidth
     if (e.type === 'pointerup' && -d.offset > width * FULL_SWIPE) {
       // Slides the rest of the way, then the book moves shelves.
-      item.current!.classList.remove('is-dragging')
+      flushSync(() => setDragging(false))
       show(-width, true)
       window.setTimeout(onMarkRead, 220)
       return
@@ -425,7 +444,11 @@ function ShelfRow({ book, progress, wpm, read, swiped, onSwipe, onOpen, onMarkRe
   }
 
   return (
-    <li ref={item} className={`shelf-item${swiped ? ' is-swiped' : ''}`} data-book={book.id}>
+    <li
+      ref={item}
+      className={`shelf-item${swiped ? ' is-swiped' : ''}${dragging ? ' is-dragging' : ''}${full ? ' is-full' : ''}`}
+      data-book={book.id}
+    >
       <div className="shelf-actions" ref={actions}>
         <button
           type="button"

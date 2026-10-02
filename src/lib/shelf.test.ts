@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fractionRead, isRead, readToEnd } from './shelf'
+import { atEnd, fractionRead, isRead, readToEnd } from './shelf'
 import type { BookMeta } from './types'
 
 const book = (extra: Partial<BookMeta> = {}): BookMeta => ({
@@ -24,6 +24,8 @@ describe('shelf', () => {
     expect(readToEnd(book(), at(994))).toBe(false)
     expect(readToEnd(book(), at(995))).toBe(true)
     expect(readToEnd(book(), at(1000))).toBe(true)
+    expect(atEnd(1001, 994)).toBe(false)
+    expect(atEnd(1001, 995)).toBe(true)
   })
 
   it('puts a book on the Read shelf when finished or marked as read', () => {
