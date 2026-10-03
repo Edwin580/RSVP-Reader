@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { upload } from './helpers.ts'
+import { STORY, upload } from './helpers.ts'
 
 const currentWord = (page: Page) => page.locator('.word').textContent()
 
@@ -504,6 +504,169 @@ test('reading stats show the last year as squares, shaded by time read', async (
   await cells.nth(52 * 7 + today - 1).click()
   await expect(page.locator('.stats-picked')).toContainText('3 min, 800 words')
   await expect(cells.nth(52 * 7 + today - 1)).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('finished books move to the Read shelf in the library', async ({ page }) => {
+  await page.goto('./')
+  await upload(page, 'finished.txt', 'A short book. It ends quickly.')
+  const slider = page.getByRole('slider')
+  const last = Number(await slider.getAttribute('aria-valuemax'))
+  for (let i = 0; i < last; i++) await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await page.locator('.nav-button').click()
+  await upload(page, 'unread.txt', 'Another book, not read yet. It has a few more words in it.')
+  await page.locator('.nav-button').click()
+
+  const shelf = page.getByRole('tabpanel')
+  await expect(page.getByRole('tab', { name: /Reading/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(shelf.locator('.shelf-title')).toHaveText(['unread'])
+  await page.getByRole('tab', { name: /Read\b(?!ing)/ }).click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['finished'])
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
+
+  // The shelf picked is still showing after reading a book.
+  await shelf.locator('.shelf-open').click()
+  await page.locator('.nav-button').click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['finished'])
+})
+
+test('books can be marked as read and unread, by swiping on a phone', async ({ page }, testInfo) => {
+  await page.goto('./')
+  await upload(page, 'middle.txt', 'A book that is only started. It has a few words in it, and then a few more.')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('ArrowRight')
+  await page.locator('.nav-button').click()
+  const shelf = page.getByRole('tabpanel')
+  const readTab = page.getByRole('tab', { name: /Read\b(?!ing)/ })
+  const readingTab = page.getByRole('tab', { name: /Reading/ })
+
+  const act = async (name: RegExp) => {
+    const button = shelf.getByRole('button', { name })
+    if (testInfo.project.name === 'phone') {
+      // Behind the row until it's swiped left.
+      const onTop = async () => {
+        const r = (await button.boundingBox())!
+        return page.evaluate(`!!document.elementFromPoint(${r.x + r.width / 2}, ${r.y + r.height / 2})?.closest('.shelf-action')`)
+      }
+      // Once back from the book: touches go to the page transition until it ends.
+      await expect(shelf.locator('.shelf-row')).toBeVisible()
+      await page.waitForFunction('document.getAnimations().length === 0')
+      expect(await onTop()).toBe(false)
+      const box = (await shelf.locator('.shelf-row').boundingBox())!
+      const y = box.y + box.height / 2
+      const cdp = await page.context().newCDPSession(page)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width - 20, y }] })
+      for (let i = 1; i <= 8; i++) {
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: box.x + box.width - 20 - i * 25, y }] })
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await expect.poll(onTop).toBe(true)
+    }
+    await button.click()
+  }
+
+  await act(/as read/)
+  await expect(shelf).toContainText('Nothing in progress')
+  await expect(readTab).toContainText('1')
+  await readTab.click()
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
+  await act(/as unread/)
+  await expect(shelf).toContainText('Books you finish')
+  await readingTab.click()
+  await expect(shelf.locator('.shelf-title')).toHaveText(['middle'])
+  // It kept its place.
+  await expect(shelf.locator('.shelf-meta')).toContainText('%')
+})
+
+test('a book on the Read shelf stays there while looked through, and goes back to Reading once read again', async ({ page }) => {
+  await page.goto('./')
+  const readTab = page.getByRole('tab', { name: /Read\b(?!ing)/ })
+  const readingTab = page.getByRole('tab', { name: /Reading/ })
+  const shelf = page.getByRole('tabpanel')
+  const open = async () => {
+    await shelf.locator('.shelf-open').click()
+    await expect(page.locator('.reader')).toBeVisible()
+  }
+  const close = async () => {
+    await page.locator('.nav-button').click()
+    await expect(page.locator('.shelf-tabs')).toBeVisible()
+  }
+  const counts = async (reading: string, read: string) => {
+    await expect(readingTab.locator('.shelf-count')).toHaveText(reading)
+    await expect(readTab.locator('.shelf-count')).toHaveText(read)
+  }
+  const rewind = async () => {
+    const slider = page.getByRole('slider')
+    const at = Number(await slider.getAttribute('aria-valuenow'))
+    await page.keyboard.press('ArrowLeft')
+    await expect(slider).toHaveAttribute('aria-valuenow', String(at - 1))
+  }
+  const readABit = async () => {
+    await page.getByRole('button', { name: 'Play', exact: true }).click()
+    await page.waitForTimeout(400)
+    await page.getByRole('button', { name: 'Pause', exact: true }).click()
+  }
+
+  // Read to the end: on the Read shelf.
+  await upload(page, 'ended.txt', STORY)
+  const slider = page.getByRole('slider')
+  const last = Number(await slider.getAttribute('aria-valuemax'))
+  for (let i = 0; i < last; i++) await page.keyboard.press('ArrowRight')
+  await expect(slider).toHaveAttribute('aria-valuenow', String(last))
+  await close()
+  await counts('0', '1')
+  await readTab.click()
+  await expect(shelf.locator('.shelf-meta')).toContainText('Read today')
+
+  // Opened and rewound, it stays read.
+  await open()
+  await rewind()
+  await close()
+  await counts('0', '1')
+
+  // Read again, it's back in progress, where it was left.
+  await open()
+  await readABit()
+  await close()
+  await counts('1', '0')
+  await readingTab.click()
+  await expect(shelf.locator('.shelf-meta')).toContainText('%')
+
+  // The same for a book marked as read part way through.
+  await open()
+  await close()
+  await shelf.getByRole('button', { name: /as read/ }).dispatchEvent('click')
+  await counts('0', '1')
+  await readTab.click()
+  await open()
+  await rewind()
+  await close()
+  await counts('0', '1')
+  await open()
+  await readABit()
+  await close()
+  await counts('1', '0')
+})
+
+test('on a phone, swiping a book all the way across marks it as read', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'phone', 'Swiping is for touch screens')
+  await page.goto('./')
+  await upload(page, 'swiped.txt', 'A book to swipe away. It has a few words in it.')
+  await page.locator('.nav-button').click()
+  await expect(page.locator('.shelf-row')).toBeVisible()
+  await page.waitForFunction('document.getAnimations().length === 0')
+  const box = (await page.locator('.shelf-row').boundingBox())!
+  const y = box.y + box.height / 2
+  const cdp = await page.context().newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: box.x + box.width - 10, y }] })
+  for (let i = 1; i <= 12; i++) {
+    const x = box.x + box.width - 10 - (box.width * 0.8 * i) / 12
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] })
+  }
+  await expect(page.locator('.shelf-item')).toHaveClass(/is-full/)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await expect(page.getByRole('tabpanel')).toContainText('Nothing in progress')
+  await expect(page.getByRole('tab', { name: /Read\b(?!ing)/ })).toContainText('1')
 })
 
 test('old settings with both page guides off come back with both on', async ({ page }) => {
