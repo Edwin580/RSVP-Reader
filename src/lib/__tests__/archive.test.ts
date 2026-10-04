@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLength, parseSearch, searchRecordings, searchTerms, searchUrl, tracksFromMetadata } from '../archive'
+import { authorFromTitle, authorTerm, gutenbergAuthor, parseLength, parseSearch, searchRecordings, searchTerms, searchUrl, tracksFromMetadata } from '../archive'
 
 describe('Internet Archive', () => {
   it('searches for the title alone', () => {
@@ -21,7 +21,7 @@ describe('Internet Archive', () => {
       const docs = librivox ? [{ identifier: 'lv', title: 'A' }] : [{ identifier: 'lv', title: 'A' }, { identifier: 'other', title: 'B' }]
       return new Response(JSON.stringify({ response: { docs } }))
     }) as typeof fetch
-    const results = await searchRecordings('Alice', fetcher)
+    const results = await searchRecordings('Alice', undefined, fetcher)
     expect(results.map((r) => [r.identifier, r.librivox])).toEqual([
       ['lv', true],
       ['other', false],
@@ -49,5 +49,35 @@ describe('Internet Archive', () => {
     expect(parseLength('1:02:03')).toBe(3723)
     expect(parseLength('796.5')).toBe(796.5)
     expect(parseLength(undefined)).toBe(0)
+  })
+
+  it('searches by the author’s surname, however the name is written', () => {
+    expect(authorTerm('Lewis Carroll')).toBe('Carroll')
+    expect(authorTerm('Carroll, Lewis')).toBe('Carroll')
+    expect(authorTerm('Martin Luther King, Jr.')).toBe('King')
+    expect(authorTerm('Kurt Vonnegut Jr.')).toBe('Vonnegut')
+    expect(authorTerm('Jane Austen; Tony Tanner')).toBe('Austen')
+    expect(authorTerm(undefined)).toBe('')
+    const url = new URL(searchUrl('Emma', true, 'Jane Austen'))
+    expect(url.searchParams.get('q')).toBe('title:(Emma) AND creator:(Austen) AND mediatype:(audio) AND collection:(librivoxaudio)')
+  })
+
+  it('finds the author in a Gutenberg header or a title', () => {
+    expect(gutenbergAuthor('The Project Gutenberg eBook\n\nTitle: Emma\r\nAuthor: Jane Austen\r\n')).toBe('Jane Austen')
+    expect(gutenbergAuthor('No header here')).toBeUndefined()
+    expect(authorFromTitle('Pride and Prejudice by Jane Austen')).toBe('Jane Austen')
+  })
+
+  it('looks by author first, then by title alone when that finds too few', async () => {
+    const asked: string[] = []
+    const fetcher = (async (url: string) => {
+      const q = new URL(url).searchParams.get('q')!
+      asked.push(q)
+      const docs = q.includes('creator') ? (q.includes('librivox') ? [{ identifier: 'austen_emma' }] : []) : [{ identifier: 'other_emma' }, { identifier: 'third' }]
+      return new Response(JSON.stringify({ response: { docs } }))
+    }) as typeof fetch
+    const results = await searchRecordings('Emma', 'Jane Austen', fetcher)
+    expect(results.map((r) => r.identifier)).toEqual(['austen_emma', 'other_emma', 'third'])
+    expect(asked[0]).toContain('creator:(Austen)')
   })
 })

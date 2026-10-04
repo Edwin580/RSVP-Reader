@@ -14,6 +14,8 @@ export interface Book {
   chapters: Chapter[]
   /** Word ranges (inclusive) that are chapter or section headings. Absent in books saved before headings were detected. */
   headings?: { start: number; end: number }[]
+  /** Who wrote it, from the file's metadata, when it says. For finding an audiobook of it. */
+  author?: string
   /** Cover thumbnail (data URL) found while parsing; saved with the library entry, not the book. */
   cover?: string
 }

@@ -3,6 +3,7 @@ import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useRsvp } from '../hooks/useRsvp'
 import { alignTranscript } from '../lib/align'
+import { authorFromTitle } from '../lib/archive'
 import { addPoint, formatTime, paceAt, parseTimestamps, speedFor, syncPoints, timeAt, wordAt as wordHeardAt, type AudioLink } from '../lib/audio'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
@@ -930,6 +931,7 @@ export function Reader({
       {panel === 'audio' && (
         <AudioPanel
           title={book.title}
+          author={book.author ?? authorFromTitle(book.title)}
           chapters={chapters}
           link={audio}
           startsAt={timeAt(points, index)}

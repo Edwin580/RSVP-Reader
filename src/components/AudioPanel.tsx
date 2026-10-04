@@ -15,6 +15,7 @@ import { Icon } from './Icon'
 
 interface Props {
   title: string
+  author?: string
   chapters: Chapter[]
   link: AudioLink | null
   /** Where the recording would start for the word being read, in seconds. */
@@ -40,7 +41,7 @@ type Search = { state: 'searching' } | { state: 'done'; results: Recording[] } |
  * chapter times.
  */
 export function AudioPanel(props: Props) {
-  const { title, chapters, link, startsAt, transcriptMatches, speed, listening, error, closing, onLink, onListen, onClose } = props
+  const { title, author, chapters, link, startsAt, transcriptMatches, speed, listening, error, closing, onLink, onListen, onClose } = props
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
@@ -86,15 +87,16 @@ export function AudioPanel(props: Props) {
               onListen={onListen}
             />
           ) : (
-            <Find title={title} onUse={use} />
+            <Find title={title} author={author} onUse={use} />
           )}
 
           <h3 className="search-section">
             Transcript or chapter times <span className="muted">(optional)</span>
           </h3>
           <p className="search-hint">
-            For a YouTube video, open its description, tap <em>Show transcript</em>, and copy it all in here: the book
-            then follows the narrator word for word. A chapter list (<em>0:00 Chapter 1</em>) works too.
+            Paste a video’s transcript and the book follows the narrator word for word. YouTube’s app doesn’t let you
+            copy it, so open the video on a computer, click <em>Show transcript</em> under the description, and copy it
+            all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, tap the word you hear while listening.
           </p>
           <textarea
             className="audio-times"
@@ -113,7 +115,7 @@ export function AudioPanel(props: Props) {
 }
 
 /** Recordings of the book on the Internet Archive, and other ways to add one. */
-function Find({ title, onUse }: { title: string; onUse: (source: AudioSource, file?: File) => void }) {
+function Find({ title, author, onUse }: { title: string; author?: string; onUse: (source: AudioSource, file?: File) => void }) {
   const [search, setSearch] = useState<Search>({ state: 'searching' })
   const [loading, setLoading] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -122,14 +124,14 @@ function Find({ title, onUse }: { title: string; onUse: (source: AudioSource, fi
 
   useEffect(() => {
     let live = true
-    searchRecordings(title).then(
+    searchRecordings(title, author).then(
       (results) => live && setSearch({ state: 'done', results }),
       () => live && setSearch({ state: 'failed', message: 'The Internet Archive couldn’t be reached. Check your connection.' }),
     )
     return () => {
       live = false
     }
-  }, [title])
+  }, [title, author])
 
   const choose = async (recording: Recording) => {
     setLoading(recording.identifier)

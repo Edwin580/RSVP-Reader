@@ -29,9 +29,31 @@ export function searchTerms(title: string): string {
     .trim()
 }
 
-export function searchUrl(title: string, librivoxOnly: boolean): string {
+/** The "Author: Lewis Carroll" line at the top of a Project Gutenberg text. */
+export function gutenbergAuthor(opening: string): string | undefined {
+  return opening.match(/^\s*Author:\s*(.+?)\s*$/im)?.[1] || undefined
+}
+
+/**
+ * The surname to search for: "Lewis Carroll" and "Carroll, Lewis" → "Carroll".
+ * Catalogues write names differently, but rarely the surname.
+ */
+export function authorTerm(author: string | undefined): string {
+  if (!author) return ''
+  const name = author.split(/\s*(?:;|&|\band\b)\s*/)[0].replace(/,?\s+(jr|sr|ii|iii)\.?$/i, '')
+  const surname = name.includes(',') ? name.split(',')[0] : name.split(/\s+/).pop()
+  return (surname ?? '').replace(/[^\p{L}'-]+/gu, '').replace(/'/g, '')
+}
+
+/** "Pride and Prejudice by Jane Austen" → "Jane Austen", for books whose file only has a title. */
+export function authorFromTitle(title: string): string | undefined {
+  return title.match(/\s+by\s+(.+)$/i)?.[1]?.trim() || undefined
+}
+
+export function searchUrl(title: string, librivoxOnly: boolean, author?: string): string {
   const terms = searchTerms(title).replace(/'/g, '')
-  const q = `title:(${terms}) AND mediatype:(audio)${librivoxOnly ? ' AND collection:(librivoxaudio)' : ''}`
+  const surname = authorTerm(author)
+  const q = `title:(${terms})${surname ? ` AND creator:(${surname})` : ''} AND mediatype:(audio)${librivoxOnly ? ' AND collection:(librivoxaudio)' : ''}`
   const params = new URLSearchParams({ q, rows: '8', output: 'json' })
   for (const f of ['identifier', 'title', 'creator']) params.append('fl[]', f)
   params.append('sort[]', 'downloads desc')
@@ -49,18 +71,28 @@ export function parseSearch(json: unknown, librivox: boolean): Recording[] {
     .map((d) => ({ identifier: d.identifier as string, title: first(d.title), creator: first(d.creator), librivox }))
 }
 
-/** LibriVox recordings of the book first, then any other audio of it on the Archive. */
-export async function searchRecordings(title: string, fetcher: typeof fetch = fetch): Promise<Recording[]> {
+/**
+ * Recordings of the book: by its author first (a title alone finds every
+ * book of that name), LibriVox before other audio, then by title alone if
+ * that finds too few.
+ */
+export async function searchRecordings(title: string, author?: string, fetcher: typeof fetch = fetch): Promise<Recording[]> {
   if (!searchTerms(title)) return []
-  const get = async (librivox: boolean) => {
-    const response = await fetcher(searchUrl(title, librivox))
+  const found: Recording[] = []
+  const get = async (librivox: boolean, by?: string) => {
+    const response = await fetcher(searchUrl(title, librivox, by))
     if (!response.ok) throw new Error(`The Internet Archive answered ${response.status}.`)
-    return parseSearch(await response.json(), librivox)
+    const seen = new Set(found.map((r) => r.identifier))
+    found.push(...parseSearch(await response.json(), librivox).filter((r) => !seen.has(r.identifier)))
   }
-  const librivox = await get(true)
-  if (librivox.length >= 3) return librivox
-  const seen = new Set(librivox.map((r) => r.identifier))
-  return [...librivox, ...(await get(false)).filter((r) => !seen.has(r.identifier))].slice(0, 8)
+  const stages: [boolean, string | undefined][] = authorTerm(author)
+    ? [[true, author], [false, author], [true, undefined], [false, undefined]]
+    : [[true, undefined], [false, undefined]]
+  for (const [librivox, by] of stages) {
+    await get(librivox, by)
+    if (found.length >= 3) break
+  }
+  return found.slice(0, 8)
 }
 
 /** "13:16", "1:02:03" or "796.5" as seconds. */
