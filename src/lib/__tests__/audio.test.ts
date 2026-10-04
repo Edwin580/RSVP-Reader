@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   addPoint,
+  MAX_SPEED,
+  paceAt,
+  speedFor,
   formatTime,
   matchChapters,
   NARRATION_WORDS_PER_SECOND,
@@ -42,12 +45,35 @@ describe('links', () => {
 describe('timestamps', () => {
   it('reads a YouTube chapter list in its usual shapes', () => {
     const text = ['0:00 Intro', '1:05 - Chapter 1: Down the Rabbit-Hole', 'Chapter 2 (12:40)', '1:02:03 | Chapter Three', 'no time here']
-    expect(parseTimestamps(text.join('\n'))).toEqual([
+    expect(parseTimestamps(text.join('\n')).map(({ seconds, label }) => ({ seconds, label }))).toEqual([
       { seconds: 0, label: 'Intro' },
       { seconds: 65, label: 'Chapter 1: Down the Rabbit-Hole' },
       { seconds: 760, label: 'Chapter 2' },
       { seconds: 3723, label: 'Chapter Three' },
     ])
+  })
+
+  it('reads a transcript copied from YouTube, a time then what was said', () => {
+    const text = '0:00\nchapter one down the rabbit hole\n0:04\nalice was beginning to get\nvery tired of sitting'
+    expect(parseTimestamps(text).map(({ seconds, text }) => ({ seconds, text }))).toEqual([
+      { seconds: 0, text: 'chapter one down the rabbit hole' },
+      { seconds: 4, text: 'alice was beginning to get very tired of sitting' },
+    ])
+  })
+
+  it('reads subtitle files', () => {
+    const srt = '1\n00:00:01,000 --> 00:00:04,000\nAlice was beginning\n\n2\n00:00:04,500 --> 00:00:07,000\nto get very tired'
+    expect(parseTimestamps(srt).map(({ seconds, text }) => ({ seconds, text }))).toEqual([
+      { seconds: 1, text: 'Alice was beginning' },
+      { seconds: 4, text: 'to get very tired' },
+    ])
+    const vtt = 'WEBVTT\n\n00:01.000 --> 00:04.000\n<c>Alice</c> was beginning'
+    expect(parseTimestamps(vtt)[0]).toMatchObject({ seconds: 1, text: 'Alice was beginning' })
+  })
+
+  it('leaves a time said in a sentence as part of it', () => {
+    const text = '0:10\nand the clock struck 10:30 as she ran past the old church and down the hill'
+    expect(parseTimestamps(text)).toHaveLength(1)
   })
 
   it('formats times like a player does', () => {
@@ -65,6 +91,11 @@ describe('matching chapters', () => {
       { index: 1000, seconds: 540 },
       { index: 2500, seconds: 1200 },
     ])
+  })
+
+  it('matches the ways recordings name their tracks', () => {
+    const stamps = parseTimestamps('0:00 AliceInWonderland_chap01\n9:00 Chapters 2-3\n20:00 03 A Caucus-Race')
+    expect(matchChapters(stamps, chapters).map((p) => p.index)).toEqual([0, 1000, 2500])
   })
 
   it('matches by name when the numbers are missing', () => {
@@ -129,5 +160,51 @@ describe('lining up book and recording', () => {
     const points = addPoint(addPoint([], 100, 50), 110, 55)
     expect(points).toEqual([{ index: 110, seconds: 55 }])
     expect(addPoint(points, 500, 200)).toHaveLength(2)
+  })
+})
+
+describe('playback speed', () => {
+  it('measures the narrator’s pace around a spot', () => {
+    const points = [
+      { index: 0, seconds: 0 },
+      { index: 1000, seconds: 400 },
+      { index: 2000, seconds: 700 },
+    ]
+    expect(paceAt(points, 100)).toBeCloseTo(2.5)
+    expect(paceAt(points, 1900)).toBeCloseTo(1000 / 300)
+    expect(paceAt([], 100)).toBe(NARRATION_WORDS_PER_SECOND)
+  })
+
+  it('plays faster or slower to match the reading speed, within what players allow', () => {
+    // A 150 wpm narrator heard at 300 wpm plays at double speed.
+    expect(speedFor(300, 2.5)).toBe(2)
+    expect(speedFor(195, 2.5)).toBe(1.3)
+    expect(speedFor(1000, 2.5)).toBe(MAX_SPEED)
+    expect(speedFor(100, 2.5)).toBe(0.65)
+  })
+})
+
+describe('recordings in tracks', () => {
+  it('pins each chapter to its track, after a LibriVox announcement', () => {
+    const link = {
+      source: {
+        kind: 'archive' as const,
+        identifier: 'alice',
+        title: 'Alice',
+        librivox: true,
+        tracks: [
+          { url: 'a', title: '01 Down the Rabbit Hole', seconds: 796 },
+          { url: 'b', title: '02 The Pool of Tears', seconds: 775 },
+          { url: 'c', title: '03 A Caucus-Race and a Long Tale', seconds: 632 },
+        ],
+      },
+      timestamps: '',
+      points: [],
+    }
+    expect(syncPoints(link, chapters)).toEqual([
+      { index: 0, seconds: 14 },
+      { index: 1000, seconds: 810 },
+      { index: 2500, seconds: 1585 },
+    ])
   })
 })

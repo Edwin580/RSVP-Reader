@@ -974,29 +974,100 @@ function silentWav(seconds: number): Buffer {
   return wav
 }
 
-test('an audiobook starts where you are and the book follows it', async ({ page }) => {
+/** The Internet Archive, answering with a LibriVox recording of the story in two 20-second chapters. */
+async function mockArchive(page: Page) {
+  await page.route('https://archive.org/advancedsearch.php**', (route) =>
+    route.fulfill({ json: { response: { docs: [{ identifier: 'story_librivox', title: 'Story', creator: 'A. Writer' }] } } }),
+  )
+  await page.route('https://archive.org/metadata/story_librivox', (route) =>
+    route.fulfill({
+      json: {
+        files: [
+          { name: 'story_01_64kb.mp3', format: '64Kbps MP3', title: '01 Chapter 1', length: '0:20' },
+          { name: 'story_02_64kb.mp3', format: '64Kbps MP3', title: '02 Chapter 2', length: '0:20' },
+        ],
+      },
+    }),
+  )
+  // Answered in ranges, like the real thing, or the browser can't seek in it.
+  const wav = silentWav(20)
+  await page.route('https://archive.org/download/**', (route) => {
+    const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '')
+    if (!range) return route.fulfill({ body: wav, contentType: 'audio/wav', headers: { 'Accept-Ranges': 'bytes' } })
+    const start = Number(range[1])
+    const end = range[2] ? Number(range[2]) : wav.length - 1
+    return route.fulfill({
+      status: 206,
+      body: wav.subarray(start, end + 1),
+      contentType: 'audio/wav',
+      headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${start}-${end}/${wav.length}` },
+    })
+  })
+}
+
+test('an audiobook is found for the book and starts at the chapter being read', async ({ page }) => {
+  await mockArchive(page)
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Listen', exact: true }).click()
-  await expect(page.getByRole('link', { name: 'YouTube' })).toHaveAttribute('href', /youtube\.com\/results\?search_query=story%20audiobook/)
-  await page.getByLabel('Chapter times').fill('0:00 Intro\n0:05 Chapter One\n0:30 Chapter Two')
-  await expect(page.getByText('Matched 2 of 3 times to chapters.')).toBeVisible()
-  await page.locator('.audio-file input').setInputFiles({ name: 'story.wav', mimeType: 'audio/wav', buffer: silentWav(60) })
-  await expect(page.locator('.audio-source-name')).toHaveText('story.wav')
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await expect(page.getByText('2 of its 2 chapters line up with the book’s.')).toBeVisible()
   await page.keyboard.press('Escape')
 
-  // Chapter 2 is 30 seconds in.
+  // Chapter 2 is the second track: 20 seconds in, then 14 seconds of LibriVox announcement.
   await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
-  await expect(page.locator('.listen-time')).toHaveText('0:30')
+  await expect(page.locator('.listen-time')).toHaveText(/^0:34/)
+  // This narrator reads far slower than 300 wpm, so it plays as fast as it can.
+  await expect(page.locator('.listen-time')).toContainText('2×')
   await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
-  // The book moves on with the recording.
   await expect.poll(() => currentWord(page), { timeout: 8000 }).not.toBe('Chapter')
-  await page.getByRole('button', { name: 'Pause audiobook' }).click()
-  await expect(page.getByRole('button', { name: 'Sync here' })).toBeVisible()
+  // It really is playing from the second track.
+  await expect(page.locator('.listen-time')).toHaveText(/^0:3[5-9]|^0:4/, { timeout: 8000 })
 
-  // The link is kept with the book.
+  // Tapping the word being heard syncs the book to it.
+  await page.locator('.context [data-i]', { hasText: /^shelves\.\s*$/ }).click()
+  await expect(page.locator('.word')).toHaveText('shelves.')
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
+  await expect(page.getByText('1 word synced')).toBeVisible()
+  await page.keyboard.press('Escape')
+
+  // The recording is kept with the book.
   await page.reload()
   await page.locator('.shelf-open').click()
   await expect(page.locator('.listen-bar')).toBeVisible()
+})
+
+test('a pasted transcript lines the recording up with the text', async ({ page }) => {
+  await mockArchive(page)
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.locator('.audio-file input').setInputFiles({ name: 'story.wav', mimeType: 'audio/wav', buffer: silentWav(60) })
+  await page.getByLabel('Transcript or chapter times').fill(
+    [
+      '0:00', 'welcome to this recording', '0:08', 'chapter one the rabbit ran across the field',
+      '0:12', 'alice followed it to a hole under the hedge', '0:30', 'chapter two down she went past cupboards and shelves',
+    ].join('\n'),
+  )
+  await expect(page.getByText(/Transcript matched to the book at \d+ spots?\./)).toBeVisible()
+  await page.keyboard.press('Escape')
+  // "Alice followed it" is said at 0:12.
+  for (let i = 0; i < 8; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.word')).toHaveText('Alice')
+  await expect(page.locator('.listen-time')).toHaveText(/^0:12/)
+})
+
+test('a YouTube video plays without showing its player', async ({ page }) => {
+  await page.route('https://www.youtube.com/**', (route) => route.abort())
+  await page.route('https://archive.org/**', (route) => route.fulfill({ json: { response: { docs: [] } } }))
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByLabel('Audiobook link').fill('https://youtu.be/dQw4w9WgXcQ')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(page.locator('.audio-source-name')).toHaveText('YouTube video')
+  await expect(page.locator('.audio-video')).toHaveCSS('opacity', '0')
+  await expect(page.locator('.audio-video')).toHaveCSS('pointer-events', 'none')
 })

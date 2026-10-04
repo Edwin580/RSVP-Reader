@@ -2,7 +2,8 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
 import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useRsvp } from '../hooks/useRsvp'
-import { addPoint, formatTime, syncPoints, timeAt, wordAt as wordHeardAt, type AudioLink } from '../lib/audio'
+import { alignTranscript } from '../lib/align'
+import { addPoint, formatTime, paceAt, parseTimestamps, speedFor, syncPoints, timeAt, wordAt as wordHeardAt, type AudioLink } from '../lib/audio'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
@@ -219,7 +220,7 @@ export function Reader({
   const onTapWord = (target: Element | null, act: () => void) => {
     const tapped = wordAt(target)
     tapIndex.current = tapped ?? index
-    if (tapped !== null) seek(tapped)
+    if (tapped !== null) tapWord(tapped)
     else act()
   }
   // Always the first tap's word: that tap may have jumped to it, moving the
@@ -283,7 +284,7 @@ export function Reader({
       : {
           ignore: ignorePress,
           allowMenu: selectable,
-          onTap: (target) => onTapWord(target, toggle),
+          onTap: (target) => onTapWord(target, togglePlayback),
           onDoubleTap,
           onDismiss: onDismissTap,
           onHoldStart: (target) => {
@@ -384,44 +385,64 @@ export function Reader({
   }, [book.id, words])
 
   // Listening along to an audiobook: the book follows the narrator, lined up
-  // by chapter timestamps and spots synced by hand (src/lib/audio.ts).
+  // by a matched transcript, chapter starts and words tapped while listening
+  // (src/lib/audio.ts). The recording plays at the reading speed.
   const audioHost = useRef<HTMLDivElement>(null)
   const player = useAudioPlayer(audio?.source ?? null, audioFile, audioHost)
+  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed } = player
   const listening = player.playing
-  const [listened, setListened] = useState(false)
-  const points = useMemo(() => (audio ? syncPoints(audio, chapters) : []), [audio, chapters])
+  const timestamps = audio?.timestamps ?? ''
+  const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
+  const points = useMemo(() => (audio ? syncPoints(audio, chapters, transcript) : []), [audio, chapters, transcript])
+  const speed = audio && audio.matchSpeed !== false ? speedFor(wpm, paceAt(points, index)) : 1
+  useEffect(() => setSpeed(speed), [speed, setSpeed])
   /** The last word moved to by following the narrator; any other move is the reader's own jump. */
   const followed = useRef(-1)
+  /** Players report the old time for a moment after a seek; don't follow until then. */
+  const settling = useRef(0)
+  const startAudio = (i: number) => {
+    followed.current = i
+    settling.current = performance.now() + 800
+    playAudio(timeAt(points, i))
+  }
   const listen = () => {
     if (listening) {
-      player.pause()
+      pauseAudio()
       return
     }
     pause()
-    followed.current = index
-    setListened(true)
-    player.play(timeAt(points, index))
+    startAudio(index)
   }
-  const syncHere = () => {
-    if (audio) onAudio({ ...audio, points: addPoint(audio.points, index, player.currentTime()) })
+  // Tapping a word while listening says "the narrator is here": it pins that
+  // word to this moment, and the book carries on from it.
+  const tapWord = (i: number) => {
+    if (!listening || !audio) {
+      seek(i)
+      return
+    }
+    onAudio({ ...audio, points: addPoint(audio.points, i, currentTime()) })
+    followed.current = i
+    seek(i)
   }
-  const { currentTime, play: playAudio, pause: pauseAudio } = player
+  /** The whole second being heard, for the time shown while listening. */
+  const [heard, setHeard] = useState(0)
   useEffect(() => {
     if (!listening) return
     const follow = () => {
+      if (performance.now() < settling.current) return
+      setHeard(Math.floor(currentTime()))
       const i = wordHeardAt(points, currentTime(), words.length)
       if (i === current.current) return
       followed.current = i
       seek(i)
     }
-    const timer = window.setInterval(follow, 250)
+    const timer = window.setInterval(follow, 200)
     return () => window.clearInterval(timer)
   }, [listening, points, currentTime, words.length, seek])
-  // A jump while listening (a tap on a word, the progress bar) takes the recording there too.
+  // A jump while listening (the progress bar, a chapter, a page turn) takes the recording there too.
   useEffect(() => {
     if (!listening || index === followed.current) return
-    followed.current = index
-    playAudio(timeAt(points, index))
+    startAudio(index)
     // Only the reader's position moving should re-seek, not new points arriving.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [index])
@@ -698,6 +719,7 @@ export function Reader({
             durationOf={(i) => plannedMs(i, index)}
             focusLines={settings.lineFocus === 'one' ? 1 : settings.lineFocus === 'three' ? 3 : 0}
             onSeek={seek}
+            onTapWord={tapWord}
             onSelectWord={selectWord}
             onToggle={holdToRead ? noop : togglePlayback}
             onPage={onPage}
@@ -764,13 +786,11 @@ export function Reader({
               <Icon name={listening ? 'pause' : 'headphones'} size={16} />
               {listening ? 'Listening' : 'Listen'}
             </button>
-            {listened && (
-              <button type="button" className="text-button" onClick={syncHere} title="The narrator is at this word">
-                <Icon name="sync" size={16} />
-                Sync here
-              </button>
-            )}
-            <span className="muted listen-time">{formatTime(timeAt(points, index))}</span>
+            <span className="muted listen-time">
+              {formatTime(listening ? heard : timeAt(points, index))}
+              {speed !== 1 && ` · ${speed}×`}
+            </span>
+            {listening && <span className="muted listen-hint">Tap the word you hear to sync</span>}
           </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
@@ -913,6 +933,8 @@ export function Reader({
           chapters={chapters}
           link={audio}
           startsAt={timeAt(points, index)}
+          transcriptMatches={transcript.length}
+          speed={speedFor(wpm, paceAt(points, index))}
           listening={listening}
           error={player.error}
           closing={closing}

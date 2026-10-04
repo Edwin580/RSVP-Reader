@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import type { AudioSource } from '../lib/audio'
+import { trackStarts, type AudioSource, type Track } from '../lib/audio'
 
 /** The parts of YouTube's IFrame Player API used here. */
 interface YTPlayer {
@@ -7,7 +7,7 @@ interface YTPlayer {
   pauseVideo(): void
   seekTo(seconds: number, allowSeekAhead: boolean): void
   getCurrentTime(): number
-  getDuration(): number
+  setPlaybackRate(rate: number): void
   destroy(): void
 }
 interface YTNamespace {
@@ -36,7 +36,7 @@ declare global {
 const YT_PLAYING = 1
 
 let youTubeApi: Promise<YTNamespace> | null = null
-/** Loads YouTube's player script once, when a video is first played. */
+/** Loads YouTube's player script once. */
 function loadYouTube(): Promise<YTNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT)
   youTubeApi ??= new Promise((resolve, reject) => {
@@ -60,17 +60,28 @@ export interface AudioPlayer {
   playing: boolean
   /** Why it can't play, in words for the reader. */
   error: string | null
-  /** Start playing from `seconds`. Call from a tap so phones allow sound. */
+  /** Start playing from `seconds` into the whole recording. Call from a tap so phones allow sound. */
   play: (seconds: number) => void
   pause: () => void
-  /** Where playback is now, in seconds. */
+  /** Where playback is in the whole recording, in seconds. */
   currentTime: () => number
+  /** Playback speed (1 = as recorded). */
+  setSpeed: (speed: number) => void
+}
+
+/** The files to play in turn: a recording's tracks, or a single file of unknown length. */
+function tracksOf(source: AudioSource | null, file: Blob | null): Track[] | null {
+  if (!source) return null
+  if (source.kind === 'archive') return source.tracks
+  if (source.kind === 'url') return [{ url: source.url, title: '', seconds: Infinity }]
+  if (source.kind === 'file' && file) return [{ url: '', title: source.name, seconds: Infinity }]
+  return null
 }
 
 /**
- * Plays an audiobook from a YouTube video (in a small visible player inside
- * `container`, as YouTube requires) or an audio file from the web or the
- * device.
+ * Plays an audiobook: a YouTube video (in a hidden player inside
+ * `container`), a recording made of several files played back to back as
+ * one, or a single audio file from the web or the device.
  */
 export function useAudioPlayer(
   source: AudioSource | null,
@@ -79,30 +90,68 @@ export function useAudioPlayer(
 ): AudioPlayer {
   const [playing, setPlaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const audio = useRef<HTMLAudioElement | null>(null)
-  const yt = useRef<Promise<YTPlayer> | null>(null)
-  const ytPlayer = useRef<YTPlayer | null>(null)
+  const speed = useRef(1)
   const kind = source?.kind ?? null
-  /** What identifies the recording: a video id or an address. Saving new timestamps keeps it, and the player. */
-  const key = !source ? '' : source.kind === 'youtube' ? source.videoId : source.kind === 'url' ? source.url : source.name
+  /** What identifies the recording; saving new timestamps keeps it, and the player. */
+  const key = !source
+    ? ''
+    : source.kind === 'youtube'
+      ? source.videoId
+      : source.kind === 'url'
+        ? source.url
+        : source.kind === 'file'
+          ? source.name
+          : source.identifier
   const fileMissing = kind === 'file' && !file
 
-  // An audio file (from the web or the device) plays in an <audio> element.
+  // Audio files play in an <audio> element, one track at a time.
+  const audio = useRef<HTMLAudioElement | null>(null)
+  const tracks = useRef<{ list: Track[]; starts: number[]; current: number }>({ list: [], starts: [], current: -1 })
+  const latest = useRef({ source, file })
   useEffect(() => {
-    if (kind !== 'url' && kind !== 'file') return
-    if (kind === 'file' && !file) return
-    const url = kind === 'file' ? URL.createObjectURL(file!) : key
+    latest.current = { source, file }
+  })
+  useEffect(() => {
+    const list = tracksOf(latest.current.source, latest.current.file)
+    if (!list) return
+    const objectUrl = kind === 'file' ? URL.createObjectURL(latest.current.file!) : null
+    if (objectUrl) list[0] = { ...list[0], url: objectUrl }
+    tracks.current = { list, starts: trackStarts(list), current: -1 }
     const el = new Audio()
     el.preload = 'metadata'
-    el.src = url
-    const onPlay = () => setPlaying(true)
-    const onPause = () => setPlaying(false)
+    /** Moving on to the next track pauses the element for a moment; that isn't the listener pausing. */
+    let advancing = false
+    const load = (k: number) => {
+      tracks.current.current = k
+      el.src = tracks.current.list[k].url
+      // Loading a file resets the speed to the default one.
+      el.defaultPlaybackRate = speed.current
+      el.playbackRate = speed.current
+    }
+    const onPlay = () => {
+      advancing = false
+      setPlaying(true)
+    }
+    const onPause = () => {
+      if (!advancing) setPlaying(false)
+    }
+    const onEnded = () => {
+      const t = tracks.current
+      if (t.current + 1 >= t.list.length) {
+        setPlaying(false)
+        return
+      }
+      advancing = true
+      load(t.current + 1)
+      el.play().catch(() => setPlaying(false))
+    }
     const onError = () => {
       setPlaying(false)
       setError('This audio couldn’t be played. Links need to go straight to an audio file, such as an MP3.')
     }
-    const events = [['play', onPlay], ['pause', onPause], ['ended', onPause], ['error', onError]] as const
+    const events = [['play', onPlay], ['pause', onPause], ['ended', onEnded], ['error', onError]] as const
     for (const [name, handler] of events) el.addEventListener(name, handler)
+    load(0)
     audio.current = el
     return () => {
       for (const [name, handler] of events) el.removeEventListener(name, handler)
@@ -110,98 +159,115 @@ export function useAudioPlayer(
       el.removeAttribute('src')
       el.load()
       audio.current = null
-      if (kind === 'file') URL.revokeObjectURL(url)
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
       setPlaying(false)
       setError(null)
     }
   }, [kind, key, file])
 
-  useEffect(
-    () => () => {
-      ytPlayer.current?.destroy()
-      ytPlayer.current = null
-      yt.current = null
-      setPlaying(false)
-      setError(null)
-    },
-    [key],
-  )
-
-  /** The YouTube player, created on first play. */
-  const youTube = useCallback((): Promise<YTPlayer> => {
-    if (!source || source.kind !== 'youtube') return Promise.reject(new Error('Not a video'))
-    if (yt.current) return yt.current
+  // A video plays in YouTube's player, made as soon as there's a video so a
+  // tap can start it straight away (phones only allow sound from a tap).
+  const yt = useRef<YTPlayer | null>(null)
+  const pendingPlay = useRef<number | null>(null)
+  const videoId = source?.kind === 'youtube' ? source.videoId : null
+  useEffect(() => {
     const host = container.current
-    if (!host) return Promise.reject(new Error('No player'))
+    if (!videoId || !host) return
     const mount = document.createElement('div')
     host.replaceChildren(mount)
-    const created = loadYouTube().then(
-      (YT) =>
-        new Promise<YTPlayer>((resolve) => {
-          const player = new YT.Player(mount, {
-            videoId: source.videoId,
-            width: '100%',
-            height: '100%',
-            playerVars: { playsinline: 1, rel: 0 },
-            events: {
-              onReady: () => {
-                ytPlayer.current = player
-                resolve(player)
-              },
-              onStateChange: (e) => setPlaying(e.data === YT_PLAYING),
-              onError: () => {
-                setPlaying(false)
-                setError('This video can’t be played here. Some videos don’t allow it; try another.')
-              },
+    let player: YTPlayer | null = null
+    let live = true
+    loadYouTube().then(
+      (YT) => {
+        if (!live) return
+        player = new YT.Player(mount, {
+          videoId,
+          width: '200',
+          height: '200',
+          playerVars: { playsinline: 1, rel: 0, controls: 0 },
+          events: {
+            onReady: () => {
+              if (!live || !player) return
+              yt.current = player
+              player.setPlaybackRate(speed.current)
+              if (pendingPlay.current !== null) {
+                player.seekTo(pendingPlay.current, true)
+                player.playVideo()
+                pendingPlay.current = null
+              }
             },
-          })
-        }),
+            onStateChange: (e) => setPlaying(e.data === YT_PLAYING),
+            onError: () => {
+              setPlaying(false)
+              setError('This video can’t be played here. Some videos don’t allow it; try another.')
+            },
+          },
+        })
+      },
+      (e: Error) => live && setError(e.message),
     )
-    created.catch(() => {
+    return () => {
+      live = false
+      player?.destroy()
       yt.current = null
-    })
-    yt.current = created
-    return created
-  }, [source, container])
+      pendingPlay.current = null
+      host.replaceChildren()
+      setPlaying(false)
+      setError(null)
+    }
+  }, [videoId, container])
 
   const play = useCallback(
     (seconds: number) => {
       setError(null)
-      if (source?.kind === 'youtube') {
-        youTube().then(
-          (p) => {
-            p.seekTo(seconds, true)
-            p.playVideo()
-          },
-          (e: Error) => setError(e.message),
-        )
+      if (kind === 'youtube') {
+        if (yt.current) {
+          yt.current.seekTo(seconds, true)
+          yt.current.playVideo()
+        } else pendingPlay.current = seconds
         return
       }
       const el = audio.current
       if (!el) return
-      const start = () => {
-        el.currentTime = Math.min(seconds, Number.isFinite(el.duration) ? Math.max(0, el.duration - 1) : seconds)
-        el.play().catch(() => {})
+      const t = tracks.current
+      let k = 0
+      while (k + 1 < t.starts.length && t.starts[k + 1] <= seconds) k++
+      const offset = seconds - t.starts[k]
+      if (k !== t.current) {
+        t.current = k
+        el.src = t.list[k].url
+        el.defaultPlaybackRate = speed.current
+        el.playbackRate = speed.current
       }
-      if (el.readyState >= 1) start()
-      else {
-        el.addEventListener('loadedmetadata', start, { once: true })
-        // Phones only allow sound in response to a tap: start now, then move to the spot.
-        el.play().catch(() => {})
+      const seek = () => {
+        el.currentTime = Number.isFinite(el.duration) ? Math.min(offset, Math.max(0, el.duration - 1)) : offset
       }
+      if (el.readyState >= 1) seek()
+      else el.addEventListener('loadedmetadata', seek, { once: true })
+      // Play straight away, inside the tap, or phones refuse; the seek follows once the file's length is known.
+      el.play().catch(() => {})
     },
-    [source, youTube],
+    [kind],
   )
 
   const pause = useCallback(() => {
     audio.current?.pause()
-    ytPlayer.current?.pauseVideo()
+    yt.current?.pauseVideo()
+    pendingPlay.current = null
   }, [])
 
   const currentTime = useCallback(() => {
-    if (source?.kind === 'youtube') return ytPlayer.current?.getCurrentTime() ?? 0
-    return audio.current?.currentTime ?? 0
-  }, [source])
+    if (kind === 'youtube') return yt.current?.getCurrentTime() ?? 0
+    const t = tracks.current
+    return (t.starts[t.current] ?? 0) + (audio.current?.currentTime ?? 0)
+  }, [kind])
+
+  const setSpeed = useCallback((next: number) => {
+    if (next === speed.current) return
+    speed.current = next
+    if (audio.current) audio.current.playbackRate = next
+    yt.current?.setPlaybackRate(next)
+  }, [])
 
   return {
     playing,
@@ -209,5 +275,6 @@ export function useAudioPlayer(
     play,
     pause,
     currentTime,
+    setSpeed,
   }
 }

@@ -1,16 +1,28 @@
 import type { Chapter } from './types'
+import type { TimedText } from './align'
 
 /**
- * Listening along with an audiobook someone else recorded (a YouTube video,
- * a LibriVox MP3, a file on the device), with no speech recognition: the
- * book and the recording are lined up from timestamps. A video's chapter
- * list ("12:34 Chapter 3") pins chapter starts, and "Sync here" pins the
- * word being read to the moment being heard. Between pinned points the
- * narration is assumed to go at a steady pace.
+ * Listening along with an audiobook someone else recorded (a LibriVox
+ * recording from the Internet Archive, a YouTube video, an MP3), with no
+ * speech recognition: the book and the recording are lined up from
+ * timestamps. A pasted transcript is matched to the text word for word
+ * (align.ts); a recording's chapter tracks, or a video's chapter list
+ * ("12:34 Chapter 3"), pin chapter starts; and tapping the word being heard
+ * pins it to that moment. Between pinned points the narration is assumed to
+ * go at a steady pace.
  */
+
+/** One file of a recording made of several (a LibriVox book is one per chapter). */
+export interface Track {
+  url: string
+  title: string
+  seconds: number
+}
 
 export type AudioSource =
   | { kind: 'youtube'; videoId: string; url: string }
+  /** A recording on the Internet Archive, played track after track as one. */
+  | { kind: 'archive'; identifier: string; title: string; librivox: boolean; tracks: Track[] }
   | { kind: 'url'; url: string }
   /** A file on this device; the file itself is stored separately (storage.ts). */
   | { kind: 'file'; name: string }
@@ -25,8 +37,10 @@ export interface AudioLink {
   source: AudioSource
   /** Timestamps as pasted, usually a video's chapter list. */
   timestamps: string
-  /** Points pinned by hand with "Sync here". */
+  /** Points pinned by hand, by tapping the word being heard. */
   points: SyncPoint[]
+  /** Play the recording faster or slower to match the reading speed. Absent (older links) means on. */
+  matchSpeed?: boolean
 }
 
 /** A typical audiobook narration pace (about 155 wpm), used until there's a better guess. */
@@ -73,30 +87,46 @@ export function formatTime(seconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
-export interface Timestamp {
-  seconds: number
+export interface Timestamp extends TimedText {
+  /** The words on the time's own line: a chapter's name in a chapter list. */
   label: string
 }
 
-const TIME = /(?:^|[^\d:])((?:\d{1,2}:)?\d{1,2}:\d{2})(?![\d:])/
+const TIME = /((?:\d{1,2}:)?\d{1,2}:\d{2})(?:[.,]\d{1,3})?(?![\d:])/
+const TIMES = new RegExp(TIME.source, 'g')
+const AT_START = new RegExp(`^[\\s\\-–—•*([]*${TIME.source}`)
+
+function seconds(time: string): number {
+  return time.split(':').map(Number).reduce((total, part) => total * 60 + part, 0)
+}
 
 /**
- * Lines with a time in them, as in a YouTube description's chapter list:
- * "0:00 Intro", "1:02:03 - Chapter 12: The Trial", "Chapter 1 (12:40)".
+ * Timed lines: a chapter list from a video's description ("0:00 Intro",
+ * "1:02:03 - Chapter 12: The Trial", "Chapter 1 (12:40)"), or a transcript
+ * copied from YouTube's "Show transcript" (a time, then the words spoken
+ * until the next one) or a subtitle file (SRT, VTT).
  */
 export function parseTimestamps(text: string): Timestamp[] {
   const found: Timestamp[] = []
-  for (const line of text.split(/\r?\n/)) {
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.replace(/<[^>]*>/g, '').trim()
+    if (!line || /^\d+$/.test(line) || line === 'WEBVTT') continue
     const match = line.match(TIME)
-    if (!match) continue
-    const parts = match[1].split(':').map(Number)
-    const seconds = parts.reduce((total, part) => total * 60 + part, 0)
-    const label = line
-      .replace(match[1], ' ')
-      .replace(/[()[\]]/g, ' ')
-      .replace(/^[\s\-–—:|.•*]+|[\s\-–—:|.•*]+$/g, '')
-      .trim()
-    found.push({ seconds, label })
+    // A time starts a new entry when it opens the line, or anywhere in a short
+    // line ("Chapter 2 (12:40)"); in a sentence it's just part of what was said.
+    if (match && (AT_START.test(line) || line.split(/\s+/).length <= 12)) {
+      const label = line
+        .replace(TIMES, ' ')
+        .replace(/-->/g, ' ')
+        .replace(/[()[\]]/g, ' ')
+        .replace(/^[\s\-–—:|.•*]+|[\s\-–—:|.•*]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+      found.push({ seconds: seconds(match[1]), label, text: label })
+    } else if (found.length) {
+      const last = found[found.length - 1]
+      last.text = last.text ? `${last.text} ${line}` : line
+    }
   }
   return found
 }
@@ -124,6 +154,9 @@ function normalize(title: string): string {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
+    // "chap1", "AliceInWonderland_chap01" → "chap 1"
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .replace(/(\d)([a-z])/g, '$1 $2')
     .trim()
     .split(' ')
     .map((word) => {
@@ -136,10 +169,12 @@ function normalize(title: string): string {
     .join(' ')
 }
 
-/** "Chapter 12", "Ch. XII", "12. The Trial" → "12"; "Part 2" → "part 2"; otherwise null. */
+/** "Chapter 12", "Ch. XII", "chap12", "Chapters 12-14", "12. The Trial" → "12"; "Part 2" → "part 2"; otherwise null. */
 function numberKey(title: string): string | null {
   const t = normalize(title.replace(/\b(chapter|ch|part|book)\s+i\b/gi, '$1 1'))
-  const m = t.match(/^(?:(part|book)\s+)?(?:chapter\s+|ch\s+)?(\d+)\b/)
+  const chapter = t.match(/\b(?:chapters?|chap|ch)\s+0*(\d+)\b/)
+  if (chapter) return chapter[1]
+  const m = t.match(/^(?:(part|book)\s+)?0*(\d+)\b/)
   if (!m) return null
   return m[1] ? `${m[1]} ${m[2]}` : m[2]
 }
@@ -180,12 +215,42 @@ export function matchChapters(stamps: Timestamp[], chapters: Chapter[]): SyncPoi
   return points
 }
 
+/** A LibriVox chapter opens with its announcement ("This is a LibriVox recording…") before the text. */
+const LIBRIVOX_INTRO_SECONDS = 14
+
+/** Where each track of a recording starts, as one timeline. */
+export function trackStarts(tracks: Track[]): number[] {
+  let total = 0
+  return tracks.map((t) => {
+    const start = total
+    total += t.seconds
+    return start
+  })
+}
+
+/** Chapter starts pinned by the recording's tracks and the pasted chapter list. */
+function chapterPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
+  const { source } = link
+  const fromTracks =
+    source.kind === 'archive'
+      ? matchChapters(
+          trackStarts(source.tracks).map((start, k) => {
+            const title = source.tracks[k].title
+            return { seconds: start + (source.librivox ? LIBRIVOX_INTRO_SECONDS : 0), label: title, text: title }
+          }),
+          chapters,
+        )
+      : []
+  return [...fromTracks, ...matchChapters(parseTimestamps(link.timestamps), chapters)]
+}
+
 /**
- * The points to line up by: hand-set points first, then chapter timestamps
- * wherever they agree with them (later in the book means later in the
- * recording). Sorted by position.
+ * The points to line up by: hand-set points first, then a matched
+ * transcript's, then chapter starts, each kept only where it agrees with
+ * those already there (later in the book means later in the recording).
+ * Sorted by position.
  */
-export function syncPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
+export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: SyncPoint[] = []): SyncPoint[] {
   const kept: SyncPoint[] = []
   const add = (p: SyncPoint) => {
     const at = kept.findIndex((k) => k.index >= p.index)
@@ -197,7 +262,8 @@ export function syncPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
   }
   // The most recent hand-set point wins over older ones it disagrees with.
   for (const p of [...link.points].reverse()) add(p)
-  for (const p of matchChapters(parseTimestamps(link.timestamps), chapters)) add(p)
+  for (const p of transcript) add(p)
+  for (const p of chapterPoints(link, chapters)) add(p)
   return kept
 }
 
@@ -251,12 +317,30 @@ export function addPoint(points: SyncPoint[], index: number, seconds: number): S
   return [...points.filter((p) => Math.abs(p.index - index) > near), { index, seconds }]
 }
 
-/** Searches to find a recording of a book; opened in a new tab, nothing is fetched here. */
-export function findLinks(title: string): { label: string; url: string }[] {
-  const q = encodeURIComponent(title)
-  return [
-    { label: 'YouTube', url: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} audiobook`)}` },
-    { label: 'LibriVox', url: `https://librivox.org/search?q=${q}&search_form=advanced` },
-    { label: 'Internet Archive', url: `https://archive.org/search?query=${q}&and%5B%5D=mediatype%3A%22audio%22` },
-  ]
+/** Words either side of a spot to measure the narrator's pace over, so a pause or a quick line doesn't swing it. */
+const PACE_WINDOW = 200
+
+/** How fast the narrator reads around the word at `index`, in words a second. */
+export function paceAt(points: SyncPoint[], index: number): number {
+  if (points.length < 2) return NARRATION_WORDS_PER_SECOND
+  let a = 0
+  while (a + 1 < points.length - 1 && points[a + 1].index <= index - PACE_WINDOW) a++
+  let b = points.length - 1
+  while (b - 1 > a && points[b - 1].index >= index + PACE_WINDOW) b--
+  return rate(points[a], points[b])
+}
+
+/** Playback speeds a player allows; outside them speech turns to chipmunks or mud. */
+export const MIN_SPEED = 0.5
+export const MAX_SPEED = 2
+
+/** How fast to play the recording so the narrator reads at `wpm`, rounded to a twentieth. */
+export function speedFor(wpm: number, wordsPerSecond: number): number {
+  const speed = wpm / 60 / wordsPerSecond
+  return Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, speed)) * 20) / 20
+}
+
+/** Searching YouTube needs a key this app doesn't have, so this opens YouTube's own search. */
+export function youTubeSearch(title: string): string {
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${title} audiobook`)}`
 }
