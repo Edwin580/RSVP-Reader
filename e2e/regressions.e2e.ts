@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import JSZip from 'jszip'
 import { upload } from './helpers.ts'
 
 /*
@@ -210,4 +211,49 @@ test("the ring around a tapped day in the stats calendar isn't clipped (#52)", a
     })()`)
     expect(fits, `square ${index}`).toBe(true)
   }
+})
+
+test('page numbers and running headers from a printed book stay out of the text (#55)', async ({ page }) => {
+  // Reported with an EPUB made from a printed book: a page number ("18")
+  // showed up mid-sentence, and the sentence was split into two paragraphs
+  // where the printed page ended.
+  const paragraphs = [
+    'Eddie ran across the pier, the way children do, hoping running will turn to 17',
+    'flying. It might have seemed ridiculous to anyone watching, this white-haired 18',
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    'maintenance worker, all alone, making like an airplane. But the running boy is inside 19',
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    'every man, no matter how old he gets.',
+    'And then Eddie stopped running. He heard something. A voice, tinny, as if coming 20',
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    'through a megaphone.',
+  ]
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Pier</dc:title></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>',
+  )
+  zip.file(
+    'c1.xhtml',
+    `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>The End</h1>${paragraphs.map((p) => `<p>${p}</p>`).join('')}</body></html>`,
+  )
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'pier.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  await openSettings(page)
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await closeSettings(page)
+
+  const text = page.locator('.page > .page-text')
+  await expect(text).toContainText('this white-haired maintenance worker, all alone')
+  await expect(text.locator('p')).toHaveText([
+    'Eddie ran across the pier, the way children do, hoping running will turn to flying. It might have seemed ridiculous to anyone watching, this white-haired maintenance worker, all alone, making like an airplane. But the running boy is inside every man, no matter how old he gets.',
+    'And then Eddie stopped running. He heard something. A voice, tinny, as if coming through a megaphone.',
+  ])
 })

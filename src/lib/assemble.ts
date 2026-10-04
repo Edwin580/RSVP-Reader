@@ -1,3 +1,4 @@
+import { removePageArtifacts } from './pageArtifacts'
 import { buildBook, splitMarkdownChapters, splitParagraphs, splitTextChapters, type Section } from './text'
 import type { Book } from './types'
 
@@ -14,10 +15,13 @@ export type AssembleRequest =
 export function assemble(request: AssembleRequest): Book {
   let sections: Section[]
   if (request.kind === 'sections') {
-    sections = request.sections
+    sections = removePageArtifacts(request.sections)
   } else {
     const text = new TextDecoder().decode(request.data)
-    sections = request.kind === 'text' ? splitTextChapters(splitParagraphs(text)) : splitMarkdownChapters(text)
+    sections =
+      request.kind === 'text'
+        ? removePageArtifacts(splitTextChapters(splitParagraphs(text)))
+        : splitMarkdownChapters(text)
   }
   return buildBook(request.id, request.title, sections)
 }
