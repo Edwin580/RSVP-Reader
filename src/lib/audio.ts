@@ -244,6 +244,11 @@ export function trackChapters(tracks: Track[], chapters: Chapter[]): (number | n
   return tracks.map((_, k) => found.find((p) => p.seconds === k)?.index ?? null)
 }
 
+/** Narrators read about 130–220 words a minute; a chapter that would take a pace outside this isn't the one recorded. */
+const MIN_BELIEVABLE_PACE = 2.1
+const MAX_BELIEVABLE_PACE = 3.7
+const TYPICAL_PACE = 2.7
+
 /** How far either side of a guessed start to look, in words, when a track doesn't say which chapter it is. */
 const GUESS_WINDOW = 2500
 
@@ -264,8 +269,21 @@ export function trackRange(
   const starts = trackChapters(tracks, chapters)
   const start = starts[k]
   const next = starts[k + 1]
-  if (start !== null && start !== undefined && (k + 1 >= tracks.length || (next !== null && next !== undefined && next > start))) {
-    return { start, end: k + 1 < tracks.length ? next! : wordCount, options: {} }
+  // Named after a chapter, and so is the next track: it covers the chapters between.
+  if (start !== null && start !== undefined && next !== null && next !== undefined && next > start) {
+    return { start, end: next, options: {} }
+  }
+  // The last track (or one before a track named after nothing): it ends at
+  // whichever chapter break later on makes for a believable narration pace
+  // (chapters are long, so there's rarely more than one); if none does
+  // (the book runs on with an afterword or a licence), where it ends is
+  // found from its sound.
+  if (start !== null && start !== undefined) {
+    const believable = [...chapters.map((c) => c.start).filter((c) => c > start), wordCount]
+      .map((end) => ({ end, pace: (end - start) / Math.max(duration * 0.92, 1) }))
+      .filter((c) => c.pace >= MIN_BELIEVABLE_PACE && c.pace <= MAX_BELIEVABLE_PACE)
+      .sort((a, b) => Math.abs(a.pace - TYPICAL_PACE) - Math.abs(b.pace - TYPICAL_PACE))
+    if (believable.length > 0) return { start, end: believable[0].end, options: {} }
   }
   const guess = start ?? wordAt(points, trackStarts(tracks)[k] ?? 0, wordCount)
   const from = Math.max(0, guess - (start === null || start === undefined ? GUESS_WINDOW : 0))

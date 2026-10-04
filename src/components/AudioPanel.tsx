@@ -25,6 +25,8 @@ interface Props {
   /** The playback speed that matches the reading speed. */
   speed: number
   listening: boolean
+  /** Lining up before playing. */
+  preparing: boolean
   /** A file of the recording is being lined up with the book from its sound. */
   lining: boolean
   error: string | null
@@ -43,7 +45,7 @@ type Search = { state: 'searching' } | { state: 'done'; results: Recording[] } |
  * chapter times.
  */
 export function AudioPanel(props: Props) {
-  const { title, author, chapters, link, startsAt, transcriptMatches, speed, listening, lining, error, closing, onLink, onListen, onClose } = props
+  const { title, author, chapters, link, startsAt, transcriptMatches, speed, listening, preparing, lining, error, closing, onLink, onListen, onClose } = props
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
@@ -84,6 +86,7 @@ export function AudioPanel(props: Props) {
               startsAt={startsAt}
               speed={speed}
               listening={listening}
+              preparing={preparing}
               lining={lining}
               error={error}
               onLink={onLink}
@@ -241,6 +244,7 @@ function Linked({
   startsAt,
   speed,
   listening,
+  preparing,
   lining,
   error,
   onLink,
@@ -251,6 +255,7 @@ function Linked({
   startsAt: number
   speed: number
   listening: boolean
+  preparing: boolean
   lining: boolean
   error: string | null
   onLink: (link: AudioLink | null) => void
@@ -286,7 +291,7 @@ function Linked({
       </p>
       <button type="button" className="bookmark-here" onClick={onListen}>
         <Icon name={listening ? 'pause' : 'play'} size={16} />
-        {listening ? 'Pause' : `Listen from here · ${formatTime(startsAt)}`}
+        {listening ? 'Pause' : preparing ? 'Lining up… (tap to stop)' : `Listen from here · ${formatTime(startsAt)}`}
       </button>
       {error && <p className="search-hint audio-error" role="alert">{error}</p>}
       <div className="setting audio-speed">

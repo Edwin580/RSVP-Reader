@@ -405,7 +405,7 @@ export function Reader({
   // (src/lib/audio.ts). The recording plays at the reading speed.
   const audioHost = useRef<HTMLDivElement>(null)
   const player = useAudioPlayer(audio?.source ?? null, audioFile, audioHost)
-  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed } = player
+  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed, seeking: audioSeeking, unlock: unlockAudio } = player
   const listening = player.playing
   const timestamps = audio?.timestamps ?? ''
   const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
@@ -414,67 +414,109 @@ export function Reader({
   useEffect(() => setSpeed(speed), [speed, setSpeed])
   /** The last word moved to by following the narrator; any other move is the reader's own jump. */
   const followed = useRef(-1)
-  /** Players report the old time for a moment after a seek; don't follow until then. */
+  /** YouTube's player reports the old time for a moment after a seek; don't follow until then. */
   const settling = useRef(0)
-  // Lining each file up from its sound (pauses.ts): the one being listened
-  // to, and the next one before it's reached. Done once per file and saved.
+  // Lining each file up from its sound (pauses.ts): before playing from a
+  // spot, the file it's in; while listening, the next one before it's
+  // reached. Done once per file and saved with the link.
   const narration = useMemo(() => buildTimeline(words, book.paragraphEnds, 'natural', headings).weights, [words, book.paragraphEnds, headings])
   const latestAudio = useRef(audio)
-  const latestPoints = useRef(points)
   useEffect(() => {
     latestAudio.current = audio
-    latestPoints.current = points
   })
+  /** The points as they are now, including files lined up since the last render. */
+  const pointsNow = useCallback(
+    () => (latestAudio.current ? syncPoints(latestAudio.current, chapters, transcript) : []),
+    [chapters, transcript],
+  )
+  /** The file playing `seconds` into the recording. */
+  const fileAt = useCallback((seconds: number) => {
+    const source = latestAudio.current?.source
+    return source?.kind === 'archive' ? trackAt(source.tracks, seconds) : 0
+  }, [])
   const [lining, setLining] = useState(0)
-  const tried = useRef(new Set<string>())
-  /** Set when the file being heard has just been lined up, so the recording moves to where the reader is. */
-  const realign = useRef(false)
+  const linings = useRef(new Map<string, Promise<void>>())
   const lineUp = useCallback(
-    (k: number, heardNow: boolean) => {
+    (k: number): Promise<void> => {
       const link = latestAudio.current
-      if (!link || k < 0 || link.detected?.[k] !== undefined) return
+      if (!link || k < 0 || link.detected?.[k] !== undefined) return Promise.resolve()
       const { source } = link
       const target = source.kind === 'archive' ? source.tracks[k]?.url : source.kind === 'url' ? source.url : source.kind === 'file' ? audioFile : null
-      if (!target || (source.kind !== 'archive' && k > 0)) return
+      if (!target || (source.kind !== 'archive' && k > 0)) return Promise.resolve()
       const id = `${sourceId(source)}#${k}`
-      if (tried.current.has(id)) return
-      tried.current.add(id)
+      const running = linings.current.get(id)
+      if (running) return running
       setLining((n) => n + 1)
-      detectSync(target, { words, weights: narration, paragraphEnds: book.paragraphEnds }, (duration) => {
+      const done = detectSync(target, { words, weights: narration, paragraphEnds: book.paragraphEnds }, (duration) => {
         const tracks = source.kind === 'archive' ? source.tracks : [{ url: '', title: '', seconds: duration }]
-        return trackRange(tracks, k, chapters, latestPoints.current, words.length, duration)
+        return trackRange(tracks, k, chapters, pointsNow(), words.length, duration)
       })
         .then((found) => {
           const now = latestAudio.current
           if (!now || sourceId(now.source) !== sourceId(source)) return
           const offset = source.kind === 'archive' ? trackStarts(source.tracks)[k] : 0
-          onAudio({ ...now, detected: { ...now.detected, [k]: found.map((p) => ({ index: p.index, seconds: p.seconds + offset })) } })
-          if (heardNow) realign.current = true
+          const next = { ...now, detected: { ...now.detected, [k]: found.map((p) => ({ index: p.index, seconds: p.seconds + offset })) } }
+          // Seen straight away by whatever is waiting on this, before the next render.
+          latestAudio.current = next
+          onAudio(next)
         })
         // Lining up is a bonus: without it, chapter starts and taps still place the recording.
         .catch(() => {})
         .finally(() => setLining((n) => n - 1))
+      linings.current.set(id, done)
+      return done
     },
-    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio],
+    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow],
   )
-  /** The file playing `seconds` into the recording. */
-  const fileAt = useCallback(
-    (seconds: number) => (audio?.source.kind === 'archive' ? trackAt(audio.source.tracks, seconds) : 0),
-    [audio?.source],
+  /**
+   * Lines up the file that word `i` is in. The first guess at which file
+   * that is can be wrong (a book whose chapters the recording doesn't name),
+   * so if the word turns out to be outside the file, the file it's in now
+   * looks to be is lined up too.
+   */
+  const prepare = useCallback(
+    async (i: number) => {
+      const seen = new Set<number>()
+      for (let step = 0; step < 4; step++) {
+        const k = fileAt(timeAt(pointsNow(), i))
+        if (seen.has(k)) return
+        seen.add(k)
+        await lineUp(k)
+        const found = latestAudio.current?.detected?.[k]
+        if (!found || found.length < 2 || (i >= found[0].index && i <= found[found.length - 1].index)) return
+      }
+    },
+    [fileAt, lineUp, pointsNow],
   )
-  const startAudio = (i: number) => {
+  /** Lining up waits at most this long for a slow connection; then the recording starts from the best guess. */
+  const PREPARE_MS = 20000
+  const [preparing, setPreparing] = useState(false)
+  /** Bumped by each new start, so an older one still lining up doesn't play once a newer one has begun. */
+  const startToken = useRef(0)
+  /** Play the recording from word `i`: lined up first, so it starts where the text is. */
+  const playFrom = async (i: number) => {
+    const token = ++startToken.current
+    followed.current = i
+    pauseAudio()
+    // Phones only allow sound in response to a tap: allow it now, while lining up waits.
+    unlockAudio()
+    setPreparing(true)
+    await Promise.race([prepare(i), new Promise((resolve) => window.setTimeout(resolve, PREPARE_MS))])
+    if (token !== startToken.current) return
+    setPreparing(false)
     followed.current = i
     settling.current = performance.now() + 800
-    playAudio(timeAt(points, i))
+    playAudio(timeAt(pointsNow(), i))
   }
   const listen = () => {
-    if (listening) {
+    if (listening || preparing) {
+      startToken.current++
+      setPreparing(false)
       pauseAudio()
       return
     }
     pause()
-    lineUp(fileAt(timeAt(points, index)), true)
-    startAudio(index)
+    void playFrom(index)
   }
   // Tapping a word while listening says "the narrator is here": it pins that
   // word to this moment, and the book carries on from it.
@@ -492,41 +534,39 @@ export function Reader({
   useEffect(() => {
     if (!listening) return
     const follow = () => {
-      if (performance.now() < settling.current) return
       const t = currentTime()
       setHeard(Math.floor(t))
+      // Still moving to where it was asked to start: nothing new to follow yet.
+      if (performance.now() < settling.current || audioSeeking()) return
       const k = fileAt(t)
-      lineUp(k, true)
+      void lineUp(k)
       // Halfway through a chapter's file, line up the next one too.
       const source = latestAudio.current?.source
       if (source?.kind === 'archive') {
         const start = trackStarts(source.tracks)[k]
-        if (t - start > (source.tracks[k]?.seconds ?? Infinity) / 2) lineUp(k + 1, false)
+        if (t - start > (source.tracks[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
       }
-      const i = wordHeardAt(points, currentTime(), words.length)
+      const i = wordHeardAt(points, t, words.length)
       if (i === current.current) return
       followed.current = i
       seek(i)
     }
     const timer = window.setInterval(follow, 200)
     return () => window.clearInterval(timer)
-  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp])
-  // With the Listen panel open, line up the file for where the reader is, ready to press Listen.
+  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp, audioSeeking])
+  // With a recording linked, line up the part for where the reader is, so
+  // pressing Listen can start straight away.
+  const sourceKey = audio ? sourceId(audio.source) : ''
   useEffect(() => {
-    if (panel === 'audio' && audio) lineUp(fileAt(timeAt(latestPoints.current, current.current)), false)
-  }, [panel, audio, lineUp, fileAt])
-  // Once the file being heard is lined up, the recording moves to where the reader is.
+    if (sourceKey) void prepare(current.current)
+  }, [sourceKey, prepare])
   useEffect(() => {
-    if (!realign.current) return
-    realign.current = false
-    if (listening) startAudio(current.current)
-    // Runs when new points arrive; startAudio is recreated every render.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, listening])
+    if (panel === 'audio' && sourceKey) void prepare(current.current)
+  }, [panel, sourceKey, prepare])
   // A jump while listening (the progress bar, a chapter, a page turn) takes the recording there too.
   useEffect(() => {
     if (!listening || index === followed.current) return
-    startAudio(index)
+    void playFrom(index)
     // Only the reader's position moving should re-seek, not new points arriving.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [index])
@@ -866,14 +906,19 @@ export function Reader({
         )}
         {audio && (
           <div className="listen-bar">
-            <button type="button" className="text-button" onClick={listen} aria-label={listening ? 'Pause audiobook' : 'Listen from here'}>
+            <button
+              type="button"
+              className="text-button"
+              onClick={listen}
+              aria-label={listening ? 'Pause audiobook' : preparing ? 'Stop lining up' : 'Listen from here'}
+            >
               <Icon name={listening ? 'pause' : 'headphones'} size={16} />
-              {listening ? 'Listening' : 'Listen'}
+              {listening ? 'Listening' : preparing ? 'Lining up…' : 'Listen'}
             </button>
             <span className="muted listen-time">
               {formatTime(listening ? heard : timeAt(points, index))}
               {speed !== 1 && ` · ${speed}×`}
-              {lining > 0 && ' · lining up'}
+              {lining > 0 && !preparing && ' · lining up'}
             </span>
             {listening && <span className="muted listen-hint">Tap the word you hear to sync</span>}
           </div>
@@ -1022,6 +1067,7 @@ export function Reader({
           transcriptMatches={transcript.length}
           speed={speedFor(wpm, paceAt(points, index))}
           listening={listening}
+          preparing={preparing}
           lining={lining > 0}
           error={player.error}
           closing={closing}

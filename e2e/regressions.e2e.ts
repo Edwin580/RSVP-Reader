@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import JSZip from 'jszip'
-import { upload } from './helpers.ts'
+import { chapterTwo, clock, LISTEN_BOOK, mockArchive, SECOND, upload } from './helpers.ts'
 
 /*
  * Bugs that were fixed and must stay fixed. Each test names the bug as it
@@ -294,4 +294,31 @@ test('a PDF keeps just its text, without its running header and page numbers (#5
   })`)) as { words: string[]; chapters: unknown[] }
   expect(book.chapters.length).toBeGreaterThan(3)
   expect(book.words).toEqual(paragraphs.join(' ').split(' '))
+})
+
+test('pressing Listen in the middle of a chapter plays from the sentence being read (#56)', async ({ page }) => {
+  // On a slow connection, the recording used to start from a guess straight
+  // away, the book jumped to the chapter's start while the file loaded, and
+  // then the recording moved to wherever the book had got to.
+  await mockArchive(page, { delay: 1500 })
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  // Partway into chapter 2, which hasn't been lined up yet.
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.locator('.context [data-i]', { hasText: /^Lanterns\s*$/ }).click()
+  await expect(page.locator('.word')).toHaveText('Lanterns')
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+
+  // It lines the chapter up first, keeping the reader's place…
+  await expect(page.getByRole('button', { name: 'Stop lining up' })).toBeVisible()
+  await expect(page.locator('.word')).toHaveText('Lanterns')
+  // …then plays from exactly where that sentence is read.
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[SECOND.findIndex((s) => s.startsWith('Lanterns'))])}`))
+  await expect(page.locator('.word')).toHaveText('Lanterns')
 })

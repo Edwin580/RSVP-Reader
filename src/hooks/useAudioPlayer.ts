@@ -67,6 +67,14 @@ export interface AudioPlayer {
   currentTime: () => number
   /** Playback speed (1 = as recorded). */
   setSpeed: (speed: number) => void
+  /**
+   * Call from a tap when playing will only start later (once lining up is
+   * done): phones allow sound only in response to a tap, and remember it for
+   * the player once it has played.
+   */
+  unlock: () => void
+  /** Still moving to where `play` asked for; `currentTime` gives that spot until it gets there. */
+  seeking: () => boolean
 }
 
 /** The files to play in turn: a recording's tracks, or a single file of unknown length. */
@@ -91,6 +99,10 @@ export function useAudioPlayer(
   const [playing, setPlaying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const speed = useRef(1)
+  /** Where `play` asked to go, until playback gets there (seconds into the whole recording), or null. */
+  const target = useRef<{ seconds: number; since: number } | null>(null)
+  /** Briefly playing (muted) only to be allowed to play later; not the listener playing. */
+  const unlocking = useRef(false)
   const kind = source?.kind ?? null
   /** What identifies the recording; saving new timestamps keeps it, and the player. */
   const key = !source
@@ -129,11 +141,18 @@ export function useAudioPlayer(
       el.playbackRate = speed.current
     }
     const onPlay = () => {
+      if (unlocking.current) return
       advancing = false
       setPlaying(true)
     }
     const onPause = () => {
-      if (!advancing) setPlaying(false)
+      if (!advancing && !unlocking.current) setPlaying(false)
+    }
+    // There at last: the sound comes on (it's muted while the file loads and seeks, so nothing else is heard first).
+    const onSeeked = () => {
+      if (!target.current || unlocking.current) return
+      target.current = null
+      el.muted = false
     }
     const onEnded = () => {
       const t = tracks.current
@@ -149,7 +168,7 @@ export function useAudioPlayer(
       setPlaying(false)
       setError('This audio couldn’t be played. Links need to go straight to an audio file, such as an MP3.')
     }
-    const events = [['play', onPlay], ['pause', onPause], ['ended', onEnded], ['error', onError]] as const
+    const events = [['play', onPlay], ['pause', onPause], ['ended', onEnded], ['error', onError], ['seeked', onSeeked]] as const
     for (const [name, handler] of events) el.addEventListener(name, handler)
     load(0)
     audio.current = el
@@ -221,6 +240,7 @@ export function useAudioPlayer(
     (seconds: number) => {
       setError(null)
       if (kind === 'youtube') {
+        target.current = { seconds, since: performance.now() }
         if (yt.current) {
           yt.current.seekTo(seconds, true)
           yt.current.playVideo()
@@ -229,18 +249,28 @@ export function useAudioPlayer(
       }
       const el = audio.current
       if (!el) return
+      unlocking.current = false
+      target.current = { seconds, since: performance.now() }
+      el.muted = true
       const t = tracks.current
       let k = 0
       while (k + 1 < t.starts.length && t.starts[k + 1] <= seconds) k++
       const offset = seconds - t.starts[k]
       if (k !== t.current) {
+        // Not the file loaded: until it's loaded, the old one's position means nothing.
         t.current = k
         el.src = t.list[k].url
         el.defaultPlaybackRate = speed.current
         el.playbackRate = speed.current
       }
       const seek = () => {
-        el.currentTime = Number.isFinite(el.duration) ? Math.min(offset, Math.max(0, el.duration - 1)) : offset
+        const to = Number.isFinite(el.duration) ? Math.min(offset, Math.max(0, el.duration - 1)) : offset
+        // Already there (no seek will happen): sound on now.
+        if (Math.abs(el.currentTime - to) < 0.05) {
+          target.current = null
+          el.muted = false
+        }
+        el.currentTime = to
       }
       if (el.readyState >= 1) seek()
       else el.addEventListener('loadedmetadata', seek, { once: true })
@@ -251,16 +281,43 @@ export function useAudioPlayer(
   )
 
   const pause = useCallback(() => {
+    target.current = null
     audio.current?.pause()
     yt.current?.pauseVideo()
     pendingPlay.current = null
   }, [])
 
+  const seeking = useCallback(() => {
+    const asked = target.current
+    if (!asked) return false
+    // YouTube says nothing when a seek is done: there once its time is close, or after a moment.
+    if (kind === 'youtube') {
+      const now = yt.current?.getCurrentTime() ?? 0
+      if (Math.abs(now - asked.seconds) < 2 || performance.now() - asked.since > 3000) target.current = null
+    }
+    return target.current !== null
+  }, [kind])
+
   const currentTime = useCallback(() => {
+    if (seeking()) return target.current!.seconds
     if (kind === 'youtube') return yt.current?.getCurrentTime() ?? 0
     const t = tracks.current
     return (t.starts[t.current] ?? 0) + (audio.current?.currentTime ?? 0)
-  }, [kind])
+  }, [kind, seeking])
+
+  const unlock = useCallback(() => {
+    const el = audio.current
+    if (!el || !el.paused) return
+    unlocking.current = true
+    el.muted = true
+    const done = () => {
+      if (!unlocking.current) return
+      unlocking.current = false
+      el.pause()
+      el.muted = false
+    }
+    el.play().then(done, done)
+  }, [])
 
   const setSpeed = useCallback((next: number) => {
     if (next === speed.current) return
@@ -276,5 +333,7 @@ export function useAudioPlayer(
     pause,
     currentTime,
     setSpeed,
+    unlock,
+    seeking,
   }
 }

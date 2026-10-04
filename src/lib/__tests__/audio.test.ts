@@ -226,7 +226,13 @@ describe('which part of the book each track covers', () => {
 
   it('looks for a named track in its chapter, up to the next', () => {
     expect(trackRange(tracks, 1, chapters, [], 5000, 775)).toEqual({ start: 1000, end: 2500, options: {} })
-    expect(trackRange(tracks, 2, chapters, [], 5000, 632)).toEqual({ start: 2500, end: 5000, options: {} })
+    // The last track ends where a believable pace says: here the end of the book (2500 words in 1000 s)…
+    expect(trackRange(tracks, 2, chapters, [], 5000, 1000)).toEqual({ start: 2500, end: 5000, options: {} })
+    // …and here the next chapter, not the far end of the book (a recording of only part of it).
+    const more = [...chapters, { title: 'CHAPTER IV. The Rabbit Sends in a Little Bill', start: 4300 }]
+    expect(trackRange(tracks, 2, more, [], 30000, 700)).toEqual({ start: 2500, end: 4300, options: {} })
+    // When no chapter break fits (a licence runs on after the last), where it ends is found from its sound.
+    expect(trackRange(tracks, 2, chapters, [], 30000, 632)).toEqual({ start: 2500, end: expect.any(Number), options: { lead: 0, openEnd: true } })
   })
 
   it('looks either side of a guess for a track named after no chapter', () => {

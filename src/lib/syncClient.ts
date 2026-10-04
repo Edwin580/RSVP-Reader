@@ -18,6 +18,7 @@ export interface TextRange {
   options: AlignOptions
 }
 
+
 async function decode(data: ArrayBuffer): Promise<{ samples: Float32Array; sampleRate: number }> {
   const Context =
     window.OfflineAudioContext ?? (window as unknown as { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext
