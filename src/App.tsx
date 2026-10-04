@@ -10,6 +10,7 @@ import { sentenceStart } from './lib/rsvp'
 import { atEnd, readToEnd } from './lib/shelf'
 import { EMPTY_STATS } from './lib/stats'
 import * as storage from './lib/storage'
+import type { AudioLink } from './lib/audio'
 import type { Book, BookMeta, Bookmark, Progress } from './lib/types'
 
 interface OpenBook {
@@ -30,6 +31,7 @@ export default function App() {
   const [stats, setStats] = useState(EMPTY_STATS)
   const [open, setOpen] = useState<OpenBook | null>(null)
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  const [audio, setAudio] = useState<{ link: AudioLink | null; file: Blob | null }>({ link: null, file: null })
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
@@ -60,6 +62,8 @@ export default function App() {
   const openBook = useCallback(async (book: Book) => {
     const saved = await storage.loadProgress(book.id)
     setBookmarks(await storage.loadBookmarks(book.id))
+    const link = await storage.loadAudio(book.id)
+    setAudio({ link, file: link?.source.kind === 'file' ? ((await storage.loadAudioFile(book.id)) ?? null) : null })
     // Resume from the start of the sentence so there's context to pick up from,
     // except in a finished book, which would then no longer be finished.
     const finished = readToEnd({ wordCount: book.words.length }, saved)
@@ -97,6 +101,7 @@ export default function App() {
     const { createDemoBook } = await import('./lib/demo')
     const book = createDemoBook()
     setBookmarks([])
+    setAudio({ link: null, file: null })
     navigate('forward', () => setOpen({ book, startIndex: 0, demo: true }))
   }
 
@@ -189,6 +194,14 @@ export default function App() {
     if (bookId) storage.saveBookmarks(bookId, next).catch(() => {})
   }
 
+  const handleAudio = useCallback(
+    (link: AudioLink | null, file?: File) => {
+      setAudio((current) => ({ link, file: file ?? (link?.source.kind === 'file' ? current.file : null) }))
+      if (bookId) storage.saveAudio(bookId, link, file).catch(() => {})
+    },
+    [bookId],
+  )
+
   const demo = !!open?.demo
   const handleReadingTime = useCallback(
     (ms: number, words: number) => {
@@ -215,6 +228,9 @@ export default function App() {
         onProgress={handleProgress}
         bookmarks={bookmarks}
         onBookmarks={handleBookmarks}
+        audio={audio.link}
+        audioFile={audio.file}
+        onAudio={handleAudio}
         onReadingTime={handleReadingTime}
         onPlay={handlePlay}
         onClose={() => {
