@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   addPoint,
+  trackAt,
+  trackChapters,
+  trackRange,
   MAX_SPEED,
   paceAt,
   speedFor,
@@ -206,5 +209,38 @@ describe('recordings in tracks', () => {
       { index: 1000, seconds: 810 },
       { index: 2500, seconds: 1585 },
     ])
+  })
+})
+
+describe('which part of the book each track covers', () => {
+  const tracks = [
+    { url: 'a', title: '01 Down the Rabbit Hole', seconds: 796 },
+    { url: 'b', title: '02 The Pool of Tears', seconds: 775 },
+    { url: 'c', title: '03 A Caucus-Race and a Long Tale', seconds: 632 },
+  ]
+
+  it('finds the chapter each track is named after', () => {
+    expect(trackChapters(tracks, chapters)).toEqual([0, 1000, 2500])
+    expect(trackChapters([{ url: 'x', title: 'Intro', seconds: 30 }, ...tracks], chapters)).toEqual([null, 0, 1000, 2500])
+  })
+
+  it('looks for a named track in its chapter, up to the next', () => {
+    expect(trackRange(tracks, 1, chapters, [], 5000, 775)).toEqual({ start: 1000, end: 2500, options: {} })
+    expect(trackRange(tracks, 2, chapters, [], 5000, 632)).toEqual({ start: 2500, end: 5000, options: {} })
+  })
+
+  it('looks either side of a guess for a track named after no chapter', () => {
+    const unnamed = [{ url: 'a', title: 'Part one', seconds: 600 }, { url: 'b', title: 'Part two', seconds: 600 }]
+    // Lined up so far: word 3000 is heard at 600 s, where the second track starts.
+    const range = trackRange(unnamed, 1, chapters, [{ index: 0, seconds: 0 }, { index: 3000, seconds: 600 }], 20000, 600)
+    expect(range.start).toBe(500)
+    expect(range.options).toEqual({ lead: 5000, openEnd: true })
+    expect(range.end).toBeGreaterThan(3000 + 600 * 2.6)
+  })
+
+  it('knows which track is playing', () => {
+    expect(trackAt(tracks, 0)).toBe(0)
+    expect(trackAt(tracks, 800)).toBe(1)
+    expect(trackAt(tracks, 99999)).toBe(2)
   })
 })

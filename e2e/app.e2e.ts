@@ -954,25 +954,69 @@ test('double-tapping with a finger selects the word', async ({ page }, testInfo)
   await expect.poll(() => selected(page)).toBe('hedge')
 })
 
-/** A silent WAV file `seconds` long, standing in for an audiobook. */
-function silentWav(seconds: number): Buffer {
+/** A WAV file standing in for a narrator: noise for speech and silence for pauses, so a recording's pauses can be placed exactly. */
+function wav(parts: ({ speech: number } | { silence: number })[]): Buffer {
   const rate = 8000
-  const data = rate * seconds
-  const wav = Buffer.alloc(44 + data, 128) // 8-bit silence is 128
-  wav.write('RIFF', 0)
-  wav.writeUInt32LE(36 + data, 4)
-  wav.write('WAVEfmt ', 8)
-  wav.writeUInt32LE(16, 16)
-  wav.writeUInt16LE(1, 20) // PCM
-  wav.writeUInt16LE(1, 22) // mono
-  wav.writeUInt32LE(rate, 24)
-  wav.writeUInt32LE(rate, 28)
-  wav.writeUInt16LE(1, 32)
-  wav.writeUInt16LE(8, 34)
-  wav.write('data', 36)
-  wav.writeUInt32LE(data, 40)
-  return wav
+  const samples = parts.map((p) => ({ n: Math.round(('speech' in p ? p.speech : p.silence) * rate), loud: 'speech' in p }))
+  const data = samples.reduce((sum, p) => sum + p.n, 0)
+  const out = Buffer.alloc(44 + data, 128) // 8-bit silence is 128
+  out.write('RIFF', 0)
+  out.writeUInt32LE(36 + data, 4)
+  out.write('WAVEfmt ', 8)
+  out.writeUInt32LE(16, 16)
+  out.writeUInt16LE(1, 20) // PCM
+  out.writeUInt16LE(1, 22) // mono
+  out.writeUInt32LE(rate, 24)
+  out.writeUInt32LE(rate, 28)
+  out.writeUInt16LE(1, 32)
+  out.writeUInt16LE(8, 34)
+  out.write('data', 36)
+  out.writeUInt32LE(data, 40)
+  let at = 44
+  for (const p of samples) {
+    if (p.loud) for (let i = 0; i < p.n; i++) out[at + i] = 128 + Math.round((Math.random() * 2 - 1) * 40)
+    at += p.n
+  }
+  return out
 }
+
+const silentWav = (seconds: number) => wav([{ silence: seconds }])
+
+/** A book whose second chapter is long enough to line up by its sound, like a real one. */
+const SECOND = [
+  'Down she went, past cupboards and shelves.',
+  'The fall seemed to last for ever, and she wondered where she would land.',
+  'Marmalade jars stood on the shelves, and she took one down as she passed.',
+  'It was empty.',
+  'Lanterns hung from hooks in the walls, and maps and pictures were pinned up in places, all the way down, so that she had plenty to look at.',
+  'Would the fall never come to an end?',
+  'Presently she began talking to herself again, about the cat she had left at home and whether anyone would remember to give it milk at tea time.',
+  'Nobody answered.',
+  'Then, quite suddenly, she landed on a heap of sticks and dry leaves, and the fall was over.',
+]
+const LISTEN_BOOK = ['Chapter 1', '', 'The rabbit ran across the field. Alice followed it to a hole under the hedge.', '', 'Chapter 2', '', SECOND.join(' ')].join('\n')
+
+/**
+ * The second chapter read aloud: an announcement, the heading, then each
+ * sentence, with a pause after each. Returns the recording and when each
+ * sentence starts.
+ */
+function readChapterTwo(): { audio: Buffer; starts: number[] } {
+  const parts: ({ speech: number } | { silence: number })[] = [{ speech: 4 }, { silence: 0.9 }, { speech: 1 }, { silence: 0.9 }]
+  let t = 6.8
+  const starts: number[] = []
+  for (const sentence of SECOND) {
+    starts.push(t)
+    const length = sentence.split(' ').length * 0.36
+    parts.push({ speech: length }, { silence: 0.8 })
+    t += length + 0.8
+  }
+  parts.push({ speech: 3 }, { silence: 1 })
+  return { audio: wav(parts), starts }
+}
+const chapterTwo = readChapterTwo()
+/** Chapter 2's track starts after chapter 1's 20 seconds. */
+const CHAPTER_TWO_LENGTH = Math.ceil(chapterTwo.audio.length / 8000)
 
 /** The Internet Archive, answering with a LibriVox recording of the story in two 20-second chapters. */
 async function mockArchive(page: Page) {
@@ -984,49 +1028,70 @@ async function mockArchive(page: Page) {
       json: {
         files: [
           { name: 'story_01_64kb.mp3', format: '64Kbps MP3', title: '01 Chapter 1', length: '0:20' },
-          { name: 'story_02_64kb.mp3', format: '64Kbps MP3', title: '02 Chapter 2', length: '0:20' },
+          { name: 'story_02_64kb.mp3', format: '64Kbps MP3', title: '02 Chapter 2', length: `0:${CHAPTER_TWO_LENGTH}` },
         ],
       },
     }),
   )
   // Answered in ranges, like the real thing, or the browser can't seek in it.
-  const wav = silentWav(20)
+  const files: Record<string, Buffer> = { 'story_01_64kb.mp3': silentWav(20), 'story_02_64kb.mp3': chapterTwo.audio }
   await page.route('https://archive.org/download/**', (route) => {
+    const body = files[route.request().url().split('/').pop()!]
+    const headers = { 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' }
     const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? '')
-    if (!range) return route.fulfill({ body: wav, contentType: 'audio/wav', headers: { 'Accept-Ranges': 'bytes' } })
+    if (!range) return route.fulfill({ body, contentType: 'audio/wav', headers })
     const start = Number(range[1])
-    const end = range[2] ? Number(range[2]) : wav.length - 1
+    const end = range[2] ? Number(range[2]) : body.length - 1
     return route.fulfill({
       status: 206,
-      body: wav.subarray(start, end + 1),
+      body: body.subarray(start, end + 1),
       contentType: 'audio/wav',
-      headers: { 'Accept-Ranges': 'bytes', 'Content-Range': `bytes ${start}-${end}/${wav.length}` },
+      headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${body.length}` },
     })
   })
 }
 
-test('an audiobook is found for the book and starts at the chapter being read', async ({ page }) => {
+test('an audiobook is found for the book and lined up with it from its sound', async ({ page }) => {
   await mockArchive(page)
   await page.goto('./')
-  await upload(page)
+  await upload(page, 'story.txt', LISTEN_BOOK)
   await page.getByRole('button', { name: 'Listen', exact: true }).click()
   await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
-  await expect(page.getByText('2 of its 2 chapters line up with the book’s.')).toBeVisible()
+  await expect(page.getByText(/The first time you listen to a chapter, its sound is matched to the text/)).toBeVisible()
   await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
 
-  // Chapter 2 is the second track: 20 seconds in, then 14 seconds of LibriVox announcement.
+  // Chapter 2 is the second track. Until it's lined up, its start is a guess:
+  // 20 seconds in, then 14 seconds of LibriVox announcement.
   await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
   await expect(page.locator('.listen-time')).toHaveText(/^0:34/)
-  // This narrator reads far slower than 300 wpm, so it plays as fast as it can.
-  await expect(page.locator('.listen-time')).toContainText('2×')
+  // This narrator reads slower than 300 wpm, so it plays faster.
+  await expect(page.locator('.listen-time')).toHaveText(/ · [12]\.?\d*×$/)
+
+  // Opening Listen lines up the chapter being read from its sound.
+  await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
+  await expect(page.getByText('1 of 2 lined up so far.')).toBeVisible({ timeout: 15000 })
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+  // Each sentence is placed where it really starts, past the announcement.
+  for (const k of [0, 2, 4]) {
+    await page.locator('.context [data-i]', { hasText: new RegExp(`^${SECOND[k].split(' ')[0]}\\s*$`) }).first().click()
+    const at = 20 + chapterTwo.starts[k]
+    await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^0:${Math.floor(at)}`))
+  }
+
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 1' })
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
+  await expect(page.locator('.word')).toHaveText('Down')
   await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
-  await expect.poll(() => currentWord(page), { timeout: 8000 }).not.toBe('Chapter')
-  // It really is playing from the second track.
-  await expect(page.locator('.listen-time')).toHaveText(/^0:3[5-9]|^0:4/, { timeout: 8000 })
+  await expect.poll(() => currentWord(page), { timeout: 8000 }).not.toBe('Down')
+  // It really is playing from there.
+  await expect(page.locator('.listen-time')).toHaveText(/^0:2[7-9]|^0:3/, { timeout: 8000 })
 
   // Tapping the word being heard syncs the book to it.
-  await page.locator('.context [data-i]', { hasText: /^shelves\.\s*$/ }).click()
+  await page.locator('.context [data-i]', { hasText: /^shelves\.\s*$/ }).first().click()
   await expect(page.locator('.word')).toHaveText('shelves.')
   await page.getByRole('button', { name: 'Pause audiobook' }).click()
   await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
@@ -1039,18 +1104,20 @@ test('an audiobook is found for the book and starts at the chapter being read', 
   await expect(page.locator('.listen-bar')).toBeVisible()
 })
 
-test('a pasted transcript lines the recording up with the text', async ({ page }) => {
+test('a pasted transcript lines a video up with the text', async ({ page }) => {
   await mockArchive(page)
+  await page.route('https://www.youtube.com/**', (route) => route.abort())
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Listen', exact: true }).click()
-  await page.locator('.audio-file input').setInputFiles({ name: 'story.wav', mimeType: 'audio/wav', buffer: silentWav(60) })
   await page.getByLabel('Transcript or chapter times').fill(
     [
       '0:00', 'welcome to this recording', '0:08', 'chapter one the rabbit ran across the field',
       '0:12', 'alice followed it to a hole under the hedge', '0:30', 'chapter two down she went past cupboards and shelves',
     ].join('\n'),
   )
+  await page.getByLabel('Audiobook link').fill('https://youtu.be/dQw4w9WgXcQ')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
   await expect(page.getByText(/Transcript matched to the book at \d+ spots?\./)).toBeVisible()
   await page.keyboard.press('Escape')
   // "Alice followed it" is said at 0:12.

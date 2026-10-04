@@ -25,6 +25,8 @@ interface Props {
   /** The playback speed that matches the reading speed. */
   speed: number
   listening: boolean
+  /** A file of the recording is being lined up with the book from its sound. */
+  lining: boolean
   error: string | null
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
@@ -41,7 +43,7 @@ type Search = { state: 'searching' } | { state: 'done'; results: Recording[] } |
  * chapter times.
  */
 export function AudioPanel(props: Props) {
-  const { title, author, chapters, link, startsAt, transcriptMatches, speed, listening, error, closing, onLink, onListen, onClose } = props
+  const { title, author, chapters, link, startsAt, transcriptMatches, speed, listening, lining, error, closing, onLink, onListen, onClose } = props
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
@@ -82,6 +84,7 @@ export function AudioPanel(props: Props) {
               startsAt={startsAt}
               speed={speed}
               listening={listening}
+              lining={lining}
               error={error}
               onLink={onLink}
               onListen={onListen}
@@ -90,24 +93,29 @@ export function AudioPanel(props: Props) {
             <Find title={title} author={author} onUse={use} />
           )}
 
-          <h3 className="search-section">
-            Transcript or chapter times <span className="muted">(optional)</span>
-          </h3>
-          <p className="search-hint">
-            Paste a video’s transcript and the book follows the narrator word for word. YouTube’s app doesn’t let you
-            copy it, so open the video on a computer, click <em>Show transcript</em> under the description, and copy it
-            all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, tap the word you hear while listening.
-          </p>
-          <textarea
-            className="audio-times"
-            rows={4}
-            placeholder={'0:00\nChapter one. Down the rabbit hole.\n0:06\nAlice was beginning to get very tired…'}
-            value={timestamps}
-            onChange={(e) => setTimestamps(e.target.value)}
-            aria-label="Transcript or chapter times"
-            spellCheck={false}
-          />
-          <SyncStatus timestamps={timestamps} chapters={chapters} transcriptMatches={transcriptMatches} linked={!!link} />
+          {/* A recording lines itself up from its sound; a video can't, so it's for videos (or what was pasted before). */}
+          {(!link || link.source.kind === 'youtube' || timestamps.trim() !== '') && (
+            <>
+              <h3 className="search-section">
+                Transcript or chapter times <span className="muted">(optional)</span>
+              </h3>
+              <p className="search-hint">
+                Paste a video’s transcript and the book follows the narrator word for word. YouTube’s app doesn’t let you
+                copy it, so open the video on a computer, click <em>Show transcript</em> under the description, and copy it
+                all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, tap the word you hear while listening.
+              </p>
+              <textarea
+                className="audio-times"
+                rows={4}
+                placeholder={'0:00\nChapter one. Down the rabbit hole.\n0:06\nAlice was beginning to get very tired…'}
+                value={timestamps}
+                onChange={(e) => setTimestamps(e.target.value)}
+                aria-label="Transcript or chapter times"
+                spellCheck={false}
+              />
+              <SyncStatus timestamps={timestamps} chapters={chapters} transcriptMatches={transcriptMatches} linked={!!link} />
+            </>
+          )}
         </div>
       </aside>
     </div>
@@ -233,6 +241,7 @@ function Linked({
   startsAt,
   speed,
   listening,
+  lining,
   error,
   onLink,
   onListen,
@@ -242,6 +251,7 @@ function Linked({
   startsAt: number
   speed: number
   listening: boolean
+  lining: boolean
   error: string | null
   onLink: (link: AudioLink | null) => void
   onListen: () => void
@@ -255,6 +265,7 @@ function Linked({
         ).length
       : 0
   const matchSpeed = link.matchSpeed !== false
+  const lined = Object.values(link.detected ?? {}).filter((points) => points.length > 0).length
   return (
     <>
       <div className="audio-source">
@@ -264,13 +275,15 @@ function Linked({
           Remove
         </button>
       </div>
-      {source.kind === 'archive' && (
-        <p className="search-hint">
-          {tracksMatched > 0
-            ? `${tracksMatched} of its ${source.tracks.length} chapters line up with the book’s.`
-            : 'Its tracks don’t match this book’s chapters, so it starts at a guess. Tap the word you hear to sync.'}
-        </p>
-      )}
+      <p className="search-hint" aria-live="polite">
+        {source.kind === 'youtube'
+          ? 'A video can’t be lined up from its sound, so it starts at a guess. Tap the word you hear to sync, or paste its transcript below.'
+          : `The first time you listen to ${source.kind === 'archive' ? 'a chapter' : 'it'}, its sound is matched to the text, sentence by sentence.`}
+        {lining && ' Lining up now…'}
+        {!lining && lined > 0 && source.kind === 'archive' && ` ${lined} of ${source.tracks.length} lined up so far.`}
+        {!lining && lined > 0 && source.kind !== 'archive' && ' Lined up.'}
+        {source.kind === 'archive' && tracksMatched === 0 && ' Its tracks aren’t named after this book’s chapters, so each is found by its sound.'}
+      </p>
       <button type="button" className="bookmark-here" onClick={onListen}>
         <Icon name={listening ? 'pause' : 'play'} size={16} />
         {listening ? 'Pause' : `Listen from here · ${formatTime(startsAt)}`}

@@ -41,6 +41,12 @@ export interface AudioLink {
   points: SyncPoint[]
   /** Play the recording faster or slower to match the reading speed. Absent (older links) means on. */
   matchSpeed?: boolean
+  /**
+   * Points found from each file's sound (pauses.ts), by track number (0 for
+   * a single file), in seconds into the whole recording. An empty list means
+   * it was tried and nothing could be placed.
+   */
+  detected?: Record<string, SyncPoint[]>
 }
 
 /** A typical audiobook narration pace (about 155 wpm), used until there's a better guess. */
@@ -228,6 +234,54 @@ export function trackStarts(tracks: Track[]): number[] {
   })
 }
 
+/** The chapter each track of a recording starts, as the word it starts at, or null when its title names none. */
+export function trackChapters(tracks: Track[], chapters: Chapter[]): (number | null)[] {
+  // The track's number stands in for its time, to tell which matched.
+  const found = matchChapters(
+    tracks.map((t, k) => ({ seconds: k, label: t.title, text: t.title })),
+    chapters,
+  )
+  return tracks.map((_, k) => found.find((p) => p.seconds === k)?.index ?? null)
+}
+
+/** How far either side of a guessed start to look, in words, when a track doesn't say which chapter it is. */
+const GUESS_WINDOW = 2500
+
+/**
+ * The part of the book to look for track `k` in, once its length is known.
+ * A track named after a chapter covers that chapter, up to the next track's;
+ * otherwise its start is guessed from what's already lined up, and looked
+ * for either side of the guess.
+ */
+export function trackRange(
+  tracks: Track[],
+  k: number,
+  chapters: Chapter[],
+  points: SyncPoint[],
+  wordCount: number,
+  duration: number,
+): { start: number; end: number; options: { lead?: number; openEnd?: boolean } } {
+  const starts = trackChapters(tracks, chapters)
+  const start = starts[k]
+  const next = starts[k + 1]
+  if (start !== null && start !== undefined && (k + 1 >= tracks.length || (next !== null && next !== undefined && next > start))) {
+    return { start, end: k + 1 < tracks.length ? next! : wordCount, options: {} }
+  }
+  const guess = start ?? wordAt(points, trackStarts(tracks)[k] ?? 0, wordCount)
+  const from = Math.max(0, guess - (start === null || start === undefined ? GUESS_WINDOW : 0))
+  const lead = guess - from + (start === null || start === undefined ? GUESS_WINDOW : 0)
+  const end = Math.min(wordCount, Math.ceil(from + lead + duration * NARRATION_WORDS_PER_SECOND * 2 + 500))
+  return { start: from, end, options: { lead, openEnd: true } }
+}
+
+/** Which track plays `seconds` into the whole recording. */
+export function trackAt(tracks: Track[], seconds: number): number {
+  const starts = trackStarts(tracks)
+  let k = 0
+  while (k + 1 < starts.length && starts[k + 1] <= seconds) k++
+  return k
+}
+
 /** Chapter starts pinned by the recording's tracks and the pasted chapter list. */
 function chapterPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
   const { source } = link
@@ -263,6 +317,7 @@ export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: Syn
   // The most recent hand-set point wins over older ones it disagrees with.
   for (const p of [...link.points].reverse()) add(p)
   for (const p of transcript) add(p)
+  for (const p of Object.values(link.detected ?? {}).flat()) add(p)
   for (const p of chapterPoints(link, chapters)) add(p)
   return kept
 }

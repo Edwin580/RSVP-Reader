@@ -4,7 +4,22 @@ import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useRsvp } from '../hooks/useRsvp'
 import { alignTranscript } from '../lib/align'
 import { authorFromTitle } from '../lib/archive'
-import { addPoint, formatTime, paceAt, parseTimestamps, speedFor, syncPoints, timeAt, wordAt as wordHeardAt, type AudioLink } from '../lib/audio'
+import {
+  addPoint,
+  formatTime,
+  paceAt,
+  parseTimestamps,
+  speedFor,
+  syncPoints,
+  timeAt,
+  trackAt,
+  trackRange,
+  trackStarts,
+  wordAt as wordHeardAt,
+  type AudioLink,
+  type AudioSource,
+} from '../lib/audio'
+import { detectSync } from '../lib/syncClient'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
@@ -401,6 +416,52 @@ export function Reader({
   const followed = useRef(-1)
   /** Players report the old time for a moment after a seek; don't follow until then. */
   const settling = useRef(0)
+  // Lining each file up from its sound (pauses.ts): the one being listened
+  // to, and the next one before it's reached. Done once per file and saved.
+  const narration = useMemo(() => buildTimeline(words, book.paragraphEnds, 'natural', headings).weights, [words, book.paragraphEnds, headings])
+  const latestAudio = useRef(audio)
+  const latestPoints = useRef(points)
+  useEffect(() => {
+    latestAudio.current = audio
+    latestPoints.current = points
+  })
+  const [lining, setLining] = useState(0)
+  const tried = useRef(new Set<string>())
+  /** Set when the file being heard has just been lined up, so the recording moves to where the reader is. */
+  const realign = useRef(false)
+  const lineUp = useCallback(
+    (k: number, heardNow: boolean) => {
+      const link = latestAudio.current
+      if (!link || k < 0 || link.detected?.[k] !== undefined) return
+      const { source } = link
+      const target = source.kind === 'archive' ? source.tracks[k]?.url : source.kind === 'url' ? source.url : source.kind === 'file' ? audioFile : null
+      if (!target || (source.kind !== 'archive' && k > 0)) return
+      const id = `${sourceId(source)}#${k}`
+      if (tried.current.has(id)) return
+      tried.current.add(id)
+      setLining((n) => n + 1)
+      detectSync(target, { words, weights: narration, paragraphEnds: book.paragraphEnds }, (duration) => {
+        const tracks = source.kind === 'archive' ? source.tracks : [{ url: '', title: '', seconds: duration }]
+        return trackRange(tracks, k, chapters, latestPoints.current, words.length, duration)
+      })
+        .then((found) => {
+          const now = latestAudio.current
+          if (!now || sourceId(now.source) !== sourceId(source)) return
+          const offset = source.kind === 'archive' ? trackStarts(source.tracks)[k] : 0
+          onAudio({ ...now, detected: { ...now.detected, [k]: found.map((p) => ({ index: p.index, seconds: p.seconds + offset })) } })
+          if (heardNow) realign.current = true
+        })
+        // Lining up is a bonus: without it, chapter starts and taps still place the recording.
+        .catch(() => {})
+        .finally(() => setLining((n) => n - 1))
+    },
+    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio],
+  )
+  /** The file playing `seconds` into the recording. */
+  const fileAt = useCallback(
+    (seconds: number) => (audio?.source.kind === 'archive' ? trackAt(audio.source.tracks, seconds) : 0),
+    [audio?.source],
+  )
   const startAudio = (i: number) => {
     followed.current = i
     settling.current = performance.now() + 800
@@ -412,6 +473,7 @@ export function Reader({
       return
     }
     pause()
+    lineUp(fileAt(timeAt(points, index)), true)
     startAudio(index)
   }
   // Tapping a word while listening says "the narrator is here": it pins that
@@ -431,7 +493,16 @@ export function Reader({
     if (!listening) return
     const follow = () => {
       if (performance.now() < settling.current) return
-      setHeard(Math.floor(currentTime()))
+      const t = currentTime()
+      setHeard(Math.floor(t))
+      const k = fileAt(t)
+      lineUp(k, true)
+      // Halfway through a chapter's file, line up the next one too.
+      const source = latestAudio.current?.source
+      if (source?.kind === 'archive') {
+        const start = trackStarts(source.tracks)[k]
+        if (t - start > (source.tracks[k]?.seconds ?? Infinity) / 2) lineUp(k + 1, false)
+      }
       const i = wordHeardAt(points, currentTime(), words.length)
       if (i === current.current) return
       followed.current = i
@@ -439,7 +510,19 @@ export function Reader({
     }
     const timer = window.setInterval(follow, 200)
     return () => window.clearInterval(timer)
-  }, [listening, points, currentTime, words.length, seek])
+  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp])
+  // With the Listen panel open, line up the file for where the reader is, ready to press Listen.
+  useEffect(() => {
+    if (panel === 'audio' && audio) lineUp(fileAt(timeAt(latestPoints.current, current.current)), false)
+  }, [panel, audio, lineUp, fileAt])
+  // Once the file being heard is lined up, the recording moves to where the reader is.
+  useEffect(() => {
+    if (!realign.current) return
+    realign.current = false
+    if (listening) startAudio(current.current)
+    // Runs when new points arrive; startAudio is recreated every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, listening])
   // A jump while listening (the progress bar, a chapter, a page turn) takes the recording there too.
   useEffect(() => {
     if (!listening || index === followed.current) return
@@ -790,6 +873,7 @@ export function Reader({
             <span className="muted listen-time">
               {formatTime(listening ? heard : timeAt(points, index))}
               {speed !== 1 && ` · ${speed}×`}
+              {lining > 0 && ' · lining up'}
             </span>
             {listening && <span className="muted listen-hint">Tap the word you hear to sync</span>}
           </div>
@@ -938,6 +1022,7 @@ export function Reader({
           transcriptMatches={transcript.length}
           speed={speedFor(wpm, paceAt(points, index))}
           listening={listening}
+          lining={lining > 0}
           error={player.error}
           closing={closing}
           onLink={onAudio}
@@ -1129,4 +1214,12 @@ function useIdle(active: boolean, ms: number): boolean {
     }
   }, [active, ms])
   return idle
+}
+
+/** What identifies a recording, to tell whether it's still the one linked. */
+function sourceId(source: AudioSource): string {
+  if (source.kind === 'youtube') return `yt:${source.videoId}`
+  if (source.kind === 'archive') return `ia:${source.identifier}`
+  if (source.kind === 'url') return `url:${source.url}`
+  return `file:${source.name}`
 }
