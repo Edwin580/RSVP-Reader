@@ -235,6 +235,13 @@ describe('which part of the book each track covers', () => {
     expect(trackRange(tracks, 2, chapters, [], 30000, 632)).toEqual({ start: 2500, end: expect.any(Number), options: { lead: 0, openEnd: true } })
   })
 
+  it('lets the recording run on past an excerpt, and the text run on past a fast reading', () => {
+    // 1500 words of chapter 2 against a 20-minute recording: an excerpt.
+    expect(trackRange(tracks, 1, chapters, [], 5000, 1200).options).toEqual({ audioRunsOn: true })
+    // 1500 words in 4 minutes: more text than the recording reads.
+    expect(trackRange(tracks, 1, chapters, [], 5000, 240).options).toEqual({ lead: 0, openEnd: true })
+  })
+
   it('looks either side of a guess for a track named after no chapter', () => {
     const unnamed = [{ url: 'a', title: 'Part one', seconds: 600 }, { url: 'b', title: 'Part two', seconds: 600 }]
     // Lined up so far: word 3000 is heard at 600 s, where the second track starts.

@@ -92,6 +92,15 @@ describe('lining a recording up with the text from its pauses', () => {
     for (const p of placed) expect(Math.abs(p.seconds - truth[starts.indexOf(p.index - before.length)])).toBeLessThan(0.1)
   })
 
+  it('places an excerpt in a recording that reads on past it', () => {
+    // Only the first five sentences are in the text; the recording has all ten.
+    const shown = starts[5]
+    const points = alignChapter(findPauses(samples, RATE), samples.length / RATE, { ...text, end: shown }, { audioRunsOn: true })
+    const placed = points.filter((p) => starts.includes(p.index))
+    expect(placed.length).toBeGreaterThanOrEqual(4)
+    for (const p of placed) expect(Math.abs(p.seconds - truth[starts.indexOf(p.index)])).toBeLessThan(0.1)
+  })
+
   it('finds nothing in silence', () => {
     expect(alignChapter(findPauses(new Float32Array(RATE * 10), RATE), 10, text)).toEqual([])
   })

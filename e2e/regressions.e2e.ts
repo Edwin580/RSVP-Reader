@@ -324,3 +324,23 @@ test('pressing Listen in the middle of a chapter plays from the sentence being r
   // The chapter downloaded for lining up is the one played: it isn't downloaded twice.
   expect(archive.downloads.filter((name) => name === 'story_02_64kb.mp3')).toHaveLength(1)
 })
+
+test('an excerpt of a chapter, like the demo’s, lines up with the full recording of it (#56)', async ({ page }) => {
+  // The book has only the first four sentences of chapter 2; the recording
+  // reads all nine. Assuming it read only the excerpt made the narrator
+  // impossibly slow, and listening started minutes away from the text.
+  await mockArchive(page)
+  const excerpt = ['Chapter 1', '', 'The rabbit ran across the field. Alice followed it to a hole under the hedge.', '', 'Chapter 2', '', SECOND.slice(0, 4).join(' ')].join('\n')
+  await page.goto('./')
+  await upload(page, 'story.txt', excerpt)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.locator('.context [data-i]', { hasText: /^Marmalade\s*$/ }).click()
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[2])}`))
+  await expect(page.locator('.word')).toHaveText('Marmalade')
+})

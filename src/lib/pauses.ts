@@ -122,6 +122,12 @@ export interface AlignOptions {
   /** When where it ends isn't known: the text may run on past the recording (`end` is just as far as to look). */
   openEnd?: boolean
   /**
+   * When the recording holds more than the text: an excerpt or an abridged
+   * edition, read from a full recording. The text has to be placed in full,
+   * but the recording may run on after it.
+   */
+  audioRunsOn?: boolean
+  /**
    * The narrator's pace, in letters a second of speech, if known (from a
    * part of the recording already lined up). With an open end, the text's
    * length can't tell the pace, so without this a typical narrator's is assumed.
@@ -149,6 +155,9 @@ export function alignChapter(pauses: Pause[], duration: number, text: ChapterTex
   let lead = 0
   for (let i = text.start; i < Math.min(text.end, text.start + (options.lead ?? 0)); i++) lead += letters(text.words[i])
   const openEnd = options.openEnd ?? false
+  const audioRunsOn = options.audioRunsOn ?? false
+  // Either way, the text's length says nothing about the pace: a typical narrator's is assumed.
+  const paceUnknown = openEnd || audioRunsOn
 
   // Where speech could start a sentence: after each pause, and at the very start.
   const onsets = [0, ...pauses.map((p) => p.end)].filter((t) => t < duration)
@@ -166,20 +175,34 @@ export function alignChapter(pauses: Pause[], duration: number, text: ChapterTex
   // A first guess at the narrator's pace, then measured from the match
   // itself and matched again. The middle of the chapter measures it best:
   // the ends are where an announcement or credits can throw the match off.
-  const assumed = options.rate ?? TYPICAL_ARTICULATION
-  let rate = openEnd ? assumed : total / Math.max(speaking * 0.9, 1)
-  const run = () => match(marks, onsets, spoken, gaps, rate, duration, lead, openEnd)
-  let matched = run()
-  for (let pass = 0; pass < 2 && matched.length >= 8; pass++) {
-    const middle = matched.slice(Math.floor(matched.length * 0.15), Math.ceil(matched.length * 0.85))
-    let measured = slope(middle.map((m) => [spoken[m.onset], marks[m.mark].at]))
-    if (!(measured > 0)) break
-    if (openEnd) measured = Math.min(assumed * (1 + OPEN_END_RATE_SLACK), Math.max(assumed * (1 - OPEN_END_RATE_SLACK), measured))
-    rate = measured
-    matched = run()
+  /** Matches at one pace, then again at the pace that match measured (within `slack` of the first). */
+  const attempt = (start: number, slack: number) => {
+    let rate = start
+    let result = match(marks, onsets, spoken, gaps, rate, duration, lead, openEnd, audioRunsOn)
+    for (let pass = 0; pass < 2 && result.path.length >= 8; pass++) {
+      const middle = result.path.slice(Math.floor(result.path.length * 0.15), Math.ceil(result.path.length * 0.85))
+      const measured = slope(middle.map((m) => [spoken[m.onset], marks[m.mark].at]))
+      if (!(measured > 0)) break
+      rate = Math.min(start * (1 + slack), Math.max(start * (1 - slack), measured))
+      result = match(marks, onsets, spoken, gaps, rate, duration, lead, openEnd, audioRunsOn)
+    }
+    return result
   }
-  return matched.map((m) => ({ index: marks[m.mark].index, seconds: onsets[m.onset] }))
+  let best: { path: { mark: number; onset: number }[]; cost: number }
+  if (!paceUnknown) best = attempt(total / Math.max(speaking * 0.9, 1), Infinity)
+  else {
+    // Narrators range from slow and deliberate to brisk: try paces across that
+    // range, each allowed to drift a little, and keep the match that fits best
+    // (least cost for each sentence placed).
+    const assumed = options.rate ?? TYPICAL_ARTICULATION
+    const tries = (options.rate ? [1] : PACE_TRIES).map((f) => attempt(assumed * f, OPEN_END_RATE_SLACK))
+    best = tries.reduce((a, b) => (b.cost / Math.max(b.path.length, 1) < a.cost / Math.max(a.path.length, 1) ? b : a))
+  }
+  return best.path.map((m) => ({ index: marks[m.mark].index, seconds: onsets[m.onset] }))
 }
+
+/** Paces to try, as shares of a typical narrator's, when the text's length can't tell it. */
+const PACE_TRIES = [0.8, 1, 1.25, 1.55]
 
 /** Least-squares slope of y over x. */
 function slope(points: [number, number][]): number {
@@ -205,7 +228,8 @@ function match(
   duration: number,
   lead: number,
   openEnd: boolean,
-): { mark: number; onset: number }[] {
+  audioRunsOn: boolean,
+): { path: { mark: number; onset: number }[]; cost: number } {
   const B = marks.length
   const O = onsets.length
   const intro = Math.min(MAX_INTRO_SECONDS, duration * MAX_INTRO_SHARE)
@@ -225,7 +249,7 @@ function match(
   // end, nothing would stop the start sliding late (the text just ends
   // sooner), so pauses passed over before it cost half as much as anywhere.
   const before = new Float64Array(O)
-  for (let o = 1; o < O; o++) before[o] = before[o - 1] + (openEnd ? skipOnset(o - 1) / 2 : 0)
+  for (let o = 1; o < O; o++) before[o] = before[o - 1] + (openEnd || audioRunsOn ? skipOnset(o - 1) / 2 : 0)
   for (let m = 0; m < B && (m === 0 || marks[m].at <= lead); m++) {
     for (let o = 0; o < O && onsets[o] <= intro; o++) cost[m * O + o] = fit(m, o) + before[o]
   }
@@ -273,7 +297,8 @@ function match(
   // in the closing credits.
   const unusedAfter = new Float64Array(O + 1)
   for (let o = O - 1; o >= 0; o--) {
-    unusedAfter[o] = unusedAfter[o + 1] + (onsets[o] < duration - outro ? skipOnset(o) : 0)
+    // When the recording runs on past the text, what comes after it is simply not in the book.
+    unusedAfter[o] = unusedAfter[o + 1] + (onsets[o] < duration - outro && !audioRunsOn ? skipOnset(o) : 0)
   }
   // With an open end the text may run on, but the recording is all read:
   // speech left over after the last sentence placed, beyond what one long
@@ -295,5 +320,5 @@ function match(
   }
   const path: { mark: number; onset: number }[] = []
   for (let k = end; k >= 0; k = from[k]) path.push({ mark: Math.floor(k / O), onset: k % O })
-  return path.reverse()
+  return { path: path.reverse(), cost: endCost }
 }

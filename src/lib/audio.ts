@@ -245,8 +245,8 @@ export function trackChapters(tracks: Track[], chapters: Chapter[]): (number | n
 }
 
 /** Narrators read about 130–220 words a minute; a chapter that would take a pace outside this isn't the one recorded. */
-const MIN_BELIEVABLE_PACE = 2.1
-const MAX_BELIEVABLE_PACE = 3.7
+const MIN_BELIEVABLE_PACE = 1.8
+const MAX_BELIEVABLE_PACE = 4.6
 const TYPICAL_PACE = 2.7
 
 /** How far either side of a guessed start to look, in words, when a track doesn't say which chapter it is. */
@@ -265,12 +265,19 @@ export function trackRange(
   points: SyncPoint[],
   wordCount: number,
   duration: number,
-): { start: number; end: number; options: { lead?: number; openEnd?: boolean } } {
+): { start: number; end: number; options: { lead?: number; openEnd?: boolean; audioRunsOn?: boolean } } {
   const starts = trackChapters(tracks, chapters)
   const start = starts[k]
   const next = starts[k + 1]
-  // Named after a chapter, and so is the next track: it covers the chapters between.
+  /** Words a second it would take the narrator to read the text from `start` to `end` in this file. */
+  const paceTo = (end: number) => (end - (start ?? 0)) / Math.max(duration * 0.92, 1)
+  // Named after a chapter, and so is the next track: it covers the chapters between,
+  // unless that's too little text for the recording (an excerpt, or an abridged
+  // edition), when the recording runs on after the text, or too much.
   if (start !== null && start !== undefined && next !== null && next !== undefined && next > start) {
+    const pace = paceTo(next)
+    if (pace < MIN_BELIEVABLE_PACE) return { start, end: next, options: { audioRunsOn: true } }
+    if (pace > MAX_BELIEVABLE_PACE) return { start, end: next, options: { lead: 0, openEnd: true } }
     return { start, end: next, options: {} }
   }
   // The last track (or one before a track named after nothing): it ends at
@@ -284,6 +291,8 @@ export function trackRange(
       .filter((c) => c.pace >= MIN_BELIEVABLE_PACE && c.pace <= MAX_BELIEVABLE_PACE)
       .sort((a, b) => Math.abs(a.pace - TYPICAL_PACE) - Math.abs(b.pace - TYPICAL_PACE))
     if (believable.length > 0) return { start, end: believable[0].end, options: {} }
+    // Even the rest of the book is too little for the recording: an excerpt of what it reads.
+    if (paceTo(wordCount) < MIN_BELIEVABLE_PACE) return { start, end: wordCount, options: { audioRunsOn: true } }
   }
   const guess = start ?? wordAt(points, trackStarts(tracks)[k] ?? 0, wordCount)
   const from = Math.max(0, guess - (start === null || start === undefined ? GUESS_WINDOW : 0))
