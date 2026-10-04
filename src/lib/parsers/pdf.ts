@@ -4,19 +4,38 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { COVER_RENDER_WIDTH } from '../covers'
+import { stripPageEdges, type PageLine } from '../pageArtifacts'
 import type { Section } from '../text'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
-/** Join a page's text lines, merging words hyphenated across line breaks. */
-function pageText(items: TextItem[]): string {
+/** A page's text as lines, each with its height on the page. */
+function pageLines(items: TextItem[]): PageLine[] {
+  const lines: PageLine[] = []
   let text = ''
-  for (const item of items) {
-    text += item.str
-    if (item.hasEOL) text += '\n'
+  let y: number | null = null
+  const end = () => {
+    const line = text.replace(/\s+/g, ' ').trim()
+    if (line && y !== null) lines.push({ text: line, y })
+    text = ''
+    y = null
   }
-  return text
+  for (const item of items) {
+    if (y === null && item.str.trim()) y = item.transform[5]
+    text += item.str
+    if (item.hasEOL) end()
+  }
+  end()
+  return lines
+}
+
+/** Join a page's lines, merging words hyphenated across line breaks. */
+function joinLines(lines: string[]): string {
+  return lines
+    .join('\n')
     .replace(/(\p{L})-\n(?=\p{Ll})/gu, '$1')
+    // A "--" dash split over two lines.
+    .replace(/-\n-/g, '--')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -31,15 +50,18 @@ export async function parsePdf(
     const meta = await doc.getMetadata().catch(() => null)
     const info = meta?.info as { Title?: string } | undefined
 
-    const pages: { n: number; text: string }[] = []
+    const lines: PageLine[][] = []
     for (let n = 1; n <= doc.numPages; n++) {
       const page = await doc.getPage(n)
       const content = await page.getTextContent()
-      const text = pageText(content.items.filter((i): i is TextItem => 'str' in i))
-      if (text) pages.push({ n, text })
+      lines.push(pageLines(content.items.filter((i): i is TextItem => 'str' in i)))
       page.cleanup()
       onProgress?.(n / doc.numPages)
     }
+    // Without the running headers, footers and page numbers.
+    const pages = stripPageEdges(lines)
+      .map((page, i) => ({ n: i + 1, text: joinLines(page) }))
+      .filter((p) => p.text)
 
     if (pages.length === 0) {
       throw new Error('There’s no text in this PDF. It may be scanned pages, which are only pictures.')

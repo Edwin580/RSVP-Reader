@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import JSZip from 'jszip'
 import { upload } from './helpers.ts'
 
 /*
@@ -210,4 +211,87 @@ test("the ring around a tapped day in the stats calendar isn't clipped (#52)", a
     })()`)
     expect(fits, `square ${index}`).toBe(true)
   }
+})
+
+test('page numbers and running headers from a printed book stay out of the text (#55)', async ({ page }) => {
+  // Reported with an EPUB made from a printed book: a page number ("18")
+  // showed up mid-sentence, and the sentence was split into two paragraphs
+  // where the printed page ended.
+  // Each printed page is a few hundred words; the number and the header
+  // come at its end.
+  const printed = 'The boards were wet and the sea was grey under the morning sky. '.repeat(10)
+  const paragraphs = [
+    `${printed}Eddie ran across the pier, the way children do, hoping running will turn to 17`,
+    `flying. ${printed}It might have seemed ridiculous to anyone watching, this white-haired 18`,
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    `maintenance worker, all alone, making like an airplane. ${printed}But the running boy is inside 19`,
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    `every man, no matter how old he gets. ${printed}And then Eddie stopped running. He heard a voice, as if coming 20`,
+    'THE FIVE PEOPLE YOU MEET IN HEAVEN',
+    'through a megaphone.',
+  ]
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Pier</dc:title></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>',
+  )
+  zip.file(
+    'c1.xhtml',
+    `<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>The End</h1>${paragraphs.map((p) => `<p>${p}</p>`).join('')}</body></html>`,
+  )
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'pier.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+
+  const book = await page.evaluate(`new Promise((done) => {
+    const req = indexedDB.open('rsvp-reader')
+    req.onsuccess = () => {
+      const all = req.result.transaction('kv').objectStore('kv').getAll()
+      all.onsuccess = () => done(all.result.find((v) => v && Array.isArray(v.words)))
+    }
+  })`) as { words: string[]; paragraphEnds: number[] }
+  const { words, paragraphEnds } = book
+  const at = words.indexOf('white-haired')
+  // The sentence carries straight on, in the same paragraph.
+  expect(words.slice(at, at + 3)).toEqual(['white-haired', 'maintenance', 'worker,'])
+  // Two paragraphs: the chapter's heading, and the text in one piece.
+  expect(paragraphEnds).toEqual([1, words.length - 1])
+  expect(words.filter((w) => /^\d+$/.test(w) || w === 'FIVE')).toEqual([])
+})
+
+test('a PDF keeps just its text, without its running header and page numbers (#55)', async ({ page, context }) => {
+  // PDFs often draw the header and page number after the text, so they're
+  // found by where they sit on the page, not where they come in the file.
+  const sentences = Array.from({ length: 160 }, (_, i) => `Sentence number ${['one', 'two', 'three', 'four'][i % 4]} of the story goes on a while.`)
+  const paragraphs = Array.from({ length: 20 }, (_, i) => sentences.slice(i * 8, i * 8 + 8).join(' '))
+  const printer = await context.newPage()
+  await printer.setContent(`<body style="margin: 0; font: 13pt serif">${paragraphs.map((p) => `<p>${p}</p>`).join('')}</body>`)
+  const buffer = await printer.pdf({
+    width: '4in',
+    height: '6in',
+    margin: { top: '0.7in', bottom: '0.7in', left: '0.5in', right: '0.5in' },
+    displayHeaderFooter: true,
+    headerTemplate: '<div style="font-size: 9px; width: 100%; text-align: center">THE LONG STORY</div>',
+    footerTemplate: '<div style="font-size: 9px; width: 100%; text-align: center"><span class="pageNumber"></span></div>',
+  })
+  await printer.close()
+
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'story.pdf', mimeType: 'application/pdf', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  const book = (await page.evaluate(`new Promise((done) => {
+    const req = indexedDB.open('rsvp-reader')
+    req.onsuccess = () => {
+      const all = req.result.transaction('kv').objectStore('kv').getAll()
+      all.onsuccess = () => done(all.result.find((v) => v && Array.isArray(v.words)))
+    }
+  })`)) as { words: string[]; chapters: unknown[] }
+  expect(book.chapters.length).toBeGreaterThan(3)
+  expect(book.words).toEqual(paragraphs.join(' ').split(' '))
 })
