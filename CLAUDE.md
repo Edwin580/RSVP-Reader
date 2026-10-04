@@ -31,6 +31,10 @@ Every bug fix comes with a test that would have caught it, so it can't quietly c
 - Browser tests for fixed bugs go in `e2e/regressions.e2e.ts`, named after the behaviour and the PR that fixed it, for example `(#48)`.
 - Before changing something a past fix relied on (a CSS rule, a gesture, a layout), read the comment next to it. Several fixes depend on things that look harmless to change: for example, the reader must never be `position: fixed`, because Safari would keep its top bar in the wrong theme.
 
+## Branches
+
+Name each branch `edwin/` plus a few words for the feature or fix, for example `edwin/page-number-fix` or `edwin/faster-pdf-import`. Use a new branch for each pull request.
+
 ## Pull requests
 
 Every PR description uses exactly these three sections, in this order:
