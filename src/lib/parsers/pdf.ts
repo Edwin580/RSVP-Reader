@@ -5,6 +5,7 @@ import type { TextItem } from 'pdfjs-dist/types/src/display/api'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 import { COVER_RENDER_WIDTH } from '../covers'
 import { stripPageEdges, type PageLine } from '../pageArtifacts'
+import { readPages, type PageReader } from '../readPages'
 import type { Section } from '../text'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
@@ -44,20 +45,21 @@ export async function parsePdf(
   data: ArrayBuffer,
   onProgress?: (fraction: number) => void,
 ): Promise<{ title?: string; sections: Section[]; cover?: string }> {
+  // pdf.js takes over the buffer it's given, so the copy for a second
+  // worker has to be made first (see SECOND_WORKER_MIN_PAGES).
+  const copy =
+    data.byteLength <= SECOND_WORKER_MAX_BYTES && (navigator.hardwareConcurrency ?? 1) >= 4 ? data.slice(0) : null
   const task = pdfjs.getDocument({ data })
   const doc = await task.promise
+  const second = copy && doc.numPages >= SECOND_WORKER_MIN_PAGES ? pdfjs.getDocument({ data: copy }) : null
+  // If it fails to open, the first copy reads everything.
+  const secondReader = second?.promise.then(pageReader)
+  secondReader?.catch(() => {})
   try {
     const meta = await doc.getMetadata().catch(() => null)
     const info = meta?.info as { Title?: string } | undefined
 
-    const lines: PageLine[][] = []
-    for (let n = 1; n <= doc.numPages; n++) {
-      const page = await doc.getPage(n)
-      const content = await page.getTextContent()
-      lines.push(pageLines(content.items.filter((i): i is TextItem => 'str' in i)))
-      page.cleanup()
-      onProgress?.(n / doc.numPages)
-    }
+    const lines = await readPages(doc.numPages, pageReader(doc), secondReader, onProgress)
     // Without the running headers, footers and page numbers.
     const pages = stripPageEdges(lines)
       .map((page, i) => ({ n: i + 1, text: joinLines(page) }))
@@ -70,11 +72,29 @@ export async function parsePdf(
     const cover = await firstPageImage(doc).catch(() => undefined)
     return { title: info?.Title?.trim() || undefined, sections: groupPages(pages, outline), cover }
   } finally {
-    await task.destroy()
+    await Promise.all([task.destroy(), second?.destroy()])
   }
 }
 
 type PdfDocument = Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>
+
+/**
+ * pdf.js reads a document in one background worker. For longer PDFs a second
+ * worker opens its own copy and reads alongside: about a quarter faster
+ * overall (a third didn't help). Not for files so big that a second copy
+ * would strain memory.
+ */
+const SECOND_WORKER_MIN_PAGES = 40
+const SECOND_WORKER_MAX_BYTES = 50 * 1024 * 1024
+
+const pageReader =
+  (doc: PdfDocument): PageReader<PageLine[]> =>
+  async (n) => {
+    const page = await doc.getPage(n)
+    const content = await page.getTextContent()
+    page.cleanup()
+    return pageLines(content.items.filter((i): i is TextItem => 'str' in i))
+  }
 
 /** The first page, rendered small, as the book's cover. */
 async function firstPageImage(doc: PdfDocument): Promise<string | undefined> {

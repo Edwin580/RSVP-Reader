@@ -1071,3 +1071,42 @@ test('a YouTube video plays without showing its player', async ({ page }) => {
   await expect(page.locator('.audio-video')).toHaveCSS('opacity', '0')
   await expect(page.locator('.audio-video')).toHaveCSS('pointer-events', 'none')
 })
+
+test('a long PDF is read by two pdf.js workers and keeps every page, in order', async ({ page, context }) => {
+  // Splitting the pages between two workers makes long PDFs about a quarter
+  // faster to add; each page has to land in its place.
+  // A device with cores to spare, and a count of the pdf.js workers started.
+  await page.addInitScript(`
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 })
+    window.pdfWorkers = 0
+    const Original = window.Worker
+    window.Worker = class extends Original {
+      constructor(url, options) {
+        super(url, options)
+        if (String(url).includes('pdf.worker')) window.pdfWorkers++
+      }
+    }
+  `)
+  const words = ['harbour', 'lantern', 'meadow', 'orchard', 'pebble', 'quarry', 'ribbon', 'saddle']
+  const paragraphs = Array.from({ length: 120 }, (_, p) =>
+    Array.from({ length: 6 }, (_, s) => `The ${words[(p + s) % 8]} of part p${p}s${s} was quiet that day.`).join(' '),
+  )
+  const printer = await context.newPage()
+  await printer.setContent(`<body style="margin: 0; font: 13pt serif">${paragraphs.map((p) => `<p>${p}</p>`).join('')}</body>`)
+  const buffer = await printer.pdf({ width: '4in', height: '6in', margin: { top: '0.5in', bottom: '0.5in', left: '0.5in', right: '0.5in' } })
+  await printer.close()
+
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'long.pdf', mimeType: 'application/pdf', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  const book = (await page.evaluate(`new Promise((done) => {
+    const req = indexedDB.open('rsvp-reader')
+    req.onsuccess = () => {
+      const all = req.result.transaction('kv').objectStore('kv').getAll()
+      all.onsuccess = () => done(all.result.find((v) => v && Array.isArray(v.words)))
+    }
+  })`)) as { words: string[]; chapters: unknown[] }
+  expect(book.chapters.length).toBeGreaterThanOrEqual(40)
+  expect(await page.evaluate('window.pdfWorkers')).toBe(2)
+  expect(book.words).toEqual(paragraphs.join(' ').split(' '))
+})

@@ -33,7 +33,7 @@ Every bug fix comes with a test that would have caught it, so it can't quietly c
 
 ## Branches
 
-Name each new branch with a short name for its feature, a word or two (`audio`, `page-numbers`), not a long generated one.
+Name each branch `edwin/` plus a few words for the feature or fix, for example `edwin/page-number-fix` or `edwin/faster-pdf-import`. Use a new branch for each pull request.
 
 ## Pull requests
 
