@@ -29,6 +29,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **Glance back**: RSVP's big weakness is that you can't look back at what you just read, and research on reading finds that costs comprehension. Hold anywhere on the reading area to see the previous and current sentence (reading pauses while you look), and let go to carry on. Swipe left or right to move a sentence at a time; in page mode, swipe to turn pages.
 - **Look up a word**: while paused, the text can be selected, so your device's own *Look Up*, *Copy* and *Translate* work on any word, offline and instantly. On phones, long-press a word in the paused text or on a page. Double-tap a word to select it (with *Hold to read* this is the way in, since a long press reads), then tap the selection for the menu. Text is never selectable while reading.
 - **Hold to read**: in the Aa menu, *Play with* can be set to *Hold*: reading runs only while your finger (or the mouse button) is down anywhere on the reading area and pauses the moment you let go, so looking away or putting the phone down never costs your place. Swipes still move by sentence (or turn pages), and a short tap on a word in page mode still jumps there. Nothing reads on a tap in this mode: the play button becomes a *Hold* button, Space reads while held, and starting a session or continuing from the "Previously…" card waits for a hold. The controls hide as soon as you hold and come back when you let go. With Hold on, holding reads instead of glancing back; the paused view already shows the sentence around you.
+- **Listen along to an audiobook**: tap the headphones to link a recording someone has made, with no AI voice. *Find a recording* opens a search for the book on YouTube, LibriVox or the Internet Archive; paste the video or MP3 link back in, or choose an audio file from your device. Paste the chapter list from the video's description (`0:00 Intro`, `12:34 Chapter 3: …`) and each time is matched to the book's chapter (*Chapter One*, *CHAPTER I.* and *Chapter 1* all match), so *Listen* starts the recording at the spot you're reading, even partway through a chapter, and the book follows the narrator while it plays. A recording of just part of the book works too. If the narrator drifts from the text, pause where they are and tap *Sync here* to pin that word to that moment. Jumping elsewhere in the book takes the recording with you. YouTube videos play in a small player in the corner, as YouTube requires.
 - **Context when paused**: the words around your position appear below. Click any word to jump to it.
 - **People and places so far**: open search before typing and Chapter lists the characters and places you've met, most mentioned first, with no spoilers: only names that have already appeared, counted up to where you are. Tap one to see where you first met them and their latest mention, and tap either to jump there. Handy when a name comes back after 200 pages.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
@@ -82,6 +83,7 @@ src/
     appearance.ts      applies theme, reading font and focus color to the page
     backup.ts          backup file format and merging a restore into the library
     bookmarks.ts       adding and removing bookmarks (saved per sentence)
+    audio.ts           lining up an audiobook with the book: links, chapter timestamps, sync points
     covers.ts          finding EPUB cover images and making cover thumbnails
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
@@ -103,8 +105,9 @@ src/
     stats.ts           reading time per day, average speed and streak
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
+  hooks/useAudioPlayer.ts  plays a YouTube video or audio file for Listen
   workers/             search.worker.ts, parse.worker.ts
-  components/          Library, ReadingStats, Reader, SessionMenu, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
+  components/          Library, ReadingStats, Reader, SessionMenu, BookmarksPanel, AudioPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
 ```
 
 ## Roadmap

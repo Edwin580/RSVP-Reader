@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
+import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useRsvp } from '../hooks/useRsvp'
+import { addPoint, formatTime, syncPoints, timeAt, wordAt as wordHeardAt, type AudioLink } from '../lib/audio'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
@@ -10,6 +12,7 @@ import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSen
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book, Bookmark } from '../lib/types'
+import { AudioPanel } from './AudioPanel'
 import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
@@ -30,6 +33,10 @@ interface Props {
   onProgress: (index: number) => void
   bookmarks: Bookmark[]
   onBookmarks: (bookmarks: Bookmark[]) => void
+  /** The audiobook linked to this book, and its file when it's one from the device. */
+  audio: AudioLink | null
+  audioFile: Blob | null
+  onAudio: (link: AudioLink | null, file?: File) => void
   /** Reports reading time (while playing) and words read, for statistics. */
   onReadingTime: (ms: number, words: number) => void
   /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
@@ -62,6 +69,9 @@ export function Reader({
   onProgress,
   bookmarks,
   onBookmarks,
+  audio,
+  audioFile,
+  onAudio,
   onReadingTime,
   onPlay,
   onClose,
@@ -320,7 +330,7 @@ export function Reader({
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | null>(null)
   // A closing panel stays mounted briefly so it can animate out.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -342,7 +352,7 @@ export function Reader({
   }, [])
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
-  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session' | 'audio') => {
     pause()
     if (panel === which && !closing) {
       closePanel()
@@ -373,14 +383,62 @@ export function Reader({
     }
   }, [book.id, words])
 
+  // Listening along to an audiobook: the book follows the narrator, lined up
+  // by chapter timestamps and spots synced by hand (src/lib/audio.ts).
+  const audioHost = useRef<HTMLDivElement>(null)
+  const player = useAudioPlayer(audio?.source ?? null, audioFile, audioHost)
+  const listening = player.playing
+  const [listened, setListened] = useState(false)
+  const points = useMemo(() => (audio ? syncPoints(audio, chapters) : []), [audio, chapters])
+  /** The last word moved to by following the narrator; any other move is the reader's own jump. */
+  const followed = useRef(-1)
+  const listen = () => {
+    if (listening) {
+      player.pause()
+      return
+    }
+    pause()
+    followed.current = index
+    setListened(true)
+    player.play(timeAt(points, index))
+  }
+  const syncHere = () => {
+    if (audio) onAudio({ ...audio, points: addPoint(audio.points, index, player.currentTime()) })
+  }
+  const { currentTime, play: playAudio, pause: pauseAudio } = player
+  useEffect(() => {
+    if (!listening) return
+    const follow = () => {
+      const i = wordHeardAt(points, currentTime(), words.length)
+      if (i === current.current) return
+      followed.current = i
+      seek(i)
+    }
+    const timer = window.setInterval(follow, 250)
+    return () => window.clearInterval(timer)
+  }, [listening, points, currentTime, words.length, seek])
+  // A jump while listening (a tap on a word, the progress bar) takes the recording there too.
+  useEffect(() => {
+    if (!listening || index === followed.current) return
+    followed.current = index
+    playAudio(timeAt(points, index))
+    // Only the reader's position moving should re-seek, not new points arriving.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [index])
+  // Reading on your own stops the recording.
+  useEffect(() => {
+    if (playing) pauseAudio()
+  }, [playing, pauseAudio])
+  const togglePlayback = listening ? pauseAudio : toggle
+
   // Persist progress: whenever paused, and periodically while playing.
   const lastSaved = useRef(index)
   useEffect(() => {
-    if (!playing || Math.abs(index - lastSaved.current) >= 50) {
+    if (!(playing || listening) || Math.abs(index - lastSaved.current) >= 50) {
       lastSaved.current = index
       onProgress(index)
     }
-  }, [index, playing, onProgress])
+  }, [index, playing, listening, onProgress])
   const current = useRef(index)
   useEffect(() => {
     current.current = index
@@ -409,7 +467,7 @@ export function Reader({
       case ' ':
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
-        if (!holdToRead) toggle()
+        if (!holdToRead) togglePlayback()
         else if (!e.repeat) startHold()
         break
       case 'ArrowLeft':
@@ -579,6 +637,15 @@ export function Reader({
         </div>
 
         <div className="top-actions">
+          <button
+            type="button"
+            className={`icon-button${audio ? ' is-marked' : ''}`}
+            onClick={() => openPanel('audio')}
+            title="Listen to an audiobook"
+            aria-label={audio ? 'Listen (an audiobook is linked)' : 'Listen'}
+          >
+            <Icon name="headphones" size={21} />
+          </button>
           <button type="button" className="icon-button" onClick={() => openPanel('search')} title="Search (/)" aria-label="Search">
             <Icon name="search" size={21} />
           </button>
@@ -632,7 +699,7 @@ export function Reader({
             focusLines={settings.lineFocus === 'one' ? 1 : settings.lineFocus === 'three' ? 3 : 0}
             onSeek={seek}
             onSelectWord={selectWord}
-            onToggle={holdToRead ? noop : toggle}
+            onToggle={holdToRead ? noop : togglePlayback}
             onPage={onPage}
             navRef={pageNav}
           />
@@ -690,6 +757,21 @@ export function Reader({
             <Icon name="chevronLeft" size={16} />
             <span>Back to {describePosition(jumpedFrom)}</span>
           </button>
+        )}
+        {audio && (
+          <div className="listen-bar">
+            <button type="button" className="text-button" onClick={listen} aria-label={listening ? 'Pause audiobook' : 'Listen from here'}>
+              <Icon name={listening ? 'pause' : 'headphones'} size={16} />
+              {listening ? 'Listening' : 'Listen'}
+            </button>
+            {listened && (
+              <button type="button" className="text-button" onClick={syncHere} title="The narrator is at this word">
+                <Icon name="sync" size={16} />
+                Sync here
+              </button>
+            )}
+            <span className="muted listen-time">{formatTime(timeAt(points, index))}</span>
+          </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
 
@@ -772,8 +854,14 @@ export function Reader({
                 Hold to read
               </button>
             ) : (
-              <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
-                <Icon name={playing ? 'pause' : 'play'} size={22} />
+              <button
+                type="button"
+                className="play-button"
+                onClick={togglePlayback}
+                aria-label={playing || listening ? 'Pause' : 'Play'}
+                title="Play / pause (Space)"
+              >
+                <Icon name={playing || listening ? 'pause' : 'play'} size={22} />
               </button>
             )}
             <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
@@ -813,6 +901,23 @@ export function Reader({
             closePanel()
           }}
           onRemove={(i) => onBookmarks(bookmarks.filter((b) => b.index !== i))}
+          onClose={closePanel}
+        />
+      )}
+
+      {audio?.source.kind === 'youtube' && <div ref={audioHost} className="audio-video" />}
+
+      {panel === 'audio' && (
+        <AudioPanel
+          title={book.title}
+          chapters={chapters}
+          link={audio}
+          startsAt={timeAt(points, index)}
+          listening={listening}
+          error={player.error}
+          closing={closing}
+          onLink={onAudio}
+          onListen={listen}
           onClose={closePanel}
         />
       )}

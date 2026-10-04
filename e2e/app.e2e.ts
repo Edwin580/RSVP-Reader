@@ -953,3 +953,50 @@ test('double-tapping with a finger selects the word', async ({ page }, testInfo)
   await page.touchscreen.tap(word.x + word.width / 2, word.y + word.height / 2)
   await expect.poll(() => selected(page)).toBe('hedge')
 })
+
+/** A silent WAV file `seconds` long, standing in for an audiobook. */
+function silentWav(seconds: number): Buffer {
+  const rate = 8000
+  const data = rate * seconds
+  const wav = Buffer.alloc(44 + data, 128) // 8-bit silence is 128
+  wav.write('RIFF', 0)
+  wav.writeUInt32LE(36 + data, 4)
+  wav.write('WAVEfmt ', 8)
+  wav.writeUInt32LE(16, 16)
+  wav.writeUInt16LE(1, 20) // PCM
+  wav.writeUInt16LE(1, 22) // mono
+  wav.writeUInt32LE(rate, 24)
+  wav.writeUInt32LE(rate, 28)
+  wav.writeUInt16LE(1, 32)
+  wav.writeUInt16LE(8, 34)
+  wav.write('data', 36)
+  wav.writeUInt32LE(data, 40)
+  return wav
+}
+
+test('an audiobook starts where you are and the book follows it', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await expect(page.getByRole('link', { name: 'YouTube' })).toHaveAttribute('href', /youtube\.com\/results\?search_query=story%20audiobook/)
+  await page.getByLabel('Chapter times').fill('0:00 Intro\n0:05 Chapter One\n0:30 Chapter Two')
+  await expect(page.getByText('Matched 2 of 3 times to chapters.')).toBeVisible()
+  await page.locator('.audio-file input').setInputFiles({ name: 'story.wav', mimeType: 'audio/wav', buffer: silentWav(60) })
+  await expect(page.locator('.audio-source-name')).toHaveText('story.wav')
+  await page.keyboard.press('Escape')
+
+  // Chapter 2 is 30 seconds in.
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await expect(page.locator('.listen-time')).toHaveText('0:30')
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
+  // The book moves on with the recording.
+  await expect.poll(() => currentWord(page), { timeout: 8000 }).not.toBe('Chapter')
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await expect(page.getByRole('button', { name: 'Sync here' })).toBeVisible()
+
+  // The link is kept with the book.
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(page.locator('.listen-bar')).toBeVisible()
+})
