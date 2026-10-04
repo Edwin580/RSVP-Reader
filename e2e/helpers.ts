@@ -91,7 +91,8 @@ const CHAPTER_TWO_LENGTH = Math.ceil(chapterTwo.audio.length / 8000)
  * 20 silent seconds for chapter 1, then chapterTwo. `delay` slows each
  * download, like a phone on mobile data.
  */
-export async function mockArchive(page: Page, { delay = 0 } = {}) {
+export async function mockArchive(page: Page, { delay = 0 } = {}): Promise<{ downloads: string[] }> {
+  const downloads: string[] = []
   await page.route('https://archive.org/advancedsearch.php**', (route) =>
     route.fulfill({ json: { response: { docs: [{ identifier: 'story_librivox', title: 'Story', creator: 'A. Writer' }] } } }),
   )
@@ -108,6 +109,7 @@ export async function mockArchive(page: Page, { delay = 0 } = {}) {
   // Answered in ranges, like the real thing, or the browser can't seek in it.
   const files: Record<string, Buffer> = { 'story_01_64kb.mp3': silentWav(20), 'story_02_64kb.mp3': chapterTwo.audio }
   await page.route('https://archive.org/download/**', async (route) => {
+    downloads.push(route.request().url().split('/').pop()!)
     if (delay) await new Promise((done) => setTimeout(done, delay))
     const body = files[route.request().url().split('/').pop()!]
     const headers = { 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*' }
@@ -122,6 +124,7 @@ export async function mockArchive(page: Page, { delay = 0 } = {}) {
       headers: { ...headers, 'Content-Range': `bytes ${start}-${end}/${body.length}` },
     })
   })
+  return { downloads }
 }
 
 /** Seconds as the player shows them: "0:34", "1:02". */

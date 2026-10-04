@@ -75,6 +75,8 @@ export interface AudioPlayer {
   unlock: () => void
   /** Still moving to where `play` asked for; `currentTime` gives that spot until it gets there. */
   seeking: () => boolean
+  /** Track `k` is already here (downloaded for lining up): play it from memory, not the network. */
+  provide: (k: number, file: Blob) => void
 }
 
 /** The files to play in turn: a recording's tracks, or a single file of unknown length. */
@@ -119,6 +121,9 @@ export function useAudioPlayer(
   // Audio files play in an <audio> element, one track at a time.
   const audio = useRef<HTMLAudioElement | null>(null)
   const tracks = useRef<{ list: Track[]; starts: number[]; current: number }>({ list: [], starts: [], current: -1 })
+  /** Tracks already downloaded, as addresses of their copies in memory. */
+  const local = useRef(new Map<number, string>())
+  const urlOf = (k: number) => local.current.get(k) ?? tracks.current.list[k].url
   const latest = useRef({ source, file })
   useEffect(() => {
     latest.current = { source, file }
@@ -129,13 +134,14 @@ export function useAudioPlayer(
     const objectUrl = kind === 'file' ? URL.createObjectURL(latest.current.file!) : null
     if (objectUrl) list[0] = { ...list[0], url: objectUrl }
     tracks.current = { list, starts: trackStarts(list), current: -1 }
+    const kept = local.current
     const el = new Audio()
     el.preload = 'metadata'
     /** Moving on to the next track pauses the element for a moment; that isn't the listener pausing. */
     let advancing = false
     const load = (k: number) => {
       tracks.current.current = k
-      el.src = tracks.current.list[k].url
+      el.src = urlOf(k)
       // Loading a file resets the speed to the default one.
       el.defaultPlaybackRate = speed.current
       el.playbackRate = speed.current
@@ -179,6 +185,8 @@ export function useAudioPlayer(
       el.load()
       audio.current = null
       if (objectUrl) URL.revokeObjectURL(objectUrl)
+      for (const url of kept.values()) URL.revokeObjectURL(url)
+      kept.clear()
       setPlaying(false)
       setError(null)
     }
@@ -256,10 +264,10 @@ export function useAudioPlayer(
       let k = 0
       while (k + 1 < t.starts.length && t.starts[k + 1] <= seconds) k++
       const offset = seconds - t.starts[k]
-      if (k !== t.current) {
-        // Not the file loaded: until it's loaded, the old one's position means nothing.
+      if (k !== t.current || el.src !== urlOf(k)) {
+        // Not the file loaded (or now there's a copy in memory): until it's loaded, the old one's position means nothing.
         t.current = k
-        el.src = t.list[k].url
+        el.src = urlOf(k)
         el.defaultPlaybackRate = speed.current
         el.playbackRate = speed.current
       }
@@ -326,6 +334,19 @@ export function useAudioPlayer(
     yt.current?.setPlaybackRate(next)
   }, [])
 
+  const provide = useCallback((k: number, file: Blob) => {
+    if (local.current.has(k)) return
+    local.current.set(k, URL.createObjectURL(file))
+    // Only a few chapters are kept in memory; older ones go back to the network.
+    if (local.current.size > 3) {
+      const [oldest, url] = local.current.entries().next().value!
+      if (oldest !== tracks.current.current) {
+        URL.revokeObjectURL(url)
+        local.current.delete(oldest)
+      }
+    }
+  }, [])
+
   return {
     playing,
     error: fileMissing ? 'This audiobook file isn’t on this device. Choose it again.' : error,
@@ -335,5 +356,6 @@ export function useAudioPlayer(
     setSpeed,
     unlock,
     seeking,
+    provide,
   }
 }

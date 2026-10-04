@@ -68,6 +68,50 @@ function inWorker(request: SyncRequest, transfer = false): Promise<SyncPoint[]> 
   })
 }
 
+/** Downloads a file, reporting how much has arrived (0–1) when its size is known. */
+async function download(url: string, onProgress?: (fraction: number) => void): Promise<ArrayBuffer> {
+  let response: Response
+  try {
+    response = await fetch(url)
+  } catch {
+    // Mobile connections drop requests now and then: one more try.
+    await new Promise((done) => setTimeout(done, 800))
+    response = await fetch(url)
+  }
+  if (!response.ok) throw new Error(`The recording couldn’t be downloaded (${response.status}).`)
+  const size = Number(response.headers.get('content-length'))
+  if (size > MAX_BYTES) throw new Error('This recording is too long to line up on this device.')
+  if (!response.body || !size || !onProgress) return response.arrayBuffer()
+  const reader = response.body.getReader()
+  const out = new Uint8Array(size)
+  let got = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    // A server can send more than it said (compression); grow rather than fail.
+    if (got + value.length > out.length) return new Blob([out.subarray(0, got), value, ...(await rest(reader))] as BlobPart[]).arrayBuffer()
+    out.set(value, got)
+    got += value.length
+    onProgress(got / size)
+  }
+  return out.buffer.slice(0, got)
+}
+
+async function rest(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array[]> {
+  const parts: Uint8Array[] = []
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return parts
+    parts.push(value)
+  }
+}
+
+export interface Detected {
+  points: SyncPoint[]
+  /** The file as downloaded, so the player can play it without downloading it again. */
+  audio: Blob
+}
+
 /**
  * Sync points for one recording file, in seconds from its start: `audio` is
  * its address or the file itself, `range` the part of the book to look in.
@@ -77,18 +121,16 @@ export async function detectSync(
   audio: string | Blob,
   book: { words: string[]; weights: ArrayLike<number>; paragraphEnds: number[] },
   range: (duration: number) => TextRange,
-): Promise<SyncPoint[]> {
+  onProgress?: (fraction: number) => void,
+): Promise<Detected> {
   let data: ArrayBuffer
   if (typeof audio === 'string') {
-    const response = await fetch(audio)
-    if (!response.ok) throw new Error(`The recording couldn’t be downloaded (${response.status}).`)
-    const size = Number(response.headers.get('content-length'))
-    if (size > MAX_BYTES) throw new Error('This recording is too long to line up on this device.')
-    data = await response.arrayBuffer()
+    data = await download(audio, onProgress)
   } else {
     if (audio.size > MAX_BYTES) throw new Error('This recording is too long to line up on this device.')
     data = await audio.arrayBuffer()
   }
+  const file = typeof audio === 'string' ? new Blob([data], { type: 'audio/mpeg' }) : audio
   const { samples, sampleRate } = await decode(data)
   const { start, end, options } = range(samples.length / sampleRate)
   const words = book.words.slice(start, end)
@@ -97,5 +139,5 @@ export async function detectSync(
   // The worker gets its own copy of the samples (the decoded buffer's can't be handed over).
   // If it can't start, the fallback runs here on that copy, which is why it's handed over only to a worker.
   const points = await inWorker({ samples: samples.slice(), sampleRate, words, weights, paragraphEnds, options }, true)
-  return points.map((p) => ({ index: p.index + start, seconds: p.seconds }))
+  return { points: points.map((p) => ({ index: p.index + start, seconds: p.seconds })), audio: file }
 }

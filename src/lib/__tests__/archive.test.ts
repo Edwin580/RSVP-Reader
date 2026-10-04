@@ -5,8 +5,9 @@ describe('Internet Archive', () => {
   it('searches for the title alone', () => {
     expect(searchTerms('Pride and Prejudice by Jane Austen')).toBe('Pride and Prejudice')
     expect(searchTerms('alice-in-wonderland.epub')).toBe('alice in wonderland')
+    // Apostrophes stay, straightened: the Archive finds "Alice's" but not "Alices" or "Alice s".
     const url = new URL(searchUrl('Alice’s Adventures', true))
-    expect(url.searchParams.get('q')).toBe('title:(Alice s Adventures) AND mediatype:(audio) AND collection:(librivoxaudio)')
+    expect(url.searchParams.get('q')).toBe("title:(Alice's Adventures) AND mediatype:(audio) AND collection:(librivoxaudio)")
   })
 
   it('reads search results', () => {

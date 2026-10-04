@@ -300,7 +300,7 @@ test('pressing Listen in the middle of a chapter plays from the sentence being r
   // On a slow connection, the recording used to start from a guess straight
   // away, the book jumped to the chapter's start while the file loaded, and
   // then the recording moved to wherever the book had got to.
-  await mockArchive(page, { delay: 1500 })
+  const archive = await mockArchive(page, { delay: 1500 })
   await page.goto('./')
   await upload(page, 'story.txt', LISTEN_BOOK)
   await page.getByRole('button', { name: 'Listen', exact: true }).click()
@@ -321,4 +321,6 @@ test('pressing Listen in the middle of a chapter plays from the sentence being r
   await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[SECOND.findIndex((s) => s.startsWith('Lanterns'))])}`))
   await expect(page.locator('.word')).toHaveText('Lanterns')
+  // The chapter downloaded for lining up is the one played: it isn't downloaded twice.
+  expect(archive.downloads.filter((name) => name === 'story_02_64kb.mp3')).toHaveLength(1)
 })

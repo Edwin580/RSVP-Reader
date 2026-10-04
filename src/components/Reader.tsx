@@ -14,6 +14,7 @@ import {
   timeAt,
   trackAt,
   trackRange,
+  spokenLetters,
   trackStarts,
   wordAt as wordHeardAt,
   type AudioLink,
@@ -405,7 +406,7 @@ export function Reader({
   // (src/lib/audio.ts). The recording plays at the reading speed.
   const audioHost = useRef<HTMLDivElement>(null)
   const player = useAudioPlayer(audio?.source ?? null, audioFile, audioHost)
-  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed, seeking: audioSeeking, unlock: unlockAudio } = player
+  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed, seeking: audioSeeking, unlock: unlockAudio, provide: provideAudio } = player
   const listening = player.playing
   const timestamps = audio?.timestamps ?? ''
   const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
@@ -434,10 +435,14 @@ export function Reader({
     const source = latestAudio.current?.source
     return source?.kind === 'archive' ? trackAt(source.tracks, seconds) : 0
   }, [])
+  /** Letters said before each word: between sync points, time goes with letters, not words. */
+  const letters = useMemo(() => spokenLetters(words), [words])
   const [lining, setLining] = useState(0)
+  /** How much of the file being lined up for Listen has downloaded (0–1), or null. */
+  const [progress, setProgress] = useState<number | null>(null)
   const linings = useRef(new Map<string, Promise<void>>())
   const lineUp = useCallback(
-    (k: number): Promise<void> => {
+    (k: number, showProgress = false): Promise<void> => {
       const link = latestAudio.current
       if (!link || k < 0 || link.detected?.[k] !== undefined) return Promise.resolve()
       const { source } = link
@@ -447,11 +452,18 @@ export function Reader({
       const running = linings.current.get(id)
       if (running) return running
       setLining((n) => n + 1)
-      const done = detectSync(target, { words, weights: narration, paragraphEnds: book.paragraphEnds }, (duration) => {
-        const tracks = source.kind === 'archive' ? source.tracks : [{ url: '', title: '', seconds: duration }]
-        return trackRange(tracks, k, chapters, pointsNow(), words.length, duration)
-      })
-        .then((found) => {
+      const done = detectSync(
+        target,
+        { words, weights: narration, paragraphEnds: book.paragraphEnds },
+        (duration) => {
+          const tracks = source.kind === 'archive' ? source.tracks : [{ url: '', title: '', seconds: duration }]
+          return trackRange(tracks, k, chapters, pointsNow(), words.length, duration)
+        },
+        showProgress ? setProgress : undefined,
+      )
+        .then(({ points: found, audio: file }) => {
+          // Downloaded once: the player plays this copy instead of fetching it again.
+          if (source.kind === 'archive') provideAudio(k, file)
           const now = latestAudio.current
           if (!now || sourceId(now.source) !== sourceId(source)) return
           const offset = source.kind === 'archive' ? trackStarts(source.tracks)[k] : 0
@@ -460,13 +472,20 @@ export function Reader({
           latestAudio.current = next
           onAudio(next)
         })
-        // Lining up is a bonus: without it, chapter starts and taps still place the recording.
-        .catch(() => {})
-        .finally(() => setLining((n) => n - 1))
+        // Without lining up, chapter starts and taps still place the recording; say it's a guess.
+        .catch(() => {
+          if (showProgress) failedLining.current = true
+          // Not lined up after all: let a later try download it again.
+          linings.current.delete(id)
+        })
+        .finally(() => {
+          setLining((n) => n - 1)
+          if (showProgress) setProgress(null)
+        })
       linings.current.set(id, done)
       return done
     },
-    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow],
+    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow, provideAudio],
   )
   /**
    * Lines up the file that word `i` is in. The first guess at which file
@@ -475,38 +494,60 @@ export function Reader({
    * looks to be is lined up too.
    */
   const prepare = useCallback(
-    async (i: number) => {
+    async (i: number, showProgress = false) => {
       const seen = new Set<number>()
       for (let step = 0; step < 4; step++) {
-        const k = fileAt(timeAt(pointsNow(), i))
+        const k = fileAt(timeAt(pointsNow(), i, letters))
         if (seen.has(k)) return
         seen.add(k)
-        await lineUp(k)
+        await lineUp(k, showProgress)
         const found = latestAudio.current?.detected?.[k]
         if (!found || found.length < 2 || (i >= found[0].index && i <= found[found.length - 1].index)) return
       }
     },
-    [fileAt, lineUp, pointsNow],
+    [fileAt, lineUp, pointsNow, letters],
   )
-  /** Lining up waits at most this long for a slow connection; then the recording starts from the best guess. */
-  const PREPARE_MS = 20000
+  /**
+   * Listen waits for lining up rather than start from a guess (it shows how
+   * far the download has got); only a connection this slow gives up and
+   * starts from the best guess.
+   */
+  const PREPARE_MS = 90000
   const [preparing, setPreparing] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** Lining up for Listen failed (no connection, say): the recording starts from a guess. */
+  const failedLining = useRef(false)
+  /** Further than this from anything lined up in the file, the passage probably isn't in the recording. */
+  const NOT_COVERED_WORDS = 300
   /** Bumped by each new start, so an older one still lining up doesn't play once a newer one has begun. */
   const startToken = useRef(0)
   /** Play the recording from word `i`: lined up first, so it starts where the text is. */
   const playFrom = async (i: number) => {
     const token = ++startToken.current
+    failedLining.current = false
     followed.current = i
     pauseAudio()
     // Phones only allow sound in response to a tap: allow it now, while lining up waits.
     unlockAudio()
     setPreparing(true)
-    await Promise.race([prepare(i), new Promise((resolve) => window.setTimeout(resolve, PREPARE_MS))])
+    await Promise.race([prepare(i, true), new Promise((resolve) => window.setTimeout(resolve, PREPARE_MS))])
     if (token !== startToken.current) return
     setPreparing(false)
+    const now = pointsNow()
+    // A recording of part of the book (or another edition) may not have this passage at all.
+    const k = fileAt(timeAt(now, i, letters))
+    const found = latestAudio.current?.detected?.[k]
+    setNotice(
+      failedLining.current
+        ? 'Couldn’t line up this chapter (check the connection), so it starts from a guess. Tap the word you hear to sync.'
+        : found && found.length > 2 && (i < found[0].index - NOT_COVERED_WORDS || i > found[found.length - 1].index + NOT_COVERED_WORDS)
+          ? 'This recording doesn’t seem to include this part of the book, so it plays the nearest part it has.'
+          : null,
+    )
+    failedLining.current = false
     followed.current = i
     settling.current = performance.now() + 800
-    playAudio(timeAt(pointsNow(), i))
+    playAudio(timeAt(now, i, letters))
   }
   const listen = () => {
     if (listening || preparing) {
@@ -546,14 +587,15 @@ export function Reader({
         const start = trackStarts(source.tracks)[k]
         if (t - start > (source.tracks[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
       }
-      const i = wordHeardAt(points, t, words.length)
+      // A touch ahead: the word shown should be the one being said, not the one just said.
+      const i = wordHeardAt(points, t + FOLLOW_LEAD_SECONDS, words.length, letters)
       if (i === current.current) return
       followed.current = i
       seek(i)
     }
-    const timer = window.setInterval(follow, 200)
+    const timer = window.setInterval(follow, 100)
     return () => window.clearInterval(timer)
-  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp, audioSeeking])
+  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp, audioSeeking, letters])
   // With a recording linked, line up the part for where the reader is, so
   // pressing Listen can start straight away.
   const sourceKey = audio ? sourceId(audio.source) : ''
@@ -913,14 +955,14 @@ export function Reader({
               aria-label={listening ? 'Pause audiobook' : preparing ? 'Stop lining up' : 'Listen from here'}
             >
               <Icon name={listening ? 'pause' : 'headphones'} size={16} />
-              {listening ? 'Listening' : preparing ? 'Lining up…' : 'Listen'}
+              {listening ? 'Listening' : preparing ? `Lining up…${progress !== null && progress < 1 ? ` ${Math.round(progress * 100)}%` : ''}` : 'Listen'}
             </button>
             <span className="muted listen-time">
-              {formatTime(listening ? heard : timeAt(points, index))}
+              {formatTime(listening ? heard : timeAt(points, index, letters))}
               {speed !== 1 && ` · ${speed}×`}
               {lining > 0 && !preparing && ' · lining up'}
             </span>
-            {listening && <span className="muted listen-hint">Tap the word you hear to sync</span>}
+            {listening && <span className="muted listen-hint">{notice ?? 'Tap the word you hear to sync'}</span>}
           </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
@@ -1063,7 +1105,7 @@ export function Reader({
           author={book.author ?? authorFromTitle(book.title)}
           chapters={chapters}
           link={audio}
-          startsAt={timeAt(points, index)}
+          startsAt={timeAt(points, index, letters)}
           transcriptMatches={transcript.length}
           speed={speedFor(wpm, paceAt(points, index))}
           listening={listening}
@@ -1173,6 +1215,9 @@ function Glance({ words, index, headings }: { words: string[]; index: number; he
 }
 
 const noop = () => {}
+
+/** Follow the narrator this far ahead (seconds of recording): the book was measured to trail by about this much. */
+const FOLLOW_LEAD_SECONDS = 0.3
 
 /** Report reading while playing: every 30s, on pause, and when the reader closes. */
 const STATS_FLUSH_MS = 30_000

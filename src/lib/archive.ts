@@ -24,6 +24,8 @@ export function searchTerms(title: string): string {
   return title
     .replace(/\.(epub|pdf|txt|md)$/i, '')
     .replace(/\s+by\s+.*$/i, '')
+    // The Archive's search keeps apostrophes in words ("Alice's" isn't "Alices"), and EPUBs often curl them.
+    .replace(/[’‘]/g, "'")
     .replace(/[^\p{L}\p{N}' ]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -51,13 +53,23 @@ export function authorFromTitle(title: string): string | undefined {
 }
 
 export function searchUrl(title: string, librivoxOnly: boolean, author?: string): string {
-  const terms = searchTerms(title).replace(/'/g, '')
+  const terms = searchTerms(title)
   const surname = authorTerm(author)
   const q = `title:(${terms})${surname ? ` AND creator:(${surname})` : ''} AND mediatype:(audio)${librivoxOnly ? ' AND collection:(librivoxaudio)' : ''}`
   const params = new URLSearchParams({ q, rows: '8', output: 'json' })
   for (const f of ['identifier', 'title', 'creator']) params.append('fl[]', f)
   params.append('sort[]', 'downloads desc')
   return `${API}/advancedsearch.php?${params}`
+}
+
+/** Mobile connections drop requests now and then: one more try before giving up. */
+async function fetchAgain(fetcher: typeof fetch, url: string): Promise<Response> {
+  try {
+    return await fetcher(url)
+  } catch {
+    await new Promise((done) => setTimeout(done, 800))
+    return fetcher(url)
+  }
 }
 
 const first = (v: unknown): string => (Array.isArray(v) ? String(v[0] ?? '') : typeof v === 'string' ? v : '')
@@ -80,7 +92,7 @@ export async function searchRecordings(title: string, author?: string, fetcher: 
   if (!searchTerms(title)) return []
   const found: Recording[] = []
   const get = async (librivox: boolean, by?: string) => {
-    const response = await fetcher(searchUrl(title, librivox, by))
+    const response = await fetchAgain(fetcher, searchUrl(title, librivox, by))
     if (!response.ok) throw new Error(`The Internet Archive answered ${response.status}.`)
     const seen = new Set(found.map((r) => r.identifier))
     found.push(...parseSearch(await response.json(), librivox).filter((r) => !seen.has(r.identifier)))
@@ -129,7 +141,7 @@ export function tracksFromMetadata(identifier: string, json: unknown): Track[] {
 }
 
 export async function loadRecording(recording: Recording, fetcher: typeof fetch = fetch): Promise<AudioSource> {
-  const response = await fetcher(`${API}/metadata/${encodeURIComponent(recording.identifier)}`)
+  const response = await fetchAgain(fetcher, `${API}/metadata/${encodeURIComponent(recording.identifier)}`)
   if (!response.ok) throw new Error(`The Internet Archive answered ${response.status}.`)
   const tracks = tracksFromMetadata(recording.identifier, await response.json())
   if (!tracks.length) throw new Error('This recording has no MP3 files to play.')

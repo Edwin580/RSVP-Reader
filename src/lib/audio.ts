@@ -345,8 +345,31 @@ function rate(a: SyncPoint, b: SyncPoint): number {
   return Number.isFinite(r) && r >= MIN_RATE && r <= MAX_RATE ? r : NARRATION_WORDS_PER_SECOND
 }
 
+/** The first point after `value` by `key`, by binary search (points are in order). */
+function after(points: SyncPoint[], value: number, key: 'index' | 'seconds'): number {
+  let lo = 0
+  let hi = points.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (points[mid][key] > value) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
+/**
+ * Letters said before each word (one more entry than words): between two
+ * points, time goes with letters said rather than words, since long words
+ * take longer to say.
+ */
+export function spokenLetters(words: string[]): Float64Array {
+  const out = new Float64Array(words.length + 1)
+  for (let i = 0; i < words.length; i++) out[i + 1] = out[i] + words[i].replace(/[^\p{L}\p{N}]/gu, '').length
+  return out
+}
+
 /** Where in the recording the word at `index` is read, in seconds (never negative). */
-export function timeAt(points: SyncPoint[], index: number): number {
+export function timeAt(points: SyncPoint[], index: number, letters?: ArrayLike<number>): number {
   if (points.length === 0) return index / NARRATION_WORDS_PER_SECOND
   const first = points[0]
   const last = points[points.length - 1]
@@ -358,14 +381,17 @@ export function timeAt(points: SyncPoint[], index: number): number {
     const r = points.length > 1 ? rate(points[points.length - 2], last) : NARRATION_WORDS_PER_SECOND
     return last.seconds + (index - last.index) / r
   }
-  const k = points.findIndex((p) => p.index > index)
+  const k = after(points, index, 'index')
   const a = points[k - 1]
   const b = points[k]
-  return a.seconds + ((index - a.index) / (b.index - a.index)) * (b.seconds - a.seconds)
+  const pos = (i: number) => (letters ? letters[i] : i)
+  const span = pos(b.index) - pos(a.index)
+  const share = span > 0 ? (pos(index) - pos(a.index)) / span : (index - a.index) / (b.index - a.index)
+  return a.seconds + share * (b.seconds - a.seconds)
 }
 
 /** The word being read `seconds` into the recording, within a book of `count` words. */
-export function wordAt(points: SyncPoint[], seconds: number, count: number): number {
+export function wordAt(points: SyncPoint[], seconds: number, count: number, letters?: ArrayLike<number>): number {
   const clamp = (i: number) => Math.max(0, Math.min(count - 1, Math.floor(i)))
   if (points.length === 0) return clamp(seconds * NARRATION_WORDS_PER_SECOND)
   const first = points[0]
@@ -378,10 +404,21 @@ export function wordAt(points: SyncPoint[], seconds: number, count: number): num
     const r = points.length > 1 ? rate(points[points.length - 2], last) : NARRATION_WORDS_PER_SECOND
     return clamp(last.index + (seconds - last.seconds) * r)
   }
-  const k = points.findIndex((p) => p.seconds > seconds)
+  const k = after(points, seconds, 'seconds')
   const a = points[k - 1]
   const b = points[k]
-  return clamp(a.index + ((seconds - a.seconds) / (b.seconds - a.seconds)) * (b.index - a.index))
+  const share = (seconds - a.seconds) / (b.seconds - a.seconds)
+  if (!letters || letters[b.index] <= letters[a.index]) return clamp(a.index + share * (b.index - a.index))
+  // The word whose letters are being said at that share of the stretch.
+  const target = letters[a.index] + share * (letters[b.index] - letters[a.index])
+  let lo = a.index
+  let hi = b.index
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1
+    if (letters[mid] <= target) lo = mid
+    else hi = mid
+  }
+  return clamp(lo)
 }
 
 /** Pin the word at `index` to `seconds`, replacing any hand-set point within a few words of it. */
