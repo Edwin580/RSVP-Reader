@@ -630,6 +630,14 @@ export function Reader({
       {mode === 'page' ? (
         <section
           {...pageGestures.handlers}
+          onPointerDown={(e) => {
+            pageGestures.handlers.onPointerDown(e)
+            // The guide follows a press anywhere on the reading area, margins
+            // included (buttons and cards keep their own taps).
+            if (guided && e.button === 0 && !(e.target instanceof Element && ignorePress(e.target))) {
+              pageNav.current?.press?.(e)
+            }
+          }}
           onClickCapture={(e) => {
             // The click a swipe ends with shouldn't also jump to the word under the finger.
             if (pageGestures.wasSwipe()) {

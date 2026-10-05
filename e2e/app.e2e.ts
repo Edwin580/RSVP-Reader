@@ -1047,7 +1047,13 @@ async function press(page: Page, phone: boolean, x: number, y: number) {
   }
 }
 
-test('Guide: holding and dragging moves the line focus line by line, and turns the page past the last line', async ({ page }, testInfo) => {
+/** The usual distance between lines on screen. */
+const spacingOf = (lines: { middle: number }[]) => {
+  const gaps = lines.slice(1).map((l, k) => l.middle - lines[k].middle).sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
+}
+
+test('Guide: a tap moves the focus to a line; dragging from anywhere moves it line by line and turns the page', async ({ page }, testInfo) => {
   const phone = testInfo.project.name === 'phone'
   await guideSettings(page, 'pages')
   await page.goto('./')
@@ -1055,17 +1061,25 @@ test('Guide: holding and dragging moves the line focus line by line, and turns t
   await settled(page)
   const lines = await visibleLines(page)
   expect(lines.length).toBeGreaterThan(8)
-  const x = (await page.locator('.page').boundingBox())!.x + 60
+  const spacing = spacingOf(lines)
+  const box = (await page.locator('.page').boundingBox())!
+  const stage = (await page.locator('.stage-page').boundingBox())!
+  const x = box.x + 60
 
-  // Press on a line: the focus jumps there. Drag down: it follows, line by line.
-  const finger = await press(page, phone, x, lines[2].middle)
+  // A tap on a line: the focus goes there.
+  const tap = await press(page, phone, x, lines[2].middle)
+  await tap.up()
   await expect.poll(() => focusedStart(page)).toBe(lines[2].start)
-  for (const k of [3, 4, 5, 6]) {
-    await finger.move(lines[k].middle)
-    await expect.poll(() => focusedStart(page)).toBe(lines[k].start)
-  }
-  // And back up.
-  await finger.move(lines[4].middle)
+
+  // Hold anywhere (here in the margin, below the text's lines) and drag: the
+  // focus moves on from where it was, a line per line's height, and back.
+  const anywhere = phone ? box.y + box.height - 40 : box.y + box.height - 40
+  const finger = await press(page, phone, phone ? x : stage.x + 8, anywhere)
+  expect(await focusedStart(page)).toBe(lines[2].start) // pressing alone moves nothing
+  await finger.move(anywhere - spacing * 3) // dragging up a little first, then down past where it began
+  await finger.move(anywhere + spacing * 3)
+  await expect.poll(() => focusedStart(page)).toBe(lines[5].start)
+  await finger.move(anywhere + spacing * 2)
   await expect.poll(() => focusedStart(page)).toBe(lines[4].start)
   await finger.up()
   // Let go: it stays, and the place is kept. Dragging never selected any text.
@@ -1073,23 +1087,19 @@ test('Guide: holding and dragging moves the line focus line by line, and turns t
   await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(lines[4].start))
   expect(await focusedStart(page)).toBe(lines[4].start)
 
-  // Past the last line, the page turns, and the focus carries on from its
-  // first line (here a line or two on, as the finger kept going).
-  const last = lines[lines.length - 1]
+  // Dragging on past the last line turns the page, carrying on from its top.
   const lastWord = Number(await page.locator('.page > .page-text [data-i]').last().getAttribute('data-i'))
-  const turning = await press(page, phone, x, last.middle)
-  await turning.move(last.middle + (last.middle - lines[lines.length - 2].middle) * 2)
+  const turning = await press(page, phone, x, box.y + 20)
+  await turning.move(box.y + 20 + spacing * (lines.length - 4 + 0.6))
   await turning.up()
   await expect(page.locator('.page > .page-text [data-i]').first()).toHaveAttribute('data-i', String(lastWord + 1))
-  await settled(page)
-  const opened = await visibleLines(page)
-  expect([opened[0].start, opened[1].start, opened[2].start]).toContain(await focusedStart(page))
-
-  // The next line button and the keys move a line at a time.
   await settled(page)
   const turned = await visibleLines(page)
   const k = turned.map((l) => l.start).indexOf(await focusedStart(page))
   expect(k).toBeGreaterThanOrEqual(0)
+  expect(k).toBeLessThan(3)
+
+  // The next line button and the keys move a line at a time.
   await page.getByRole('button', { name: 'Next line' }).click()
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
   await page.keyboard.press('ArrowDown')
@@ -1098,7 +1108,7 @@ test('Guide: holding and dragging moves the line focus line by line, and turns t
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
 })
 
-test('Guide, continuous: the focus follows the finger, and holding near the bottom scrolls the text on', async ({ page }, testInfo) => {
+test('Guide, continuous: dragging from anywhere moves the focus, and the text scrolls along to keep it in view', async ({ page }, testInfo) => {
   const phone = testInfo.project.name === 'phone'
   await guideSettings(page, 'scroll')
   await page.goto('./')
@@ -1107,27 +1117,28 @@ test('Guide, continuous: the focus follows the finger, and holding near the bott
   const view = (await page.locator('.page').boundingBox())!
   const x = view.x + 60
   const lines = await visibleLines(page)
-  const middle = lines.filter((l) => l.middle > view.y + view.height * 0.3 && l.middle < view.y + view.height * 0.7)
-  expect(middle.length).toBeGreaterThan(3)
+  const spacing = spacingOf(lines)
+  const middle = lines.filter((l) => l.middle > view.y + view.height * 0.3 && l.middle < view.y + view.height * 0.6)
+  expect(middle.length).toBeGreaterThan(2)
 
-  // The focus follows the finger, as on a page.
-  const finger = await press(page, phone, x, middle[0].middle)
+  // A tap on a line: the focus goes there.
+  const tap = await press(page, phone, x, middle[0].middle)
+  await tap.up()
   await expect.poll(() => focusedStart(page)).toBe(middle[0].start)
-  await finger.move(middle[3].middle)
-  await expect.poll(() => focusedStart(page)).toBe(middle[3].start)
 
-  // Held near the bottom, the text scrolls on under the finger and the focus with it.
+  // Held anywhere and dragged, it moves on a line per line's height.
+  const finger = await press(page, phone, x, view.y + 20)
+  await finger.move(view.y + 20 + spacing * 2)
+  await expect.poll(() => focusedStart(page)).toBe(middle[2].start)
+  // Dragged a long way on, well past what was on screen: the text scrolls
+  // along and the focused line stays in view.
   await finger.move(view.y + view.height - 10)
-  const lastShown = lines[lines.length - 1].start
-  await expect.poll(() => focusedStart(page), { timeout: 5000 }).toBeGreaterThan(lastShown + 20)
   await finger.up()
-
-  // Let go low down: the focused line glides back up, leaving room to carry on.
-  await page.waitForTimeout(500)
-  const focused = page.locator('.page > .page-text [data-i]:not(.is-dim)').first()
-  const top = (await focused.boundingBox())!.y
-  expect(top - view.y).toBeLessThan(view.height * 0.5)
+  await expect.poll(() => focusedStart(page)).toBeGreaterThan(lines[lines.length - 1].start)
+  await settled(page)
+  const top = (await page.locator('.page > .page-text [data-i]:not(.is-dim)').first().boundingBox())!.y
   expect(top).toBeGreaterThan(view.y)
+  expect(top - view.y).toBeLessThan(view.height * 0.7)
   // The place is kept.
   await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(await focusedStart(page)))
 })

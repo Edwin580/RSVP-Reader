@@ -165,8 +165,8 @@ export interface Settings {
   lineFocus: LineFocus
   /**
    * 'tap' starts and stops reading with a tap; 'hold' reads only while you
-   * hold the text. 'guide' (page mode) has no timer: hold and drag and the
-   * line focus follows your finger, line by line.
+   * hold the text. 'guide' (page mode) has no timer: hold anywhere and drag
+   * to move the line focus line by line, or tap a line.
    */
   playControl: PlayControl
   /** Guide: the text as pages you turn, or one continuous column that scrolls along. */

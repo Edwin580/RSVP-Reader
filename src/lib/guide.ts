@@ -1,8 +1,9 @@
 /**
- * Guide: reading at your own pace in page mode. You hold the page and drag,
- * and the line focus follows your finger line by line (down to read on, up
- * to go back). These are the pure parts: lines from laid-out words, which
- * line is under the finger, and how much reading a move counts as.
+ * Guide: reading at your own pace in page mode. You hold anywhere and drag,
+ * and the line focus moves with the drag line by line (down to read on, up
+ * to go back); a tap on a line moves it there. These are the pure parts:
+ * lines from laid-out words, the line a drag or tap lands on, and how much
+ * reading a move counts as.
  */
 
 /** A line of laid-out text: where it sits (px from the top of the text) and its first word. */
@@ -54,22 +55,23 @@ export function focusRange(count: number, k: number, focus: number): [number, nu
   return [Math.max(0, k - reach), Math.min(count - 1, k + reach)]
 }
 
-/** Share of the view's height at its top and bottom where holding scrolls the text along. */
-export const EDGE = 0.15
-/** Fastest scroll at the very edge, in px per second. */
-export const EDGE_SPEED = 900
+/** The usual distance from one line to the next (px), or 0 with fewer than two lines. */
+export function lineSpacing(lines: Line[]): number {
+  const gaps = lines
+    .slice(1)
+    .map((l, k) => l.top - lines[k].top)
+    .filter((g) => g > 0)
+    .sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)] ?? 0
+}
 
 /**
- * Continuous layout: how fast to scroll (px per second, positive is onward)
- * when the finger is held at `y` in a view `height` tall. Zero away from the
- * edges; faster the deeper into an edge.
+ * The line a drag has moved the focus to: from line `from`, a line further
+ * on for every line's height dragged down (back for up), wherever on the
+ * screen the drag started.
  */
-export function edgeSpeed(y: number, height: number): number {
-  const zone = height * EDGE
-  if (zone <= 0) return 0
-  if (y > height - zone) return EDGE_SPEED * Math.min(1, (y - (height - zone)) / zone)
-  if (y < zone) return -EDGE_SPEED * Math.min(1, (zone - y) / zone)
-  return 0
+export function draggedLine(from: number, dy: number, spacing: number): number {
+  return spacing > 0 ? from + Math.round(dy / spacing) : from
 }
 
 /** Below this pace (words a minute) a stretch counts as time away, not reading. */

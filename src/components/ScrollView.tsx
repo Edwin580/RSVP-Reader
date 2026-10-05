@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
-import { edgeSpeed, focusRange, groupLines, lineAt, lineOf, windowAround, type Line } from '../lib/guide'
+import { draggedLine, focusRange, groupLines, lineAt, lineOf, lineSpacing, windowAround, type Line } from '../lib/guide'
 import { paragraphsBetween } from '../lib/pages'
 import type { PageNav } from './PageView'
 
@@ -28,17 +28,19 @@ const REACH = 1500
 const MARGIN = 400
 /** Where the focused line comes to rest, as a share of the view's height from the top. */
 const REST = 0.3
-/** Below this share of the height, a line that's let go of glides back up to REST. */
+/** The focused line is kept between these shares of the view's height, the column scrolling along to keep it there. */
+const HIGH = 0.15
 const LOW = 0.6
+/** A press that moves less than this (px) is a tap. */
+const TAP_SLOP = 8
 /** Wheel distance (px) that moves the focus one line. */
 const WHEEL_STEP = 40
 
 /**
- * Guide, continuous: the book as one column with no pages. Holding the text
- * puts the focus on the line under the finger and dragging moves it along,
- * as on a page; held near the bottom (or top), the text scrolls on under the
- * finger, faster the closer to the edge. Let go low down and the focused
- * line glides back up, leaving room to carry on.
+ * Guide, continuous: the book as one column with no pages. As on a page,
+ * holding anywhere and dragging moves the focus line by line, and a tap
+ * moves it to the line tapped; the column scrolls along to keep the focused
+ * line in the upper middle of the view, so reading on never runs out of room.
  *
  * The column is moved with a transform rather than scrolled, so nothing but
  * the finger moves it, and only a stretch of the book around the reading
@@ -170,21 +172,77 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
     ownMove.current = true
     onSeek(line.start)
   }
-  // Keys and buttons: a line, or about a screenful, at a time, keeping it in view.
+  // The column follows a line that moves out of the middle of the view, so
+  // the focus stays in reach: the text scrolls along as you read on.
+  const keepInView = (line: Line | undefined) => {
+    if (!line) return
+    const y = line.top - offset.current
+    const h = height()
+    if (y > h * LOW) place(line.top - h * LOW, true)
+    else if (y < h * HIGH) place(line.top - h * HIGH, true)
+  }
+  // Keys and buttons: a line, or about a screenful, at a time.
   const moveBy = (step: number) => {
     const all = lines.current
     const k = Math.min(Math.max(lineOf(all, index) + step, 0), all.length - 1)
-    const line = all[k]
-    if (!line) return
     seekLine(k)
-    const y = line.top - offset.current
-    if (y < height() * 0.1 || y > height() * LOW) place(line.top - height() * REST, true)
+    keepInView(all[k])
   }
   const screenful = () => {
     const all = lines.current
     const lineHeight = all.length > 1 ? all[1].top - all[0].top : 30
     return Math.max(1, Math.floor((height() * 0.7) / lineHeight))
   }
+
+  // Holding anywhere and dragging: the focus moves a line for every line's
+  // height dragged, from the line it was on (kept by its first word, as the
+  // laid-out stretch can move along mid-drag), and the column follows to
+  // keep it in view. A tap moves the focus to the line tapped.
+  const hold = useRef<{ id: number; x: number; y: number; from: number; moved: boolean } | null>(null)
+  const follow = (clientX: number, clientY: number) => {
+    const h = hold.current
+    const all = lines.current
+    if (!h || all.length === 0) return
+    if (Math.abs(clientX - h.x) > TAP_SLOP || Math.abs(clientY - h.y) > TAP_SLOP) h.moved = true
+    const k = Math.min(Math.max(draggedLine(lineOf(all, h.from), clientY - h.y, lineSpacing(all)), 0), all.length - 1)
+    seekLine(k)
+    keepInView(all[k])
+  }
+  const tapAt = (clientY: number) => {
+    const el = box.current
+    const all = lines.current
+    if (!el || all.length === 0) return
+    const y = clientY - el.getBoundingClientRect().top + offset.current
+    if (y < all[0].top - TAP_SLOP || y > all[all.length - 1].bottom + TAP_SLOP) return
+    seekLine(lineAt(all, y))
+  }
+  const latest = useRef({ follow, tapAt })
+  useLayoutEffect(() => {
+    latest.current = { follow, tapAt }
+  })
+  // Followed on the window: the stage takes the pointer over during a long press.
+  const press = (e: React.PointerEvent) => {
+    if (hold.current) return
+    const id = e.pointerId
+    const line = lines.current[lineOf(lines.current, index)]
+    hold.current = { id, x: e.clientX, y: e.clientY, from: line?.start ?? index, moved: false }
+    const move = (m: PointerEvent) => {
+      if (m.pointerId === id) latest.current.follow(m.clientX, m.clientY)
+    }
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== id) return
+      const tapped = hold.current && !hold.current.moved
+      hold.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      if (tapped && u.type === 'pointerup') latest.current.tapAt(u.clientY)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
   useLayoutEffect(() => {
     if (!navRef) return
     navRef.current = {
@@ -192,60 +250,9 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
       previous: () => moveBy(-screenful()),
       nextLine: () => moveBy(1),
       previousLine: () => moveBy(-1),
+      press,
     }
   })
-
-  // Holding: the focus follows the finger; near the top or bottom the
-  // column scrolls on under it.
-  const hold = useRef<{ id: number; y: number; frame: number; at: number } | null>(null)
-  const follow = () => {
-    const h = hold.current
-    if (!h) return
-    seekLine(lineAt(lines.current, h.y + offset.current))
-  }
-  const following = useRef(follow)
-  useLayoutEffect(() => {
-    following.current = follow
-  })
-  const startHolding = (e: React.PointerEvent) => {
-    const el = box.current
-    if (!el) return
-    const id = e.pointerId
-    const top = el.getBoundingClientRect().top
-    const tick = (now: number) => {
-      const h = hold.current
-      if (!h) return
-      const speed = edgeSpeed(h.y, height())
-      if (speed) {
-        place(offset.current + (speed * Math.min(now - h.at, 50)) / 1000)
-        following.current()
-      }
-      h.at = now
-      h.frame = requestAnimationFrame(tick)
-    }
-    hold.current = { id, y: e.clientY - top, at: performance.now(), frame: requestAnimationFrame(tick) }
-    const move = (m: PointerEvent) => {
-      if (m.pointerId !== id || !hold.current) return
-      hold.current.y = m.clientY - top
-      following.current()
-    }
-    const end = (u: PointerEvent) => {
-      if (u.pointerId !== id) return
-      cancelAnimationFrame(hold.current?.frame ?? 0)
-      hold.current = null
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-      window.removeEventListener('pointercancel', end)
-      // Let go low down: the line glides back up, leaving room to carry on.
-      const all = lines.current
-      const line = all[lineAt(all, u.clientY - top + offset.current)]
-      if (line && line.top - offset.current > height() * LOW) place(line.top - height() * REST, true)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end)
-    window.addEventListener('pointercancel', end)
-    follow()
-  }
 
   const wheel = useRef(0)
 
@@ -254,9 +261,8 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
       className="page is-guided is-continuous has-focus"
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
-      onPointerDown={(e) => {
+      onPointerDown={() => {
         selectionClick.current = hasSelection()
-        if (e.button === 0 && !hold.current) startHolding(e)
       }}
       onPointerUp={() => {
         selectionClick.current ||= hasSelection()

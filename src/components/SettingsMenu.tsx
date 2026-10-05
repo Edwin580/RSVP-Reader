@@ -33,13 +33,13 @@ const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
   {
     value: 'guide',
     label: 'Guide',
-    hint: 'Your own pace: hold the page and drag, and the focus follows your finger line by line',
+    hint: 'Your own pace: hold anywhere and drag to move the focus line by line, or tap a line',
   },
 ]
 
 const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
   { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
-  { value: 'scroll', label: 'Scroll', hint: 'One continuous column; hold near the bottom to scroll on' },
+  { value: 'scroll', label: 'Scroll', hint: 'One continuous column that scrolls along as you read' },
 ]
 
 const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [

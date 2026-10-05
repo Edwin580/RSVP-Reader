@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgeSpeed, EDGE_SPEED, focusRange, groupLines, guideReading, lineAt, lineOf, windowAround } from '../guide'
+import { draggedLine, focusRange, groupLines, guideReading, lineAt, lineOf, lineSpacing, windowAround } from '../guide'
 
 // Three lines of three words, 30px tall, 10px apart.
 const laid = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => ({ i, top: Math.floor(i / 3) * 40, height: 30 }))
@@ -37,12 +37,18 @@ describe('guide', () => {
     expect(focusRange(10, 9, 3)).toEqual([8, 9])
   })
 
-  it('scrolls the text along only near the top and bottom, faster deeper in', () => {
-    expect(edgeSpeed(500, 1000)).toBe(0)
-    expect(edgeSpeed(1000, 1000)).toBe(EDGE_SPEED)
-    expect(edgeSpeed(925, 1000)).toBeCloseTo(EDGE_SPEED / 2)
-    expect(edgeSpeed(0, 1000)).toBe(-EDGE_SPEED)
-    expect(edgeSpeed(100, 0)).toBe(0)
+  it('measures the distance from line to line', () => {
+    expect(lineSpacing(lines)).toBe(40)
+    expect(lineSpacing(lines.slice(0, 1))).toBe(0)
+  })
+
+  it('moves the focus a line for every line’s height dragged, from wherever the drag began', () => {
+    expect(draggedLine(5, 0, 40)).toBe(5)
+    expect(draggedLine(5, 19, 40)).toBe(5)
+    expect(draggedLine(5, 21, 40)).toBe(6)
+    expect(draggedLine(5, 120, 40)).toBe(8)
+    expect(draggedLine(5, -80, 40)).toBe(3)
+    expect(draggedLine(5, 300, 0)).toBe(5)
   })
 
   it('counts moving on as reading, but not time away, going back or jumping', () => {

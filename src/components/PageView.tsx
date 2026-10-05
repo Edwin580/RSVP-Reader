@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
-import { groupLines, lineAt, lineOf, type Line } from '../lib/guide'
+import { draggedLine, groupLines, lineAt, lineOf, lineSpacing, type Line } from '../lib/guide'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
 
@@ -35,9 +35,9 @@ interface Props {
   /** Filled with page navigation for the reader's keyboard shortcuts. */
   navRef?: React.RefObject<PageNav | null>
   /**
-   * Guide: no timer. Holding the page puts the focus on the line under the
-   * finger, and dragging moves it along line by line; past the last line the
-   * page turns (past the first, it turns back).
+   * Guide: no timer. Holding anywhere and dragging moves the focus along
+   * line by line from where it is; past the last line the page turns (past
+   * the first, it turns back). A tap on a line moves the focus there.
    */
   guide?: boolean
 }
@@ -48,10 +48,12 @@ export interface PageNav {
   /** Guide: the focus to the next or previous line, turning the page at its ends. */
   nextLine?: () => void
   previousLine?: () => void
+  /** Guide: a press anywhere on the reading area, to follow as it drags (or taps). */
+  press?: (e: React.PointerEvent) => void
 }
 
-/** Guide: dragging this far past the last (or first) line, in lines, turns the page. */
-const TURN_PAST = 0.6
+/** Guide: a press that moves less than this (px) is a tap. */
+const TAP_SLOP = 8
 
 /** Words laid out per measuring pass; comfortably more than fits on any screen. */
 const CHUNK = 700
@@ -224,6 +226,79 @@ export function PageView({
     else onSeek(lines[k].start)
   }
 
+  // Guide: the press being followed, anywhere on the reading area. The focus
+  // moves from line `from` a line for every line's height dragged since `y`.
+  // When the page turns under the drag, it carries on from the new page's
+  // first line (or, going back, its last) once that page is laid out.
+  const drag = useRef<{
+    id: number
+    x: number
+    y: number
+    from: number | 'last'
+    moved: boolean
+    turnedFrom: number | null
+  } | null>(null)
+  const follow = (clientX: number, clientY: number) => {
+    const d = drag.current
+    if (!d || page.end === null) return
+    if (Math.abs(clientX - d.x) > TAP_SLOP || Math.abs(clientY - d.y) > TAP_SLOP) d.moved = true
+    if (d.turnedFrom === page.start) return // Still waiting for the new page.
+    const lines = pageLines()
+    if (lines.length === 0) return
+    if (d.turnedFrom !== null) {
+      d.turnedFrom = null
+      if (d.from === 'last') d.from = lines.length - 1
+    }
+    const from = d.from === 'last' ? lines.length - 1 : d.from
+    const k = draggedLine(from, clientY - d.y, lineSpacing(lines))
+    if (k >= lines.length && page.end < words.length - 1) {
+      Object.assign(d, { from: 0, y: clientY, turnedFrom: page.start })
+      return nextPage()
+    }
+    if (k < 0 && page.start > 0) {
+      Object.assign(d, { from: 'last', y: clientY, turnedFrom: page.start })
+      return lastOfPreviousPage()
+    }
+    const line = lines[Math.min(Math.max(k, 0), lines.length - 1)]
+    if (lineOf(lines, index) !== lines.indexOf(line)) onSeek(line.start)
+  }
+  // A tap (no drag): the focus to the line tapped, if it was on the text.
+  const tapAt = (clientY: number) => {
+    const t = text.current
+    const lines = pageLines()
+    if (!t || lines.length === 0) return
+    const y = clientY - t.getBoundingClientRect().top
+    if (y < lines[0].top - TAP_SLOP || y > lines[lines.length - 1].bottom + TAP_SLOP) return
+    onSeek(lines[lineAt(lines, y)].start)
+  }
+  // The latest of each (they read this render's page and position).
+  const latest = useRef({ follow, tapAt })
+  useLayoutEffect(() => {
+    latest.current = { follow, tapAt }
+  })
+  // Followed on the window: the stage takes the pointer over during a long
+  // press, and the page under the finger can turn.
+  const press = (e: React.PointerEvent) => {
+    if (drag.current) return
+    const id = e.pointerId
+    drag.current = { id, x: e.clientX, y: e.clientY, from: lineOf(pageLines(), index), moved: false, turnedFrom: null }
+    const move = (m: PointerEvent) => {
+      if (m.pointerId === id) latest.current.follow(m.clientX, m.clientY)
+    }
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== id) return
+      const tapped = drag.current && !drag.current.moved
+      drag.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+      if (tapped && u.type === 'pointerup') latest.current.tapAt(u.clientY)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+  }
+
   useLayoutEffect(() => {
     if (!navRef) return
     navRef.current = {
@@ -235,69 +310,9 @@ export function PageView({
       },
       nextLine: () => moveLine(1),
       previousLine: () => moveLine(-1),
+      press: guide ? press : undefined,
     }
   })
-
-  // Guide: the press being followed. `shift` maps the finger's height to the
-  // text's (zero until a page turns under the finger: then it's re-based so
-  // the finger, wherever it is, holds the new page's first or last line).
-  const drag = useRef<{
-    id: number
-    shift: number
-    turned: { to: 'first' | 'last'; from: number } | null
-  } | null>(null)
-  const follow = (clientY: number) => {
-    const d = drag.current
-    const t = text.current
-    if (!d || !t || page.end === null) return
-    const lines = pageLines()
-    if (lines.length === 0) return
-    const y = clientY - t.getBoundingClientRect().top
-    if (d.turned) {
-      // Still on the page it turned from: wait for the new one.
-      if (d.turned.from === page.start) return
-      const line = d.turned.to === 'first' ? lines[0] : lines[lines.length - 1]
-      d.shift = (line.top + line.bottom) / 2 - y
-      d.turned = null
-    }
-    const at = y + d.shift
-    const height = lines[0].bottom - lines[0].top
-    if (at > lines[lines.length - 1].bottom + height * TURN_PAST && page.end < words.length - 1) {
-      d.turned = { to: 'first', from: page.start }
-      return nextPage()
-    }
-    if (at < lines[0].top - height * TURN_PAST && page.start > 0) {
-      d.turned = { to: 'last', from: page.start }
-      return lastOfPreviousPage()
-    }
-    const k = lineAt(lines, at)
-    if (k !== lineOf(lines, index)) onSeek(lines[k].start)
-  }
-  // The latest `follow` (it reads this render's page and position).
-  const following = useRef(follow)
-  useLayoutEffect(() => {
-    following.current = follow
-  })
-  // Followed on the window, not this element: the stage takes the pointer
-  // over during a long press, and the page under the finger can turn.
-  const startFollowing = (e: React.PointerEvent) => {
-    const id = e.pointerId
-    drag.current = { id, shift: 0, turned: null }
-    const move = (m: PointerEvent) => {
-      if (m.pointerId === id) following.current(m.clientY)
-    }
-    const end = (u: PointerEvent) => {
-      if (u.pointerId !== id) return
-      drag.current = null
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', end)
-      window.removeEventListener('pointercancel', end)
-    }
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', end)
-    window.addEventListener('pointercancel', end)
-    follow(e.clientY)
-  }
 
   const measuring = page.end === null
   const last = measuring
@@ -479,9 +494,8 @@ export function PageView({
       className={`page${measuring ? ' is-measuring' : ''}${focusLines ? ' has-focus' : ''}${playing ? ' is-playing' : ''}${guide ? ' is-guided' : ''}`}
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
-      onPointerDown={(e) => {
+      onPointerDown={() => {
         selectionClick.current = hasSelection()
-        if (guide && e.button === 0 && !drag.current) startFollowing(e)
       }}
       onPointerUp={() => {
         selectionClick.current ||= hasSelection()
