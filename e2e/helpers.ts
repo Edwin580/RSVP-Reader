@@ -45,6 +45,64 @@ export function wav(parts: ({ speech: number } | { silence: number })[]): Buffer
 
 export const silentWav = (seconds: number) => wav([{ silence: seconds }])
 
+/**
+ * A whole audiobook of `minutes`, read from a made-up book of the same
+ * length, as a 16 kHz, 16-bit WAV (big: over 60 MB for half an hour, like a
+ * real audiobook file). Sentences vary in length, as in any book, and each
+ * word is said at about 13 letters a second, pausing at commas and after
+ * sentences. Returns the book, the recording, and when each sentence starts.
+ */
+export function longAudiobook(minutes: number): { text: string; audio: Buffer; sentences: { text: string; start: number }[] } {
+  const vocabulary = 'the a and of to she he it was said in that with for as on at by but not all little very garden river window lantern morning question remember suddenly curious afternoon wonderful conversation'.split(' ')
+  let seed = 7
+  const random = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646
+  const rate = 16000
+  const timeline: { speech: boolean; seconds: number }[] = [{ speech: true, seconds: 3 }, { speech: false, seconds: 1 }]
+  let t = 4
+  const sentences: { text: string; start: number }[] = []
+  const paragraphs: string[] = []
+  while (t < minutes * 60 - 20) {
+    const paragraph: string[] = []
+    for (let s = 0, count = 2 + Math.floor(random() * 5); s < count; s++) {
+      const words = Array.from({ length: 3 + Math.floor(random() * 22) }, () => vocabulary[Math.floor(random() * vocabulary.length)])
+      for (let c = 4 + Math.floor(random() * 6); c < words.length - 2; c += 4 + Math.floor(random() * 8)) words[c] += ','
+      words[0] = words[0][0].toUpperCase() + words[0].slice(1)
+      words[words.length - 1] += '.'
+      sentences.push({ text: words.join(' '), start: t })
+      paragraph.push(words.join(' '))
+      words.forEach((word, j) => {
+        const length = word.replace(/[^\p{L}]/gu, '').length / 13
+        const pause = j === words.length - 1 ? (s === count - 1 ? 1.3 : 0.8) : word.endsWith(',') ? 0.3 : 0
+        timeline.push({ speech: true, seconds: length }, { speech: false, seconds: pause })
+        t += length + pause
+      })
+    }
+    paragraphs.push(paragraph.join(' '))
+  }
+  timeline.push({ speech: false, seconds: minutes * 60 - t })
+  const data = Math.round(minutes * 60 * rate) * 2
+  const audio = Buffer.alloc(44 + data)
+  audio.write('RIFF', 0)
+  audio.writeUInt32LE(36 + data, 4)
+  audio.write('WAVEfmt ', 8)
+  audio.writeUInt32LE(16, 16)
+  audio.writeUInt16LE(1, 20)
+  audio.writeUInt16LE(1, 22)
+  audio.writeUInt32LE(rate, 24)
+  audio.writeUInt32LE(rate * 2, 28)
+  audio.writeUInt16LE(2, 32)
+  audio.writeUInt16LE(16, 34)
+  audio.write('data', 36)
+  audio.writeUInt32LE(data, 40)
+  let at = 0
+  for (const part of timeline) {
+    const n = Math.round(Math.max(0, part.seconds) * rate)
+    if (part.speech) for (let i = 0; i < n && 44 + (at + i) * 2 < audio.length; i++) audio.writeInt16LE(Math.round((random() * 2 - 1) * 9000), 44 + (at + i) * 2)
+    at += n
+  }
+  return { text: ['Chapter 1', '', ...paragraphs.flatMap((p) => [p, ''])].join('\n'), audio, sentences }
+}
+
 /** A book whose second chapter is long enough to line up by its sound, like a real one. */
 export const SECOND = [
   'Down she went, past cupboards and shelves.',

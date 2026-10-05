@@ -14,7 +14,12 @@ const FLICK_MIN = 20
  * flick, and it closes, otherwise it springs back. Only on phones, where the
  * sheet rises from the bottom (see the CSS).
  */
-export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: () => void) {
+export function useSheetDrag(
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+  /** The part that scrolls, when it isn't the sheet itself (a panel with a fixed title bar). */
+  scroller?: React.RefObject<HTMLElement | null>,
+) {
   const close = useRef(onClose)
   useEffect(() => {
     close.current = onClose
@@ -48,7 +53,7 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
         // (scrolling up, or content already scrolled) is left to scroll.
         const dy = y - start.y
         if (dy === 0) return
-        if (dy < 0 || sheet.scrollTop > 0) {
+        if (dy < 0 || (scroller?.current ?? sheet).scrollTop > 0) {
           start = null
           return
         }
@@ -88,5 +93,5 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
       sheet.removeEventListener('touchend', up)
       sheet.removeEventListener('touchcancel', up)
     }
-  }, [ref])
+  }, [ref, scroller])
 }

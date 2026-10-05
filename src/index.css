@@ -1277,6 +1277,9 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .is-sheet .search-body { flex: 0 1 auto; }
+  /* Pulled down from the top, the sheet moves instead of its content bouncing (useSheetDrag). */
+  .is-sheet .search-body { overscroll-behavior-y: none; }
+  .is-sheet .sheet-handle { align-self: center; flex-shrink: 0; margin: 0.35rem 0 -0.35rem; }
   .search-backdrop.is-sheet.is-closing .search-panel { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 .panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
@@ -1423,14 +1426,14 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .listen-hint { flex-basis: 100%; text-align: center; }
 }
 .audio-results .audio-result-title { font-weight: 600; }
-.audio-speed { margin: 0.25rem 1rem 0.5rem; }
-.audio-speed .segmented { flex: 0 1 16rem; }
+.audio-listen { justify-content: center; width: calc(100% - 2rem); margin: 0.5rem 1rem 0.75rem; }
+.audio-speed { margin: 0.75rem 1rem 0.25rem; }
 .audio-source { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 1rem 0; }
 .audio-source-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .audio-link { padding: 0.35rem 0.5rem 0.25rem 1rem; }
 .audio-file { cursor: pointer; }
 .audio-file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.audio-error { color: var(--red); }
+.audio-error, .audio-warning { color: var(--red); }
 .audio-times {
   display: block;
   width: calc(100% - 2rem);

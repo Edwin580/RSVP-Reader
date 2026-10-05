@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Bookmark, Chapter } from '../lib/types'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 
 interface Props {
@@ -43,6 +44,10 @@ export function BookmarksPanel({
   }, [onClose])
   const close = useRef<HTMLButtonElement>(null)
   useEffect(() => close.current?.focus(), [])
+  // On phones it's a bottom sheet: pull it down to put it away.
+  const sheet = useRef<HTMLElement>(null)
+  const body = useRef<HTMLDivElement>(null)
+  useSheetDrag(sheet, onClose, body)
 
   const chapterTitle = (i: number) => {
     let title = ''
@@ -53,11 +58,13 @@ export function BookmarksPanel({
   return (
     <div className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`} onClick={onClose}>
       <aside
+        ref={sheet}
         className="search-panel"
         role="dialog"
         aria-label="Bookmarks"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="sheet-handle" aria-hidden="true" />
         <div className="panel-bar">
           <h2 className="panel-title">Bookmarks</h2>
           <button type="button" className="icon-button" ref={close} onClick={onClose} aria-label="Close bookmarks">
@@ -65,7 +72,7 @@ export function BookmarksPanel({
           </button>
         </div>
 
-        <div className="search-body">
+        <div className="search-body" ref={body}>
           <button type="button" className="bookmark-here" onClick={onToggleHere}>
             <Icon name={here ? 'bookmarkFilled' : 'bookmark'} size={18} />
             {here ? 'Remove bookmark here' : 'Bookmark this spot'}

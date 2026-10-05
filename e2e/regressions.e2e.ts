@@ -1,6 +1,7 @@
+import { writeFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import JSZip from 'jszip'
-import { chapterTwo, clock, LISTEN_BOOK, mockArchive, SECOND, upload } from './helpers.ts'
+import { chapterTwo, clock, LISTEN_BOOK, longAudiobook, mockArchive, SECOND, upload } from './helpers.ts'
 
 /*
  * Bugs that were fixed and must stay fixed. Each test names the bug as it
@@ -343,4 +344,78 @@ test('an excerpt of a chapter, like the demo’s, lines up with the full recordi
   await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
   await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[2])}`))
   await expect(page.locator('.word')).toHaveText('Marmalade')
+})
+
+test('a whole audiobook file of one’s own lines up wherever the reader is, however long it is (#56)', async ({ page }, testInfo) => {
+  // A file over 60 MB (any audiobook of a few hours) was too big to line up,
+  // so listening started from a guess, minutes away from the text.
+  test.setTimeout(120000)
+  const book = longAudiobook(33)
+  // Far into the file: in its third ten-minute part, so the ones before it are lined up first.
+  const target = book.sentences.findIndex((s) => s.start > 20 * 60)
+  const marked = book.text.replace(book.sentences[target].text, `Xylophone ${book.sentences[target].text}`)
+  const file = testInfo.outputPath('audiobook.wav')
+  writeFileSync(file, book.audio)
+  await page.route('https://archive.org/**', (route) => route.fulfill({ json: { response: { docs: [] } } }))
+  // Where playback is sent to start, as the player seeks there (the time shown moves on as it plays).
+  await page.addInitScript(`
+    window.seeks = []
+    const play = HTMLMediaElement.prototype.play
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.dataset.watched) {
+        this.dataset.watched = '1'
+        this.addEventListener('seeked', () => window.seeks.push(this.currentTime))
+      }
+      return play.call(this)
+    }
+  `)
+  await page.goto('./')
+  await upload(page, 'long.txt', marked)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.locator('.audio-file input').setInputFiles(file)
+  await expect(page.locator('.audio-source-name')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await page.getByLabel('Search text').fill('Xylophone')
+  await page.locator('.search-results button').first().click()
+  await expect(page.locator('.word')).toHaveText('Xylophone')
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 90000 })
+  // It starts where the sentence is read (the made-up narrator doesn't say the marker word), not from a guess.
+  const start = book.sentences[target].start
+  const seeked = await page.evaluate(() => (globalThis as unknown as { seeks: number[] }).seeks.at(-1))
+  expect(Math.abs(seeked! - start)).toBeLessThan(1)
+})
+
+test('finding a recording leaves out other books of a similar name and flags a dramatization (#56)', async ({ page }) => {
+  // For "Rebecca", the Archive offered "Rebecca of Sunnybrook Farm" (another
+  // book) and an 84-minute radio play, neither of which can follow the text.
+  await page.route('https://archive.org/advancedsearch.php**', (route) =>
+    route.fulfill({
+      json: {
+        response: {
+          docs: [
+            { identifier: 'sunnybrook', title: 'Rebecca of Sunnybrook Farm', creator: 'Kate Douglas Wiggin' },
+            { identifier: 'rebecca_radio', title: 'Rebecca', creator: 'Daphne du Maurier' },
+          ],
+        },
+      },
+    }),
+  )
+  await page.route('https://archive.org/metadata/rebecca_radio', (route) =>
+    route.fulfill({ json: { files: [{ name: 'rebecca.mp3', format: 'VBR MP3', title: 'Rebecca', length: '84:00' }] } }),
+  )
+  // A full-length novel: far longer than 84 minutes to read aloud.
+  const sentence = 'Last night I dreamt I went to Manderley again, and the drive wound away in front of me.'
+  const text = ['Chapter 1', '', Array.from({ length: 1400 }, () => sentence).join(' ')].join('\n')
+  await page.goto('./')
+  await upload(page, 'Rebecca by Daphne du Maurier.txt', text)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  const result = page.locator('.audio-results li')
+  await expect(result).toHaveCount(1)
+  await expect(result).toContainText('Daphne du Maurier')
+  await expect(result).toContainText('abridged or dramatized')
+  await expect(page.getByText('Rebecca of Sunnybrook Farm')).toHaveCount(0)
 })

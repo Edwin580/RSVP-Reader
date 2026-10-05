@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authorFromTitle, authorTerm, gutenbergAuthor, parseLength, parseSearch, searchRecordings, searchTerms, searchUrl, tracksFromMetadata } from '../archive'
+import { authorFromTitle, authorTerm, sameBook, seemsAbridged, gutenbergAuthor, parseLength, parseSearch, searchRecordings, searchTerms, searchUrl, tracksFromMetadata } from '../archive'
 
 describe('Internet Archive', () => {
   it('searches for the title alone', () => {
@@ -80,5 +80,21 @@ describe('Internet Archive', () => {
     const results = await searchRecordings('Emma', 'Jane Austen', fetcher)
     expect(results.map((r) => r.identifier)).toEqual(['austen_emma', 'other_emma', 'third'])
     expect(asked[0]).toContain('creator:(Austen)')
+  })
+
+  it('tells recordings of this book from other books with similar titles', () => {
+    const r = (title: string, creator: string) => ({ identifier: 'x', title, creator, librivox: true })
+    expect(sameBook(r('Rebecca', 'Daphne Du Maurier'), 'Rebecca', 'Daphne du Maurier')).toBe(true)
+    expect(sameBook(r('Rebecca of Sunnybrook Farm', 'Kate Douglas Wiggin'), 'Rebecca', 'Daphne du Maurier')).toBe(false)
+    expect(sameBook(r('*Du Maurier - Rebecca - 1973 Trantow Pasetti', 'Daphne Du Maurier'), 'Rebecca', 'Daphne du Maurier')).toBe(false)
+    expect(sameBook(r("Alice's Adventures in Wonderland, by Lewis Carroll", 'Lewis Carroll'), 'Alice’s Adventures in Wonderland', 'Lewis Carroll')).toBe(true)
+    expect(sameBook(r("Alice's Adventures in Wonderland (version 6)", 'Lewis Carroll'), 'Alice’s Adventures in Wonderland', undefined)).toBe(true)
+    expect(sameBook(r('The Five People You Meet in Heaven', 'Mitch Albom'), 'The Five People You Meet in Heaven: A Novel', 'Mitch Albom')).toBe(true)
+  })
+
+  it('knows a recording far shorter than the book can’t be all of it', () => {
+    // Rebecca is about 160,000 words: some 17 hours aloud, not 84 minutes.
+    expect(seemsAbridged(84 * 60, 160000)).toBe(true)
+    expect(seemsAbridged(15 * 3600, 160000)).toBe(false)
   })
 })

@@ -9,7 +9,7 @@ import type { SyncRequest } from '../workers/sync.worker'
  */
 
 /** Larger files would take too much memory to decode on a phone (about two hours of MP3). */
-const MAX_BYTES = 60 * 1024 * 1024
+export const MAX_BYTES = 60 * 1024 * 1024
 const SAMPLE_RATES = [8000, 16000, 22050, 44100]
 
 export interface TextRange {

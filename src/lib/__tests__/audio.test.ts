@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addPoint,
+  fileParts,
   trackAt,
   trackChapters,
   trackRange,
@@ -16,6 +17,7 @@ import {
   timeAt,
   wordAt,
   youTubeId,
+  type AudioLink,
 } from '../audio'
 
 const chapters = [
@@ -246,9 +248,39 @@ describe('which part of the book each track covers', () => {
     const unnamed = [{ url: 'a', title: 'Part one', seconds: 600 }, { url: 'b', title: 'Part two', seconds: 600 }]
     // Lined up so far: word 3000 is heard at 600 s, where the second track starts.
     const range = trackRange(unnamed, 1, chapters, [{ index: 0, seconds: 0 }, { index: 3000, seconds: 600 }], 20000, 600)
-    expect(range.start).toBe(500)
-    expect(range.options).toEqual({ lead: 5000, openEnd: true })
+    // Right where something is already placed, the guess is close.
+    expect(range.start).toBe(2970)
+    expect(range.options).toEqual({ lead: 60, openEnd: true })
     expect(range.end).toBeGreaterThan(3000 + 600 * 2.6)
+    // Far from anything placed, it looks further either side, and further still the further away.
+    const far = trackRange(unnamed, 1, chapters, [{ index: 0, seconds: 0 }, { index: 1500, seconds: 300 }], 20000, 600)
+    expect(far.start).toBeLessThan(3000 - 2500)
+    expect(far.options.lead).toBeGreaterThan(5000)
+  })
+
+  it('splits a long audiobook file into parts by its chapters', () => {
+    expect(fileParts(15 * 60, [{ title: 'Chapter 1', start: 0 }])).toEqual([])
+    const parts = fileParts(3000, [{ title: 'Opening Credits', start: 0 }, { title: 'Chapter 1', start: 20 }, { title: 'Chapter 2', start: 2200 }])
+    // Chapter 1 runs 36 minutes: in three pieces, only the first named after it.
+    expect(parts.map((p) => p.title)).toEqual(['Opening Credits', 'Chapter 1', '', '', 'Chapter 2'])
+    expect(parts.reduce((t, p) => t + p.seconds, 0)).toBeCloseTo(3000)
+    // A file whose first chapter starts late gets a part for what comes before.
+    expect(fileParts(2400, [{ title: 'Chapter 1', start: 30 }])[0]).toEqual({ url: '', title: '', seconds: 30 })
+  })
+
+  it('splits a long audiobook file without chapters into ten-minute stretches', () => {
+    const parts = fileParts(3600, [])
+    expect(parts).toHaveLength(6)
+    expect(parts.every((p) => p.title === '' && p.seconds === 600)).toBe(true)
+  })
+
+  it('guesses a place in a whole-book file in proportion until it’s lined up', () => {
+    const parts = fileParts(36000, [])
+    const link: AudioLink = { source: { kind: 'file', name: 'book.mp3', parts }, timestamps: '', points: [] }
+    const points = syncPoints(link, [], [], 100000)
+    expect(timeAt(points, 50000)).toBeCloseTo((36000 - 30) / 2, -2)
+    // A file far too short for the whole book is only part of it: no such guess.
+    expect(syncPoints({ ...link, source: { kind: 'file', name: 'part.mp3', parts: fileParts(1800, []) } }, [], [], 100000)).toEqual([])
   })
 
   it('knows which track is playing', () => {

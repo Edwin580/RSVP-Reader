@@ -147,3 +147,58 @@ export async function loadRecording(recording: Recording, fetcher: typeof fetch 
   if (!tracks.length) throw new Error('This recording has no MP3 files to play.')
   return { kind: 'archive', identifier: recording.identifier, title: recording.title, librivox: recording.librivox, tracks }
 }
+
+const STOP = new Set(['the', 'a', 'an', 'of', 'and'])
+/** Words that describe a recording rather than name the book. */
+const RECORDING_WORDS = new Set(['version', 'dramatic', 'reading', 'unabridged', 'audiobook', 'audio', 'book', 'librivox', 'complete', 'full', 'solo', 'edition'])
+
+function titleWords(text: string, drop: Set<string>): string[] {
+  return text
+    .replace(/\s+by\s+.*$/i, '')
+    .replace(/[:;([].*$/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[’']s\b/g, 's')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter((w) => w && !STOP.has(w) && !RECORDING_WORDS.has(w) && !drop.has(w) && !/^(1[5-9]|20)\d\d$/.test(w) && !/^v?\d$/.test(w))
+}
+
+/**
+ * Whether a search result is a recording of this book: its title names the
+ * book (give or take "version 2", "dramatic reading", "by …", a year) and,
+ * when both say, the author is the same. "Rebecca of Sunnybrook Farm" isn't
+ * "Rebecca".
+ */
+export function sameBook(recording: Recording, title: string, author?: string): boolean {
+  const surname = authorTerm(author).toLowerCase()
+  const authorWords = new Set(
+    (author ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z]+/)
+      .filter(Boolean),
+  )
+  const theirs = titleWords(recording.title, authorWords).join(' ')
+  const ours = titleWords(title, authorWords).join(' ')
+  if (!ours || theirs !== ours) return false
+  if (!surname || !recording.creator) return true
+  return recording.creator.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(surname)
+}
+
+/** Words a second most narrators read at; a recording much shorter than this would take is abridged or dramatized. */
+const READING_WORDS_PER_SECOND = 2.6
+/** A recording this much shorter than the book would take to read aloud doesn't read all of it. */
+const ABRIDGED_SHARE = 0.6
+
+/** How long the book would take to read aloud, in seconds. */
+export function readAloudSeconds(wordCount: number): number {
+  return wordCount / READING_WORDS_PER_SECOND
+}
+
+/** A recording far shorter than the book: an abridgement or a dramatization, which can't follow the text. */
+export function seemsAbridged(seconds: number, wordCount: number): boolean {
+  return seconds > 0 && seconds < readAloudSeconds(wordCount) * ABRIDGED_SHARE
+}

@@ -6,9 +6,12 @@ import { alignTranscript } from '../lib/align'
 import { authorFromTitle } from '../lib/archive'
 import {
   addPoint,
+  fileParts,
   formatTime,
   paceAt,
   parseTimestamps,
+  partsOf,
+  partWindow,
   speedFor,
   syncPoints,
   timeAt,
@@ -20,7 +23,8 @@ import {
   type AudioLink,
   type AudioSource,
 } from '../lib/audio'
-import { detectSync } from '../lib/syncClient'
+import { indexAudio, type AudioIndex } from '../lib/media'
+import { detectSync, MAX_BYTES } from '../lib/syncClient'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
@@ -410,7 +414,7 @@ export function Reader({
   const listening = player.playing
   const timestamps = audio?.timestamps ?? ''
   const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
-  const points = useMemo(() => (audio ? syncPoints(audio, chapters, transcript) : []), [audio, chapters, transcript])
+  const points = useMemo(() => (audio ? syncPoints(audio, chapters, transcript, words.length) : []), [audio, chapters, transcript, words.length])
   const speed = audio && audio.matchSpeed !== false ? speedFor(wpm, paceAt(points, index)) : 1
   useEffect(() => setSpeed(speed), [speed, setSpeed])
   /** The last word moved to by following the narrator; any other move is the reader's own jump. */
@@ -427,14 +431,39 @@ export function Reader({
   })
   /** The points as they are now, including files lined up since the last render. */
   const pointsNow = useCallback(
-    () => (latestAudio.current ? syncPoints(latestAudio.current, chapters, transcript) : []),
-    [chapters, transcript],
+    () => (latestAudio.current ? syncPoints(latestAudio.current, chapters, transcript, words.length) : []),
+    [chapters, transcript, words.length],
   )
-  /** The file playing `seconds` into the recording. */
+  /** The file (or part of a long file) playing `seconds` into the recording. */
   const fileAt = useCallback((seconds: number) => {
     const source = latestAudio.current?.source
-    return source?.kind === 'archive' ? trackAt(source.tracks, seconds) : 0
+    return source ? trackAt(partsOf(source), seconds) : 0
   }, [])
+  // A long audiobook file of one's own is read for where its chapters and
+  // each moment's sound are (media.ts), so it can be lined up a part at a
+  // time without decoding hours of it at once.
+  const indexes = useRef(new WeakMap<Blob, Promise<AudioIndex | null>>())
+  const indexOf = useCallback((file: Blob) => {
+    let index = indexes.current.get(file)
+    if (!index) {
+      index = indexAudio(file).catch(() => null)
+      indexes.current.set(file, index)
+    }
+    return index
+  }, [])
+  /** Splits a linked file into the parts it's lined up in, once (saved with the link). */
+  const ensureParts = useCallback(async () => {
+    const link = latestAudio.current
+    if (!link || link.source.kind !== 'file' || link.source.parts !== undefined || !audioFile) return
+    const index = await indexOf(audioFile)
+    const now = latestAudio.current
+    if (!now || now.source.kind !== 'file' || now.source.name !== link.source.name || now.source.parts !== undefined) return
+    const parts = index ? fileParts(index.duration, index.chapters, audioFile.size > MAX_BYTES) : []
+    // Points found from the file as a whole were in different parts' places: start afresh.
+    const next = { ...now, source: { ...now.source, parts }, detected: parts.length ? {} : now.detected }
+    latestAudio.current = next
+    onAudio(next)
+  }, [audioFile, indexOf, onAudio])
   /** Letters said before each word: between sync points, time goes with letters, not words. */
   const letters = useMemo(() => spokenLetters(words), [words])
   const [lining, setLining] = useState(0)
@@ -446,28 +475,47 @@ export function Reader({
       const link = latestAudio.current
       if (!link || k < 0 || link.detected?.[k] !== undefined) return Promise.resolve()
       const { source } = link
+      // A file not yet split into parts is split first (prepare does that).
+      if (source.kind === 'file' && source.parts === undefined) return Promise.resolve()
+      const parts = partsOf(source)
       const target = source.kind === 'archive' ? source.tracks[k]?.url : source.kind === 'url' ? source.url : source.kind === 'file' ? audioFile : null
-      if (!target || (source.kind !== 'archive' && k > 0)) return Promise.resolve()
+      if (!target || (parts.length ? k >= parts.length : k > 0)) return Promise.resolve()
       const id = `${sourceId(source)}#${k}`
       const running = linings.current.get(id)
       if (running) return running
       setLining((n) => n + 1)
-      const done = detectSync(
-        target,
-        { words, weights: narration, paragraphEnds: book.paragraphEnds },
-        (duration) => {
-          const tracks = source.kind === 'archive' ? source.tracks : [{ url: '', title: '', seconds: duration }]
-          return trackRange(tracks, k, chapters, pointsNow(), words.length, duration)
-        },
-        showProgress ? setProgress : undefined,
-      )
+      /** What to decode, and where in the recording it starts: a part of a long file is just its own stretch. */
+      const audioFor = async (): Promise<{ audio: string | Blob; offset: number; keep?: [number, number] }> => {
+        if (source.kind === 'archive') return { audio: target, offset: trackStarts(parts)[k] }
+        if (source.kind !== 'file' || !parts.length || typeof target === 'string') return { audio: target, offset: 0 }
+        const index = await indexOf(target)
+        if (!index) throw new Error('This audiobook file can’t be read in parts.')
+        const window = partWindow(parts, k, pointsNow())
+        const stretch = index.stretch(target, window.from, window.to)
+        return { audio: new Blob(stretch.parts as BlobPart[], { type: stretch.type }), offset: stretch.start, keep: [window.start, window.end] }
+      }
+      let offset = 0
+      /** The part's own stretch of the recording: points in the neighbours' bits decoded with it are theirs to place. */
+      let keep: [number, number] = [-Infinity, Infinity]
+      const done = audioFor()
+        .then((chosen) => {
+          offset = chosen.offset
+          if (chosen.keep) keep = chosen.keep
+          return detectSync(
+            chosen.audio,
+            { words, weights: narration, paragraphEnds: book.paragraphEnds },
+            (duration) =>
+              trackRange(parts.length ? parts : [{ url: '', title: '', seconds: duration }], k, chapters, pointsNow(), words.length, duration, chosen.keep ? offset : undefined),
+            showProgress ? setProgress : undefined,
+          )
+        })
         .then(({ points: found, audio: file }) => {
           // Downloaded once: the player plays this copy instead of fetching it again.
           if (source.kind === 'archive') provideAudio(k, file)
           const now = latestAudio.current
           if (!now || sourceId(now.source) !== sourceId(source)) return
-          const offset = source.kind === 'archive' ? trackStarts(source.tracks)[k] : 0
-          const next = { ...now, detected: { ...now.detected, [k]: found.map((p) => ({ index: p.index, seconds: p.seconds + offset })) } }
+          const placed = found.map((p) => ({ index: p.index, seconds: p.seconds + offset })).filter((p) => p.seconds >= keep[0] && p.seconds < keep[1])
+          const next = { ...now, detected: { ...now.detected, [k]: placed } }
           // Seen straight away by whatever is waiting on this, before the next render.
           latestAudio.current = next
           onAudio(next)
@@ -485,7 +533,7 @@ export function Reader({
       linings.current.set(id, done)
       return done
     },
-    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow, provideAudio],
+    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow, provideAudio, indexOf],
   )
   /**
    * Lines up the file that word `i` is in. The first guess at which file
@@ -495,17 +543,30 @@ export function Reader({
    */
   const prepare = useCallback(
     async (i: number, showProgress = false) => {
+      await ensureParts()
       const seen = new Set<number>()
       for (let step = 0; step < 4; step++) {
         const k = fileAt(timeAt(pointsNow(), i, letters))
         if (seen.has(k)) return
         seen.add(k)
+        // A long file's parts without a chapter marker can only be placed after
+        // the part before them (their sound alone can't tell where in the book
+        // they are): line up the ones between the last placed and this, in order.
+        const link = latestAudio.current
+        const parts = link?.source.kind === 'file' ? partsOf(link.source) : []
+        let from = k
+        while (from > 0 && !parts[from]?.title && link?.detected?.[from - 1] === undefined) from--
+        for (let m = from; m < k; m++) {
+          if (showProgress) setProgress((m - from) / (k - from + 1))
+          await lineUp(m)
+          if (!latestAudio.current?.detected?.[m]?.length) break
+        }
         await lineUp(k, showProgress)
         const found = latestAudio.current?.detected?.[k]
         if (!found || found.length < 2 || (i >= found[0].index && i <= found[found.length - 1].index)) return
       }
     },
-    [fileAt, lineUp, pointsNow, letters],
+    [fileAt, lineUp, pointsNow, letters, ensureParts],
   )
   /**
    * Listen waits for lining up rather than start from a guess (it shows how
@@ -582,10 +643,10 @@ export function Reader({
       const k = fileAt(t)
       void lineUp(k)
       // Halfway through a chapter's file, line up the next one too.
-      const source = latestAudio.current?.source
-      if (source?.kind === 'archive') {
-        const start = trackStarts(source.tracks)[k]
-        if (t - start > (source.tracks[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
+      const parts = latestAudio.current ? partsOf(latestAudio.current.source) : []
+      if (parts.length) {
+        const start = trackStarts(parts)[k]
+        if (t - start > (parts[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
       }
       // A touch ahead: the word shown should be the one being said, not the one just said.
       const i = wordHeardAt(points, t + FOLLOW_LEAD_SECONDS, words.length, letters)
@@ -1103,6 +1164,7 @@ export function Reader({
         <AudioPanel
           title={book.title}
           author={book.author ?? authorFromTitle(book.title)}
+          wordCount={words.length}
           chapters={chapters}
           link={audio}
           startsAt={timeAt(points, index, letters)}

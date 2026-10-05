@@ -24,8 +24,12 @@ export type AudioSource =
   /** A recording on the Internet Archive, played track after track as one. */
   | { kind: 'archive'; identifier: string; title: string; librivox: boolean; tracks: Track[] }
   | { kind: 'url'; url: string }
-  /** A file on this device; the file itself is stored separately (storage.ts). */
-  | { kind: 'file'; name: string }
+  /**
+   * A file on this device; the file itself is stored separately (storage.ts).
+   * A long one is lined up in parts (its chapters, or stretches of a few
+   * minutes) though it plays as one; empty when it's lined up whole.
+   */
+  | { kind: 'file'; name: string; parts?: Track[] }
 
 /** The word at `index` is heard `seconds` into the recording. */
 export interface SyncPoint {
@@ -224,6 +228,67 @@ export function matchChapters(stamps: Timestamp[], chapters: Chapter[]): SyncPoi
 /** A LibriVox chapter opens with its announcement ("This is a LibriVox recording…") before the text. */
 const LIBRIVOX_INTRO_SECONDS = 14
 
+/** The parts a recording is lined up in: its tracks, or a long file's parts (none: it's lined up whole). */
+export function partsOf(source: AudioSource): Track[] {
+  return source.kind === 'archive' ? source.tracks : source.kind === 'file' ? (source.parts ?? []) : []
+}
+
+/** Files shorter than this are lined up whole. */
+const WHOLE_FILE_SECONDS = 20 * 60
+/** A part longer than this is split (decoding a long stretch takes a lot of memory on a phone). */
+const MAX_PART_SECONDS = 15 * 60
+/** Without chapter markers, a long file is lined up in stretches this long. */
+const PART_SECONDS = 10 * 60
+
+/**
+ * The parts to line a long audiobook file up in: one per chapter marker it
+ * carries (titled, so chapter starts are matched like a LibriVox book's),
+ * split where a chapter is long; without markers, ten-minute stretches.
+ * A short file is lined up whole, unless it's too big to decode at once.
+ */
+export function fileParts(duration: number, markers: { title: string; start: number }[], tooBigWhole = false): Track[] {
+  if (!(duration > WHOLE_FILE_SECONDS) && !(tooBigWhole && duration > 0)) return []
+  const starts = markers.filter((m) => m.start >= 0 && m.start < duration - 1)
+  if (!starts.length || starts[0].start > 1) starts.unshift({ title: '', start: 0 })
+  const parts: Track[] = []
+  starts.forEach((m, k) => {
+    const end = k + 1 < starts.length ? starts[k + 1].start : duration
+    const length = end - m.start
+    if (length <= 0) return
+    const pieces = Math.ceil(length / (starts.length > 1 ? MAX_PART_SECONDS : PART_SECONDS))
+    for (let n = 0; n < pieces; n++) parts.push({ url: '', title: n === 0 ? m.title : '', seconds: length / pieces })
+  })
+  return parts
+}
+
+/** Seconds of a neighbouring part decoded with a part, where they meet mid-chapter. */
+const PART_OVERLAP_SECONDS = 45
+/** Starting a little before a sentence, so the pause before it is heard. */
+const SENTENCE_LEAD_IN = 0.25
+
+/**
+ * The stretch of a long file to decode to line part `k` up (`from`–`to`),
+ * and the part itself (`start`–`end`), whose points are the ones kept. A
+ * match is least sure at its ends, so where a part starts or ends
+ * mid-chapter, a little of its neighbour comes along, and that end of the
+ * match falls outside the part.
+ */
+export function partWindow(parts: Track[], k: number, points: SyncPoint[] = []): { from: number; to: number; start: number; end: number } {
+  const start = trackStarts(parts)[k] ?? 0
+  const end = start + (parts[k]?.seconds ?? 0)
+  const total = parts.reduce((sum, p) => sum + p.seconds, 0)
+  let from = k > 0 && !parts[k].title ? Math.max(0, start - PART_OVERLAP_SECONDS) : start
+  // Better still, start on a sentence already placed there (the part before
+  // was lined up with some of this one): then where the text starts is known.
+  if (from < start) {
+    const placed = points.filter((p) => p.seconds > start - PART_OVERLAP_SECONDS * 2 && p.seconds <= start)
+    const nearest = placed.sort((a, b) => Math.abs(a.seconds - from) - Math.abs(b.seconds - from))[0]
+    if (nearest) from = Math.max(0, nearest.seconds - SENTENCE_LEAD_IN)
+  }
+  const to = k + 1 < parts.length && !parts[k + 1].title ? Math.min(total, end + PART_OVERLAP_SECONDS) : end
+  return { from, to, start, end }
+}
+
 /** Where each track of a recording starts, as one timeline. */
 export function trackStarts(tracks: Track[]): number[] {
   let total = 0
@@ -251,6 +316,13 @@ const TYPICAL_PACE = 2.7
 
 /** How far either side of a guessed start to look, in words, when a track doesn't say which chapter it is. */
 const GUESS_WINDOW = 2500
+const MAX_GUESS_WINDOW = 6000
+/** Within this many seconds of a point already placed, a track's start is guessed from it closely, */
+const NEAR_SECONDS = 120
+/** to within this many words, plus a second's worth for each second away. */
+const NEAR_WINDOW = 30
+/** How far a narrator's pace can stray from the average over a long stretch. */
+const PACE_DRIFT = 0.04
 
 /**
  * The part of the book to look for track `k` in, once its length is known.
@@ -265,6 +337,8 @@ export function trackRange(
   points: SyncPoint[],
   wordCount: number,
   duration: number,
+  /** Where in the recording the audio to match starts, when not at the track's start (a part decoded with some of the one before). */
+  audioFrom?: number,
 ): { start: number; end: number; options: { lead?: number; openEnd?: boolean; audioRunsOn?: boolean } } {
   const starts = trackChapters(tracks, chapters)
   const start = starts[k]
@@ -294,9 +368,19 @@ export function trackRange(
     // Even the rest of the book is too little for the recording: an excerpt of what it reads.
     if (paceTo(wordCount) < MIN_BELIEVABLE_PACE) return { start, end: wordCount, options: { audioRunsOn: true } }
   }
-  const guess = start ?? wordAt(points, trackStarts(tracks)[k] ?? 0, wordCount)
-  const from = Math.max(0, guess - (start === null || start === undefined ? GUESS_WINDOW : 0))
-  const lead = guess - from + (start === null || start === undefined ? GUESS_WINDOW : 0)
+  const at = audioFrom ?? trackStarts(tracks)[k] ?? 0
+  const guess = start ?? wordAt(points, at, wordCount)
+  // A guess from points far off in the recording can be further out: a narrator's pace drifts.
+  const nearest = points.reduce((d, p) => Math.min(d, Math.abs(p.seconds - at)), Infinity)
+  // Right after a part already lined up, the guess is close; and the closer it
+  // is, the less room there is to put a passage in the wrong place.
+  const window = Math.round(
+    nearest <= NEAR_SECONDS
+      ? NEAR_WINDOW + nearest * NARRATION_WORDS_PER_SECOND
+      : Math.min(MAX_GUESS_WINDOW, GUESS_WINDOW + (Number.isFinite(nearest) ? nearest * NARRATION_WORDS_PER_SECOND * PACE_DRIFT : 0)),
+  )
+  const from = Math.max(0, guess - (start === null || start === undefined ? window : 0))
+  const lead = guess - from + (start === null || start === undefined ? window : 0)
   const end = Math.min(wordCount, Math.ceil(from + lead + duration * NARRATION_WORDS_PER_SECOND * 2 + 500))
   return { start: from, end, options: { lead, openEnd: true } }
 }
@@ -309,20 +393,32 @@ export function trackAt(tracks: Track[], seconds: number): number {
   return k
 }
 
-/** Chapter starts pinned by the recording's tracks and the pasted chapter list. */
-function chapterPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
+/** Credits at the end of an audiobook file, after the last words of the book. */
+const CLOSING_CREDITS_SECONDS = 30
+
+/**
+ * Chapter starts pinned by the recording's tracks (or a file's chapter
+ * markers) and the pasted chapter list; and when a long file is about as
+ * long as the whole book would take to read, its end at the book's end, so
+ * a place in it is guessed in proportion until it's lined up.
+ */
+function chapterPoints(link: AudioLink, chapters: Chapter[], wordCount?: number): SyncPoint[] {
   const { source } = link
-  const fromTracks =
-    source.kind === 'archive'
-      ? matchChapters(
-          trackStarts(source.tracks).map((start, k) => {
-            const title = source.tracks[k].title
-            return { seconds: start + (source.librivox ? LIBRIVOX_INTRO_SECONDS : 0), label: title, text: title }
-          }),
-          chapters,
-        )
-      : []
-  return [...fromTracks, ...matchChapters(parseTimestamps(link.timestamps), chapters)]
+  const parts = partsOf(source)
+  const intro = source.kind === 'archive' && source.librivox ? LIBRIVOX_INTRO_SECONDS : 0
+  const fromTracks = matchChapters(
+    trackStarts(parts).map((start, k) => ({ seconds: start + intro, label: parts[k].title, text: parts[k].title })),
+    chapters,
+  )
+  const ends: SyncPoint[] = []
+  if (source.kind === 'file' && parts.length && wordCount) {
+    const total = parts.reduce((sum, p) => sum + p.seconds, 0)
+    const pace = wordCount / total
+    if (pace >= MIN_BELIEVABLE_PACE && pace <= MAX_BELIEVABLE_PACE) {
+      ends.push({ index: 0, seconds: 0 }, { index: wordCount - 1, seconds: Math.max(0, total - CLOSING_CREDITS_SECONDS) })
+    }
+  }
+  return [...fromTracks, ...matchChapters(parseTimestamps(link.timestamps), chapters), ...ends]
 }
 
 /**
@@ -331,7 +427,7 @@ function chapterPoints(link: AudioLink, chapters: Chapter[]): SyncPoint[] {
  * those already there (later in the book means later in the recording).
  * Sorted by position.
  */
-export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: SyncPoint[] = []): SyncPoint[] {
+export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: SyncPoint[] = [], wordCount?: number): SyncPoint[] {
   const kept: SyncPoint[] = []
   const add = (p: SyncPoint) => {
     const at = kept.findIndex((k) => k.index >= p.index)
@@ -345,7 +441,7 @@ export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: Syn
   for (const p of [...link.points].reverse()) add(p)
   for (const p of transcript) add(p)
   for (const p of Object.values(link.detected ?? {}).flat()) add(p)
-  for (const p of chapterPoints(link, chapters)) add(p)
+  for (const p of chapterPoints(link, chapters, wordCount)) add(p)
   return kept
 }
 
