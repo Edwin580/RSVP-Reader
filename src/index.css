@@ -1420,12 +1420,19 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .listen-bar .text-button { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 40px; font-size: 0.9rem; }
 .listen-time { font-size: 0.85rem; font-variant-numeric: tabular-nums; min-width: 3.5rem; }
 /* A video's player is there only for its sound: invisible, untouchable, out of the way. */
+/* The hidden YouTube player. YouTube needs it at least 200px square and on
+   the page to play, so it can't be removed; transparency alone isn't enough
+   on iPhones, where video is drawn on a layer of its own that ignores opacity
+   and YouTube's dark gradients showed through as a shadow. Clipping it away
+   entirely hides that layer too. */
 .audio-video {
   position: absolute;
   left: 0;
   bottom: 0;
   width: 200px;
   height: 200px;
+  overflow: hidden;
+  clip-path: inset(50%);
   opacity: 0;
   pointer-events: none;
   z-index: -1;

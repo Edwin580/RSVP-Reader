@@ -456,3 +456,22 @@ test('while listening, the guide’s pause stops only the text and the audio but
   const reading = await word()
   await expect.poll(word, { timeout: 5000 }).not.toBe(reading)
 })
+
+test('a linked YouTube video’s hidden player is clipped away, not just transparent (#56)', async ({ page }) => {
+  // On iPhones video is drawn on a layer of its own that ignores opacity, so
+  // the invisible player's dark gradients showed through as a shadow.
+  await mockArchive(page)
+  await page.route('https://www.youtube.com/**', (route) => route.abort())
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByLabel('Audiobook link').fill('https://youtu.be/dQw4w9WgXcQ')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.keyboard.press('Escape')
+  const host = page.locator('.audio-video')
+  await expect(host).toHaveCount(1)
+  // Still the size YouTube needs to play, but nothing of it can be drawn.
+  await expect(host).toHaveCSS('width', '200px')
+  await expect(host).toHaveCSS('clip-path', 'inset(50%)')
+  await expect(host).toHaveCSS('overflow', 'hidden')
+})

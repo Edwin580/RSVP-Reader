@@ -22,6 +22,15 @@ npm run test:e2e  # browser tests (Playwright); set PW_CHROMIUM_PATH to use an i
 
 Run the first four before pushing, and the browser tests too for UI changes. CI runs all five on every pull request. For UI changes, also check the app in a browser at phone and desktop sizes.
 
+## Consistent styling
+
+New UI looks and behaves like what's already there. Build it from the existing pieces instead of styling it afresh:
+
+- Panels are sheets on phones and side panels on desktop: `search-backdrop is-sheet` around a `search-panel`, with a `sheet-handle`, a `panel-bar` and `panel-title`, a close `icon-button`, Escape to close, and `useSheetDrag` so it can be dragged down.
+- Buttons: `demo-button` for the one main action, `text-button` for secondary ones, `icon-button` for icons, `link-button` inside text, `segmented` for a choice between a few options. Section headings are `search-section`, explanations `search-hint`.
+- Colours, radii and shadows come from the variables in `index.css` (`--text`, `--text-2`, `--bg`, `--fill`, `--separator`, `--accent`, `--red`, `--radius`, `--shadow`), never literal values, so every theme follows. Only floating surfaces (panels, popovers, toasts) get `--shadow`.
+- Before pushing a UI change, screenshot each screen it touches at phone and desktop sizes, in light and dark, next to an existing screen of the same kind (a new sheet next to Bookmarks, say). Check type sizes, spacing, buttons and colours match, nothing wraps or overlaps, and nothing shows that shouldn't, such as a stray shadow or a hidden element peeking through. Say in the PR what was compared.
+
 ## Bug fixes
 
 Every bug fix comes with a test that would have caught it, so it can't quietly come back:
