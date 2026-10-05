@@ -48,11 +48,13 @@ The parts that deserve a careful look: tricky logic, trade-offs, behavior change
 
 ## How it's tested
 What was run and what it showed: unit tests added or changed, manual or browser checks (devices, modes, formats), and anything not tested.
+Then how a reviewer can try it on their own phone: numbered steps on the PR preview (`/pr-preview/pr-<number>/`), and how to run the branch locally instead.
 ```
 
 - Keep it short: a few plain sentences per section. Use lists, bold, tables and code formatting only where they make something clearer, not by default.
 - Write in a neutral voice ("Pages are numbered", "The test checks…"), not "I".
 - Screenshots are welcome when the change is visible, especially for UI changes.
+- End "How it's tested" with "Try it on your phone": a few numbered steps a reviewer can follow on the preview link (where to tap, what should happen), then the local alternative: `git checkout <branch>`, `npm install && npm run dev -- --host`, and open the printed Network address on a phone on the same Wi-Fi.
 - Do not include a Claude session link (`claude.ai/code/session_…`) in PR titles or descriptions.
 - Keep titles short and descriptive.
 
