@@ -978,6 +978,8 @@ h1, h2, p { margin: 0; }
 .hold-pad.is-pressed { background: var(--text); color: var(--bg); }
 .recap-hint { flex: 1; font-size: 0.9rem; color: var(--text-2); }
 .speed { justify-self: end; display: flex; align-items: center; }
+/* The guide has no speed; the space stays so the controls don't shift. */
+.speed[hidden] { visibility: hidden; }
 .speed-value { min-width: 5.5rem; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
 .speed-value .muted { font-weight: 400; font-size: 0.85rem; }
 
@@ -1038,6 +1040,15 @@ h1, h2, p { margin: 0; }
 .page-text [data-i] { transition: opacity 0.12s ease-out; }
 .page.has-focus .is-dim { opacity: 0.06; transition: opacity 0.4s ease; }
 .page.has-focus:not(.is-playing) .is-dim { opacity: 0.3; }
+/* The guide is always reading (there's no pause), so the rest stays dark. */
+.page.is-guided.has-focus .is-dim { opacity: 0.12; }
+/* Guide, continuous: the column moves under the finger (ScrollView sets the
+   transform); the text fades out towards the top and bottom edges. */
+.page.is-continuous {
+  -webkit-mask-image: linear-gradient(transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(transparent, #000 2.5rem, #000 calc(100% - 2.5rem), transparent);
+}
+.page.is-continuous .page-text { will-change: transform; }
 @media (prefers-reduced-motion: reduce) {
   .page-text [data-i] { transition: none; }
 }

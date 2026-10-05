@@ -27,6 +27,7 @@ import {
 import { indexAudio, type AudioIndex } from '../lib/media'
 import { detectSync, MAX_BYTES } from '../lib/syncClient'
 import { glanceRange, pausedRange } from '../lib/glance'
+import { guideReading } from '../lib/guide'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
@@ -40,6 +41,7 @@ import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
+import { ScrollView } from './ScrollView'
 import { SearchPanel } from './SearchPanel'
 import { SyncPanel } from './SyncPanel'
 import { SessionMenu } from './SessionMenu'
@@ -103,6 +105,8 @@ export function Reader({
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode, font } = settings
   const holdToRead = settings.playControl === 'hold'
+  // Guide (page mode): no timer; the line focus follows the finger.
+  const guided = mode === 'page' && settings.playControl === 'guide'
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -197,7 +201,7 @@ export function Reader({
   // system's Look Up. With Tap to play, a long press selects like anywhere
   // else; with Hold to read a long press reads, so a double-tap selects.
   const [selecting, setSelecting] = useState(false)
-  const canSelect = !playing && (!holdToRead || selecting)
+  const canSelect = !playing && ((!holdToRead && !guided) || selecting)
   const selectable = (target: Element) => canSelect && !!target.closest('.context [data-i], .page-text')
   const selectAt = useRef<number | null>(null)
   const selectWord = (i: number) => {
@@ -270,7 +274,7 @@ export function Reader({
   // button, Space, starting a session or continuing from a card. Those wait
   // for a hold instead, so reading only ever runs while something is held.
   const begin = () => {
-    if (!holdToRead) play()
+    if (!holdToRead && !guided) play()
   }
   const holdHandlers = {
     ignore: ignorePress,
@@ -330,7 +334,7 @@ export function Reader({
   )
   // Page mode: swipe to turn pages, like an e-reader.
   const pageGestures = usePressGestures({
-    ...(holdToRead && {
+    ...(holdToRead && !guided && {
       ...holdHandlers,
       // Taps on words are the page's own (jump there, double-tap to select);
       // a tap anywhere else just undoes its moment of reading.
@@ -795,6 +799,19 @@ export function Reader({
   }, [index])
 
   useReadingTime(playing, index, wpm, onReadingTime)
+  // Guide: moving on line by line is reading too, for the stats (and it
+  // takes a finished book back to the Reading shelf, as playing does).
+  const guideFrom = useRef<{ index: number; at: number } | null>(null)
+  useEffect(() => {
+    if (!guided) return
+    const from = guideFrom.current
+    const now = performance.now()
+    guideFrom.current = { index, at: now }
+    const read = from && guideReading(from.index, index, now - from.at)
+    if (!read) return
+    onReadingTime(read.ms, read.words)
+    onPlay?.()
+  }, [guided, index, onReadingTime, onPlay])
   useEffect(() => {
     if (playing) onPlay?.()
   }, [playing, onPlay])
@@ -817,7 +834,8 @@ export function Reader({
       case ' ':
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
-        if (!holdToRead) togglePlayback()
+        if (guided) pageNav.current?.nextLine?.()
+        else if (!holdToRead) togglePlayback()
         else if (!e.repeat) startHold()
         break
       case 'ArrowLeft':
@@ -826,11 +844,14 @@ export function Reader({
       case 'ArrowRight':
         seek(e.shiftKey || e.ctrlKey || e.metaKey ? nextSentence(words, index) : index + 1)
         break
+      // The guide has no speed: up and down move the focus a line instead.
       case 'ArrowUp':
-        setWpm(wpm + WPM_STEP)
+        if (guided) pageNav.current?.previousLine?.()
+        else setWpm(wpm + WPM_STEP)
         break
       case 'ArrowDown':
-        setWpm(wpm - WPM_STEP)
+        if (guided) pageNav.current?.nextLine?.()
+        else setWpm(wpm - WPM_STEP)
         break
       case 'Escape':
         pause()
@@ -923,7 +944,7 @@ export function Reader({
             className="demo-button"
             onClick={() => {
               setSessionDone(null)
-              play()
+              begin()
             }}
           >
             <Icon name="play" size={16} />
@@ -946,7 +967,7 @@ export function Reader({
       holdToRead={holdToRead}
       onContinue={() => {
         setRecapDismissed(true)
-        play()
+        if (!guided) play()
       }}
       onDismiss={() => setRecapDismissed(true)}
     />
@@ -1026,6 +1047,14 @@ export function Reader({
       {mode === 'page' ? (
         <section
           {...pageGestures.handlers}
+          onPointerDown={(e) => {
+            pageGestures.handlers.onPointerDown(e)
+            // The guide follows a press anywhere on the reading area, margins
+            // included (buttons and cards keep their own taps).
+            if (guided && e.button === 0 && !(e.target instanceof Element && ignorePress(e.target))) {
+              pageNav.current?.press?.(e)
+            }
+          }}
           onClickCapture={(e) => {
             // The click a swipe ends with shouldn't also jump to the word under the finger.
             if (pageGestures.wasSwipe()) {
@@ -1033,27 +1062,44 @@ export function Reader({
               e.preventDefault()
             }
           }}
-          className={`stage stage-page${settings.pageGuide === 'pacer' || settings.pageGuide === 'none' ? ' no-highlight' : ''}${settings.pageGuide === 'highlight' || settings.pageGuide === 'none' ? ' no-pacer' : ''}`}
+          // The guide is the line focus alone: no highlight or line sweeping along.
+          className={`stage stage-page${guided || settings.pageGuide === 'pacer' || settings.pageGuide === 'none' ? ' no-highlight' : ''}${guided || settings.pageGuide === 'highlight' || settings.pageGuide === 'none' ? ' no-pacer' : ''}`}
         >
-          <PageView
-            words={words}
-            paragraphEnds={book.paragraphEnds}
-            chapterStarts={chapterStarts}
-            headings={headings}
-            index={index}
-            playing={playing}
-            scale={textScale}
-            font={font}
-            pace={60000 / wpm}
-            durationOf={(i) => plannedMs(i, index)}
-            focusLines={settings.lineFocus === 'one' ? 1 : settings.lineFocus === 'three' ? 3 : 0}
-            onSeek={seek}
-            onTapWord={tapWord}
-            onSelectWord={selectWord}
-            onToggle={holdToRead ? noop : togglePlayback}
-            onPage={onPage}
-            navRef={pageNav}
-          />
+          {guided && settings.guideLayout === 'scroll' ? (
+            <ScrollView
+              words={words}
+              paragraphEnds={book.paragraphEnds}
+              headings={headings}
+              index={index}
+              scale={textScale}
+              font={font}
+              focusLines={settings.lineFocus === 'three' ? 3 : 1}
+              onSeek={seek}
+              onSelectWord={selectWord}
+              navRef={pageNav}
+            />
+          ) : (
+            <PageView
+              words={words}
+              paragraphEnds={book.paragraphEnds}
+              chapterStarts={chapterStarts}
+              headings={headings}
+              index={index}
+              playing={playing}
+              scale={textScale}
+              font={font}
+              pace={60000 / wpm}
+              durationOf={(i) => plannedMs(i, index)}
+              // The guide always focuses at least the line under the finger.
+              focusLines={settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' || guided ? 1 : 0}
+              onSeek={seek}
+              onSelectWord={selectWord}
+              onToggle={holdToRead || guided ? noop : togglePlayback}
+              guide={guided}
+              onPage={onPage}
+              navRef={pageNav}
+            />
+          )}
           {showRecap && recapCard}
           {doneCard}
         </section>
@@ -1205,7 +1251,12 @@ export function Reader({
             <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
               <Icon name="back" />
             </button>
-            {holdToRead ? (
+            {guided ? (
+              // The guide has no timer: the main button moves the focus on a line.
+              <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
+                <Icon name="chevronDown" size={24} />
+              </button>
+            ) : holdToRead ? (
               // Hold to read: no play button until you hold. A wide pad to rest
               // a thumb on, labelled in words (an icon alone is ambiguous), that
               // fills the moment it's pressed; then the controls fade away.
@@ -1243,7 +1294,7 @@ export function Reader({
             </button>
           </div>
 
-          <div className="speed" role="group" aria-label="Reading speed">
+          <div className="speed" role="group" aria-label="Reading speed" hidden={guided}>
             <button type="button" className="icon-button" onClick={() => setWpm(wpm - WPM_STEP)} aria-label="Slower" title="Slower (↓)">
               −
             </button>

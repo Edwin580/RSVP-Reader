@@ -193,22 +193,30 @@ export interface Settings {
    * lines either side ('three').
    */
   lineFocus: LineFocus
-  /** 'tap' starts and stops reading with a tap; 'hold' reads only while you hold the text. */
+  /**
+   * 'tap' starts and stops reading with a tap; 'hold' reads only while you
+   * hold the text. 'guide' (page mode) has no timer: hold anywhere and drag
+   * to move the line focus line by line, or tap a line.
+   */
   playControl: PlayControl
+  /** Guide: the text as pages you turn, or one continuous column that scrolls along. */
+  guideLayout: GuideLayout
 }
 
 export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
-export type PlayControl = 'tap' | 'hold'
+export type PlayControl = 'tap' | 'hold' | 'guide'
+export type GuideLayout = 'pages' | 'scroll'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
-export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold']
+export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide']
+export const GUIDE_LAYOUTS: GuideLayout[] = ['pages', 'scroll']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
 
@@ -224,6 +232,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pageGuide: 'both',
   lineFocus: 'off',
   playControl: 'tap',
+  guideLayout: 'pages',
 }
 
 /** A plain '#rrggbb' colour, the only kind the colour picker gives and the page accepts. */
@@ -249,6 +258,7 @@ export function loadSettings(): Settings {
       pageGuide: oneOf(PAGE_GUIDES, saved.pageGuide, guideFromSwitches(saved.pageHighlight, saved.pacer)),
       lineFocus: oneOf(LINE_FOCUSES, saved.lineFocus, DEFAULT_SETTINGS.lineFocus),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
+      guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
     }
   } catch {
     return DEFAULT_SETTINGS

@@ -1170,3 +1170,170 @@ test('a long PDF is read by two pdf.js workers and keeps every page, in order', 
   expect(await page.evaluate('window.pdfWorkers')).toBe(2)
   expect(book.words).toEqual(paragraphs.join(' ').split(' '))
 })
+
+/** A book long enough for several pages, every sentence different. */
+const LONG_STORY = Array.from({ length: 40 }, (_, p) =>
+  Array.from({ length: 5 }, (_, s) => `Part ${p + 1} sentence ${s + 1} tells how the harbour lights came on.`).join(' '),
+).join('\n\n')
+
+/** Nothing on the page still moving (finished slide-ins stay listed, so count only running ones). */
+const settled = (page: Page) => page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+
+/** Guide settings, as if picked in Aa › More settings. */
+const guideSettings = (page: Page, layout: 'pages' | 'scroll') =>
+  page.addInitScript(
+    `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', lineFocus: 'one', v: 2 }))`,
+  )
+
+/** The lines of the visible text: their first word and the height of their middle on screen. */
+const visibleLines = (page: Page) =>
+  page.evaluate(`(() => {
+    const lines = []
+    for (const s of document.querySelectorAll('.page > .page-text [data-i]')) {
+      const r = s.getBoundingClientRect()
+      const last = lines[lines.length - 1]
+      if (last && Math.abs(last.top - r.top) < 2) continue
+      lines.push({ start: Number(s.dataset.i), top: r.top, middle: r.top + r.height / 2 })
+    }
+    const view = document.querySelector('.page').getBoundingClientRect()
+    return lines.filter((l) => l.middle > view.top && l.middle < view.bottom)
+  })()`) as Promise<{ start: number; top: number; middle: number }[]>
+
+/** The first word of the line in focus (the only words not blacked out). */
+const focusedStart = (page: Page) =>
+  page.evaluate(`Number(document.querySelector('.page > .page-text [data-i]:not(.is-dim)')?.dataset.i ?? -1)`) as Promise<number>
+
+/** A press at `x, y` that can be moved and let go: with the mouse, or a finger on a phone. */
+async function press(page: Page, phone: boolean, x: number, y: number) {
+  if (!phone) {
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    return { move: (to: number) => page.mouse.move(x, to, { steps: 4 }), up: () => page.mouse.up() }
+  }
+  const cdp = await page.context().newCDPSession(page)
+  const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', at?: number) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: at === undefined ? [] : [{ x, y: at }] })
+  await touch('touchStart', y)
+  let from = y
+  return {
+    // In steps, as a finger moves.
+    move: async (to: number) => {
+      for (let k = 1; k <= 4; k++) await touch('touchMove', from + ((to - from) * k) / 4)
+      from = to
+    },
+    up: () => touch('touchEnd').then(() => {}),
+  }
+}
+
+/** The usual distance between lines on screen. */
+const spacingOf = (lines: { middle: number }[]) => {
+  const gaps = lines.slice(1).map((l, k) => l.middle - lines[k].middle).sort((a, b) => a - b)
+  return gaps[Math.floor(gaps.length / 2)]
+}
+
+test('Guide: a tap moves the focus to a line; dragging from anywhere moves it line by line and turns the page', async ({ page }, testInfo) => {
+  const phone = testInfo.project.name === 'phone'
+  await guideSettings(page, 'pages')
+  await page.goto('./')
+  await upload(page, 'long.txt', LONG_STORY)
+  await settled(page)
+  const lines = await visibleLines(page)
+  expect(lines.length).toBeGreaterThan(8)
+  const spacing = spacingOf(lines)
+  const box = (await page.locator('.page').boundingBox())!
+  const stage = (await page.locator('.stage-page').boundingBox())!
+  const x = box.x + 60
+
+  // A tap on a line: the focus goes there.
+  const tap = await press(page, phone, x, lines[2].middle)
+  await tap.up()
+  await expect.poll(() => focusedStart(page)).toBe(lines[2].start)
+
+  // Hold anywhere (here in the margin, below the text's lines) and drag: the
+  // focus moves on from where it was, a line per line's height, and back.
+  const anywhere = phone ? box.y + box.height - 40 : box.y + box.height - 40
+  const finger = await press(page, phone, phone ? x : stage.x + 8, anywhere)
+  expect(await focusedStart(page)).toBe(lines[2].start) // pressing alone moves nothing
+  await finger.move(anywhere - spacing * 3) // dragging up a little first, then down past where it began
+  await finger.move(anywhere + spacing * 3)
+  await expect.poll(() => focusedStart(page)).toBe(lines[5].start)
+  await finger.move(anywhere + spacing * 2)
+  await expect.poll(() => focusedStart(page)).toBe(lines[4].start)
+  await finger.up()
+  // Let go: it stays, and the place is kept. Dragging never selected any text.
+  expect(await page.evaluate('String(window.getSelection())')).toBe('')
+  await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(lines[4].start))
+  expect(await focusedStart(page)).toBe(lines[4].start)
+
+  // Dragging on past the last line turns the page, carrying on from its top.
+  const lastWord = Number(await page.locator('.page > .page-text [data-i]').last().getAttribute('data-i'))
+  const turning = await press(page, phone, x, box.y + 20)
+  await turning.move(box.y + 20 + spacing * (lines.length - 4 + 0.6))
+  await turning.up()
+  await expect(page.locator('.page > .page-text [data-i]').first()).toHaveAttribute('data-i', String(lastWord + 1))
+  await settled(page)
+  const turned = await visibleLines(page)
+  const k = turned.map((l) => l.start).indexOf(await focusedStart(page))
+  expect(k).toBeGreaterThanOrEqual(0)
+  expect(k).toBeLessThan(3)
+
+  // The next line button and the keys move a line at a time.
+  await page.getByRole('button', { name: 'Next line' }).click()
+  await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
+  await page.keyboard.press('ArrowDown')
+  await expect.poll(() => focusedStart(page)).toBe(turned[k + 2].start)
+  await page.keyboard.press('ArrowUp')
+  await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
+})
+
+test('Guide, continuous: dragging from anywhere moves the focus, and the text scrolls along to keep it in view', async ({ page }, testInfo) => {
+  const phone = testInfo.project.name === 'phone'
+  await guideSettings(page, 'scroll')
+  await page.goto('./')
+  await upload(page, 'long.txt', LONG_STORY)
+  await settled(page)
+  const view = (await page.locator('.page').boundingBox())!
+  const x = view.x + 60
+  const lines = await visibleLines(page)
+  const spacing = spacingOf(lines)
+  const middle = lines.filter((l) => l.middle > view.y + view.height * 0.3 && l.middle < view.y + view.height * 0.6)
+  expect(middle.length).toBeGreaterThan(2)
+
+  // A tap on a line: the focus goes there.
+  const tap = await press(page, phone, x, middle[0].middle)
+  await tap.up()
+  await expect.poll(() => focusedStart(page)).toBe(middle[0].start)
+
+  // Held anywhere and dragged, it moves on a line per line's height.
+  const finger = await press(page, phone, x, view.y + 20)
+  await finger.move(view.y + 20 + spacing * 2)
+  await expect.poll(() => focusedStart(page)).toBe(middle[2].start)
+  // Dragged a long way on, well past what was on screen: the text scrolls
+  // along and the focused line stays in view.
+  await finger.move(view.y + view.height - 10)
+  await finger.up()
+  await expect.poll(() => focusedStart(page)).toBeGreaterThan(lines[lines.length - 1].start)
+  await settled(page)
+  const top = (await page.locator('.page > .page-text [data-i]:not(.is-dim)').first().boundingBox())!.y
+  expect(top).toBeGreaterThan(view.y)
+  expect(top - view.y).toBeLessThan(view.height * 0.7)
+  // The place is kept.
+  await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(await focusedStart(page)))
+})
+
+test('Guide is offered in page mode, with a choice of pages or continuous scroll', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  // Not in word mode: it moves a focus on a page.
+  await expect(page.getByRole('radio', { name: 'Guide' })).toHaveCount(0)
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await page.getByRole('radio', { name: 'Guide' }).click()
+  await expect(page.getByRole('radiogroup', { name: 'Layout' })).toBeVisible()
+  await page.getByRole('radio', { name: 'Scroll' }).click()
+  await expect(page.locator('.page.is-continuous')).toBeVisible()
+  await page.getByRole('radio', { name: 'Pages' }).click()
+  await expect(page.locator('.page.is-continuous')).toHaveCount(0)
+  await expect(page.locator('.page.is-guided')).toBeVisible()
+})
