@@ -954,6 +954,55 @@ test('double-tapping with a finger selects the word', async ({ page }, testInfo)
   await expect.poll(() => selected(page)).toBe('hedge')
 })
 
+test('syncing by hand pins the word heard to the moment in the recording, from the passage or a search', async ({ page }) => {
+  await mockArchive(page)
+  // Where playback is sent to start, as the player seeks there.
+  await page.addInitScript(`
+    window.seeks = []
+    const play = HTMLMediaElement.prototype.play
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.dataset.watched) {
+        this.dataset.watched = '1'
+        this.addEventListener('seeked', () => window.seeks.push(this.currentTime))
+      }
+      return play.call(this)
+    }
+  `)
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  // The recording is held where the book says the word being read is; skip it on.
+  await page.getByRole('button', { name: 'Sync text and audio' }).click()
+  const sync = page.getByRole('dialog', { name: 'Sync' })
+  await expect(sync.locator('.sync-guess')).toHaveText('Chapter')
+  // (Chapter 1 is read after a LibriVox recording's 14-second announcement.)
+  await expect(sync.locator('.sync-time')).toHaveText('0:14')
+  await sync.getByRole('button', { name: 'Forward 15 seconds' }).click()
+  await sync.getByRole('button', { name: 'Back 15 seconds' }).click()
+  await sync.getByRole('button', { name: 'Back 5 seconds' }).click()
+  await expect(sync.locator('.sync-time')).toHaveText('0:09')
+  // Tapping the word heard there pins it to that moment, and listening starts from it.
+  await sync.locator('.sync-passage [data-i]', { hasText: /^Alice$/ }).click()
+  await expect(sync).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => (globalThis as unknown as { seeks: number[] }).seeks.at(-1))).toBeCloseTo(9, 0)
+
+  // Opening it while listening holds the recording where it is; a search finds words just heard.
+  await page.getByRole('button', { name: 'Sync text and audio' }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeHidden()
+  await sync.getByLabel('Search for words you heard').fill('lanterns')
+  await sync.locator('.sync-results button').first().click()
+  await expect(sync).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
+  await expect(page.getByText('2 words synced')).toBeVisible()
+})
+
 test('an audiobook is found for the book and lined up with it from its sound', async ({ page }) => {
   await mockArchive(page)
   await page.goto('./')

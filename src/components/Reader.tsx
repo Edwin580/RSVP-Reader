@@ -40,6 +40,7 @@ import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
 import { SearchPanel } from './SearchPanel'
+import { SyncPanel } from './SyncPanel'
 import { SessionMenu } from './SessionMenu'
 import { SettingsMenu } from './SettingsMenu'
 import { reducedMotion } from './transition'
@@ -352,7 +353,7 @@ export function Reader({
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | 'sync' | null>(null)
   // A closing panel stays mounted briefly so it can animate out.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -374,7 +375,7 @@ export function Reader({
   }, [])
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
-  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session' | 'audio') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | 'sync') => {
     pause()
     if (panel === which && !closing) {
       closePanel()
@@ -631,6 +632,54 @@ export function Reader({
     followed.current = i
     seek(i)
   }
+  // Syncing by hand (SyncPanel): the recording is held at a moment, or plays
+  // while the book stays still, until the word being said there is tapped.
+  const syncing = useRef(false)
+  useEffect(() => {
+    syncing.current = panel === 'sync'
+  }, [panel])
+  /** Where the recording is held while paused for syncing, in seconds. */
+  const [held, setHeld] = useState(0)
+  const openSync = () => {
+    if (!audio) return
+    startToken.current++
+    setPreparing(false)
+    // From where it's playing, or else where the book says the word being read is.
+    setHeld(listening ? currentTime() : timeAt(points, index, letters))
+    pauseAudio()
+    openPanel('sync')
+  }
+  const syncTime = () => (listening ? currentTime() : held)
+  const syncSkip = (seconds: number) => {
+    const t = Math.max(0, syncTime() + seconds)
+    if (listening) {
+      settling.current = performance.now() + 800
+      playAudio(t)
+    } else setHeld(t)
+  }
+  const syncPlay = () => {
+    if (listening) {
+      setHeld(currentTime())
+      pauseAudio()
+    } else {
+      settling.current = performance.now() + 800
+      playAudio(held)
+    }
+  }
+  /** Word `i` is what's said now: pinned there, and listening carries on from it. */
+  const syncPick = (i: number) => {
+    if (!audio) return
+    const t = syncTime()
+    onAudio({ ...audio, points: addPoint(audio.points, i, t) })
+    followed.current = i
+    seek(i)
+    setNotice(null)
+    closePanel()
+    if (!listening) {
+      settling.current = performance.now() + 800
+      playAudio(t)
+    }
+  }
   /** The whole second being heard, for the time shown while listening. */
   const [heard, setHeard] = useState(0)
   useEffect(() => {
@@ -638,6 +687,8 @@ export function Reader({
     const follow = () => {
       const t = currentTime()
       setHeard(Math.floor(t))
+      // Lining up by hand: the passage being searched stays put.
+      if (syncing.current) return
       // Still moving to where it was asked to start: nothing new to follow yet.
       if (performance.now() < settling.current || audioSeeking()) return
       const k = fileAt(t)
@@ -1023,7 +1074,10 @@ export function Reader({
               {speed !== 1 && ` · ${speed}×`}
               {lining > 0 && !preparing && ' · lining up'}
             </span>
-            {listening && <span className="muted listen-hint">{notice ?? 'Tap the word you hear to sync'}</span>}
+            <button type="button" className="text-button listen-sync" onClick={openSync} aria-label="Sync text and audio">
+              Sync
+            </button>
+            {listening && notice && <span className="muted listen-hint">{notice}</span>}
           </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
@@ -1177,6 +1231,23 @@ export function Reader({
           closing={closing}
           onLink={onAudio}
           onListen={listen}
+          onSync={openSync}
+          onClose={closePanel}
+        />
+      )}
+
+      {panel === 'sync' && audio && (
+        <SyncPanel
+          words={words}
+          paragraphEnds={book.paragraphEnds}
+          bookSearch={bookSearch}
+          time={listening ? heard : held}
+          guess={wordHeardAt(points, listening ? heard : held, words.length, letters)}
+          playing={listening}
+          closing={closing}
+          onSkip={syncSkip}
+          onTogglePlay={syncPlay}
+          onPick={syncPick}
           onClose={closePanel}
         />
       )}

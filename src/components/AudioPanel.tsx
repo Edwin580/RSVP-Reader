@@ -37,6 +37,8 @@ interface Props {
   closing?: boolean
   onLink: (link: AudioLink | null, file?: File) => void
   onListen: () => void
+  /** Open syncing by hand (SyncPanel). */
+  onSync: () => void
   onClose: () => void
 }
 
@@ -48,7 +50,7 @@ type Search = { state: 'searching' } | { state: 'done'; results: Recording[] } |
  * chapter times.
  */
 export function AudioPanel(props: Props) {
-  const { title, author, wordCount, chapters, link, startsAt, transcriptMatches, speed, listening, preparing, lining, error, closing, onLink, onListen, onClose } = props
+  const { title, author, wordCount, chapters, link, startsAt, transcriptMatches, speed, listening, preparing, lining, error, closing, onLink, onListen, onSync, onClose } = props
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
@@ -100,6 +102,7 @@ export function AudioPanel(props: Props) {
               error={error}
               onLink={onLink}
               onListen={onListen}
+              onSync={onSync}
             />
           ) : (
             <Find title={title} author={author} wordCount={wordCount} onUse={use} />
@@ -300,6 +303,7 @@ function Linked({
   error,
   onLink,
   onListen,
+  onSync,
 }: {
   link: AudioLink
   wordCount: number
@@ -312,6 +316,8 @@ function Linked({
   error: string | null
   onLink: (link: AudioLink | null) => void
   onListen: () => void
+  /** Open syncing by hand (SyncPanel). */
+  onSync: () => void
 }) {
   const { source } = link
   const tracksMatched =
@@ -334,7 +340,7 @@ function Linked({
       </div>
       <p className="search-hint" aria-live="polite">
         {source.kind === 'youtube'
-          ? 'A video can’t be lined up from its sound, so it starts at a guess. Tap the word you hear to sync, or paste its transcript below.'
+          ? 'A video can’t be lined up from its sound, so it starts at a guess. Sync it by hand, or paste its transcript below.'
           : `The first time you listen to ${source.kind === 'archive' ? 'a chapter' : 'it'}, its sound is matched to the text, sentence by sentence.`}
         {lining && ' Lining up now…'}
         {!lining && lined > 0 && source.kind === 'archive' && ` ${lined} of ${source.tracks.length} lined up so far.`}
@@ -364,7 +370,11 @@ function Linked({
         </div>
       </div>
       <p className="search-hint">
-        The book follows the narrator. If it drifts, tap the word you hear.
+        The book follows the narrator. If it drifts,{' '}
+        <button type="button" className="link-button" onClick={onSync}>
+          sync it by hand
+        </button>
+        .
         {link.points.length > 0 && (
           <>
             {' '}
