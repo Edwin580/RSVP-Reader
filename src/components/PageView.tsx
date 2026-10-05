@@ -1,5 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
+import { groupLines, lineAt, lineOf, type Line } from '../lib/guide'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
 
@@ -33,12 +34,24 @@ interface Props {
   onPage: (start: number, end: number, lineStarts: Set<number>) => void
   /** Filled with page navigation for the reader's keyboard shortcuts. */
   navRef?: React.RefObject<PageNav | null>
+  /**
+   * Guide: no timer. Holding the page puts the focus on the line under the
+   * finger, and dragging moves it along line by line; past the last line the
+   * page turns (past the first, it turns back).
+   */
+  guide?: boolean
 }
 
 export interface PageNav {
   next: () => void
   previous: () => void
+  /** Guide: the focus to the next or previous line, turning the page at its ends. */
+  nextLine?: () => void
+  previousLine?: () => void
 }
+
+/** Guide: dragging this far past the last (or first) line, in lines, turns the page. */
+const TURN_PAST = 0.6
 
 /** Words laid out per measuring pass; comfortably more than fits on any screen. */
 const CHUNK = 700
@@ -77,6 +90,7 @@ export function PageView({
   onToggle,
   onPage,
   navRef,
+  guide = false,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
@@ -185,20 +199,105 @@ export function PageView({
     setPage((p) => ({ start: p.start, end: null, turn: null }))
   }, [layout])
 
+  // The lines on the page as laid out (positions from the top of the text).
+  const pageLines = (): Line[] =>
+    groupLines(
+      Array.from(text.current?.querySelectorAll<HTMLElement>('[data-i]') ?? [], (s) => ({
+        i: Number(s.dataset.i),
+        top: s.offsetTop,
+        height: s.offsetHeight,
+      })),
+    )
+  const nextPage = () => {
+    // Jump to the start of the next page (the follow effect turns to it).
+    if (page.end !== null && page.end < words.length - 1) onSeek(page.end + 1)
+  }
+  // To the end of the previous page: its last line, for the guide.
+  const lastOfPreviousPage = () => {
+    if (page.start > 0) onSeek(page.start - 1)
+  }
+  const moveLine = (step: 1 | -1) => {
+    const lines = pageLines()
+    const k = lineOf(lines, index) + step
+    if (k >= lines.length) nextPage()
+    else if (k < 0) lastOfPreviousPage()
+    else onSeek(lines[k].start)
+  }
+
   useLayoutEffect(() => {
     if (!navRef) return
     navRef.current = {
-      next: () => {
-        // Jump to the start of the next page (the follow effect turns to it).
-        if (page.end !== null && page.end < words.length - 1) onSeek(page.end + 1)
-      },
+      next: nextPage,
       previous: () => {
         if (page.start === 0) return onSeek(0)
         for (const [s, e] of known.current) if (e === page.start - 1) return onSeek(s)
         onSeek(pageAnchor(words, paragraphEnds, page.start - 1))
       },
+      nextLine: () => moveLine(1),
+      previousLine: () => moveLine(-1),
     }
   })
+
+  // Guide: the press being followed. `shift` maps the finger's height to the
+  // text's (zero until a page turns under the finger: then it's re-based so
+  // the finger, wherever it is, holds the new page's first or last line).
+  const drag = useRef<{
+    id: number
+    shift: number
+    turned: { to: 'first' | 'last'; from: number } | null
+  } | null>(null)
+  const follow = (clientY: number) => {
+    const d = drag.current
+    const t = text.current
+    if (!d || !t || page.end === null) return
+    const lines = pageLines()
+    if (lines.length === 0) return
+    const y = clientY - t.getBoundingClientRect().top
+    if (d.turned) {
+      // Still on the page it turned from: wait for the new one.
+      if (d.turned.from === page.start) return
+      const line = d.turned.to === 'first' ? lines[0] : lines[lines.length - 1]
+      d.shift = (line.top + line.bottom) / 2 - y
+      d.turned = null
+    }
+    const at = y + d.shift
+    const height = lines[0].bottom - lines[0].top
+    if (at > lines[lines.length - 1].bottom + height * TURN_PAST && page.end < words.length - 1) {
+      d.turned = { to: 'first', from: page.start }
+      return nextPage()
+    }
+    if (at < lines[0].top - height * TURN_PAST && page.start > 0) {
+      d.turned = { to: 'last', from: page.start }
+      return lastOfPreviousPage()
+    }
+    const k = lineAt(lines, at)
+    if (k !== lineOf(lines, index)) onSeek(lines[k].start)
+  }
+  // The latest `follow` (it reads this render's page and position).
+  const following = useRef(follow)
+  useLayoutEffect(() => {
+    following.current = follow
+  })
+  // Followed on the window, not this element: the stage takes the pointer
+  // over during a long press, and the page under the finger can turn.
+  const startFollowing = (e: React.PointerEvent) => {
+    const id = e.pointerId
+    drag.current = { id, shift: 0, turned: null }
+    const move = (m: PointerEvent) => {
+      if (m.pointerId === id) following.current(m.clientY)
+    }
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== id) return
+      drag.current = null
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', end)
+      window.removeEventListener('pointercancel', end)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end)
+    window.addEventListener('pointercancel', end)
+    follow(e.clientY)
+  }
 
   const measuring = page.end === null
   const last = measuring
@@ -377,11 +476,12 @@ export function PageView({
 
   return (
     <div
-      className={`page${measuring ? ' is-measuring' : ''}${focusLines ? ' has-focus' : ''}${playing ? ' is-playing' : ''}`}
+      className={`page${measuring ? ' is-measuring' : ''}${focusLines ? ' has-focus' : ''}${playing ? ' is-playing' : ''}${guide ? ' is-guided' : ''}`}
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
-      onPointerDown={() => {
+      onPointerDown={(e) => {
         selectionClick.current = hasSelection()
+        if (guide && e.button === 0 && !drag.current) startFollowing(e)
       }}
       onPointerUp={() => {
         selectionClick.current ||= hasSelection()
@@ -391,7 +491,7 @@ export function PageView({
         // dismissing a selection: that's not a tap on the page.
         if (selectionClick.current) return
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')
-        if (!target) return onToggle()
+        if (!target) return guide ? undefined : onToggle()
         const i = Number(target.dataset.i)
         // The same word tapped twice in quick succession: select it (the
         // first tap has already jumped there).
@@ -401,7 +501,7 @@ export function PageView({
         if (before && before.i === i && now - before.at < DOUBLE_TAP_MS && onSelectWord) {
           lastClick.current = null
           onSelectWord(i)
-        } else onSeek(i)
+        } else if (!guide) onSeek(i) // The guide has already moved to the line on the press.
       }}
     >
       <div

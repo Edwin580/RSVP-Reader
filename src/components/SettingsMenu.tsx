@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, GuideLayout, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -30,6 +30,16 @@ const MODES: { value: ReadingMode; label: string; hint: string }[] = [
 const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
   { value: 'tap', label: 'Tap', hint: 'Tap anywhere on the page to start, and again to pause' },
   { value: 'hold', label: 'Hold', hint: 'Reads while you hold anywhere on the page, pauses when you let go' },
+  {
+    value: 'guide',
+    label: 'Guide',
+    hint: 'Your own pace: hold the page and drag, and the focus follows your finger line by line',
+  },
+]
+
+const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
+  { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
+  { value: 'scroll', label: 'Scroll', hint: 'One continuous column; hold near the bottom to scroll on' },
 ]
 
 const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
@@ -132,6 +142,10 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
   }, [onClose])
 
   const set = (change: Partial<Settings>) => onSettings({ ...settings, ...change })
+  // The guide moves the focus on a page, so it's only offered in page mode
+  // (in word mode it plays with a tap).
+  const playOptions = settings.mode === 'page' ? PLAY_OPTIONS : PLAY_OPTIONS.filter((p) => p.value !== 'guide')
+  const playControl = settings.mode === 'word' && settings.playControl === 'guide' ? 'tap' : settings.playControl
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const toggleMore = () => {
@@ -205,9 +219,17 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           <div className="more-settings">
             <div className="setting setting-stack">
               <span className="setting-name">Play with</span>
-              <Choice label="Play with" options={PLAY_OPTIONS} value={settings.playControl} onChange={(playControl) => set({ playControl })} />
-              <span className="hint">{PLAY_OPTIONS.find((p) => p.value === settings.playControl)?.hint}</span>
+              <Choice label="Play with" options={playOptions} value={playControl} onChange={(playControl) => set({ playControl })} />
+              <span className="hint">{playOptions.find((p) => p.value === playControl)?.hint}</span>
             </div>
+
+            {playControl === 'guide' && (
+              <div className="setting setting-stack">
+                <span className="setting-name">Layout</span>
+                <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
+                <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
+              </div>
+            )}
 
             <div className="setting setting-stack">
               <span className="setting-name">Word timing</span>
