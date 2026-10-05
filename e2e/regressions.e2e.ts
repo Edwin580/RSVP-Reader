@@ -419,3 +419,40 @@ test('finding a recording leaves out other books of a similar name and flags a d
   await expect(result).toContainText('abridged or dramatized')
   await expect(page.getByText('Rebecca of Sunnybrook Farm')).toHaveCount(0)
 })
+
+test('while listening, the guide’s pause stops only the text and the audio button stops only the recording (#56)', async ({ page }) => {
+  // Both used to stop both, so there was no way to hold the text still while
+  // the recording played on, or to read on while the recording was paused.
+  await mockArchive(page)
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  const word = () => page.locator('.word').textContent()
+  const time = () => page.locator('.listen-time').textContent()
+
+  // The guide's pause: the text holds still, the recording plays on.
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  const held = await word()
+  const at = await time()
+  await expect.poll(time, { timeout: 5000 }).not.toBe(at)
+  expect(await word()).toBe(held)
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
+
+  // Play again: the text catches up with the recording and follows it.
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect.poll(word, { timeout: 5000 }).not.toBe(held)
+
+  // The audio button: the recording stops, and the text reads on by itself.
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await expect(page.getByRole('button', { name: 'Listen from here', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  const reading = await word()
+  await expect.poll(word, { timeout: 5000 }).not.toBe(reading)
+})

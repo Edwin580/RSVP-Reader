@@ -11,12 +11,19 @@ interface Props {
   bookSearch: BookSearch | null
   /** Where the recording is, in seconds. */
   time: number
-  /** The word the book has at that moment: where the narrator probably is. */
-  guess: number
+  /** How long the recording is, in seconds (0 while unknown). */
+  duration: number
+  /** The word the book has at a moment in the recording: where the narrator probably is. */
+  wordAt: (seconds: number) => number
+  /** Where in the recording the book has word `index`. */
+  timeAt: (index: number) => number
+  /** The chapter word `index` is in, to say where a moment of a long recording is. */
+  chapterAt: (index: number) => string
   playing: boolean
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
-  onSkip: (seconds: number) => void
+  /** Move the recording to `seconds`. */
+  onSeek: (seconds: number) => void
   onTogglePlay: () => void
   /** The narrator is saying word `index` at `time`. */
   onPick: (index: number) => void
@@ -32,10 +39,11 @@ const CONTEXT_WORDS = 7
 /**
  * Lining the book and the recording up by hand, either way round: tap the
  * word being heard in the passage around where the book thinks the narrator
- * is (or search for words just heard), or skip the recording until the
- * highlighted word is heard and tap that.
+ * is (or search for words just heard), or move the recording (skips, or a
+ * slider across all of it) until the marked word is heard and tap that.
  */
-export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playing, closing, onSkip, onTogglePlay, onPick, onClose }: Props) {
+export function SyncPanel(props: Props) {
+  const { words, paragraphEnds, bookSearch, time, duration, wordAt, timeAt, chapterAt, playing, closing, onSeek, onTogglePlay, onPick, onClose } = props
   // Escape closes it wherever the focus is, and never reaches the reader, where it would close the book.
   useEffect(() => {
     const esc = (e: KeyboardEvent) => {
@@ -49,6 +57,12 @@ export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playi
   const sheet = useRef<HTMLElement>(null)
   const body = useRef<HTMLDivElement>(null)
   useSheetDrag(sheet, onClose, body)
+
+  // While the slider is dragged, the time and passage follow it; the
+  // recording moves when it's let go.
+  const [scrub, setScrub] = useState<number | null>(null)
+  const shownTime = scrub ?? time
+  const guess = wordAt(shownTime)
 
   // The passage stays put while the guess moves within it (so the word being
   // looked for doesn't run away), and moves when the guess leaves it.
@@ -76,10 +90,15 @@ export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playi
     if (!reveal.current) return
     reveal.current = false
     passage.current?.querySelector('.sync-guess')?.scrollIntoView({ block: 'center' })
-  }, [guess, center])
-  const skip = (seconds: number) => {
+  }, [guess, center, scrub])
+  const seek = (seconds: number) => {
     reveal.current = true
-    onSkip(seconds)
+    onSeek(Math.max(0, duration ? Math.min(duration, seconds) : seconds))
+  }
+  const letGo = () => {
+    if (scrub === null) return
+    seek(scrub)
+    setScrub(null)
   }
 
   const [query, setQuery] = useState('')
@@ -114,22 +133,45 @@ export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playi
 
         <div className="sync-audio">
           {SKIPS.slice(0, 2).map((s) => (
-            <button key={s} type="button" className="text-button sync-skip" onClick={() => skip(s)} aria-label={`Back ${-s} seconds`}>
+            <button key={s} type="button" className="text-button sync-skip" onClick={() => seek(time + s)} aria-label={`Back ${-s} seconds`}>
               −{-s} s
             </button>
           ))}
           <button type="button" className="sync-play" onClick={onTogglePlay} aria-label={playing ? 'Pause recording' : 'Play recording'}>
             <Icon name={playing ? 'pause' : 'play'} size={18} />
-            <span className="sync-time">{formatTime(time)}</span>
+            <span className="sync-time">{formatTime(shownTime)}</span>
           </button>
           {SKIPS.slice(2).map((s) => (
-            <button key={s} type="button" className="text-button sync-skip" onClick={() => skip(s)} aria-label={`Forward ${s} seconds`}>
+            <button key={s} type="button" className="text-button sync-skip" onClick={() => seek(time + s)} aria-label={`Forward ${s} seconds`}>
               +{s} s
             </button>
           ))}
         </div>
+        {duration > 0 && (
+          <div className="sync-scrub">
+            <input
+              type="range"
+              min={0}
+              max={Math.floor(duration)}
+              step={1}
+              value={Math.min(Math.floor(shownTime), Math.floor(duration))}
+              aria-label="Position in the recording"
+              aria-valuetext={`${formatTime(shownTime)} of ${formatTime(duration)}`}
+              onChange={(e) => {
+                reveal.current = true
+                setScrub(Number(e.target.value))
+              }}
+              onPointerUp={letGo}
+              onKeyUp={letGo}
+              onBlur={letGo}
+            />
+            <span className="muted small sync-where">
+              {[chapterAt(guess), `${formatTime(shownTime)} of ${formatTime(duration)}`].filter(Boolean).join(' · ')}
+            </span>
+          </div>
+        )}
         <p className="search-hint sync-hint">
-          Tap the word the narrator is saying. To hear the <mark>marked</mark> word instead, skip the recording until it’s said, then tap it.
+          Play, then tap the word you hear. Or move the recording until you hear the <mark>marked</mark> word, and tap that.
         </p>
         <div className="sync-search">
           <input
@@ -152,8 +194,8 @@ export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playi
                 const marked = new Set(hit.highlights)
                 const at = hit.highlights[0] ?? hit.start
                 return (
-                  <li key={`${hit.start}-${hit.end}`}>
-                    <button type="button" onClick={() => onPick(at)}>
+                  <li key={`${hit.start}-${hit.end}`} className="sync-result">
+                    <button type="button" onClick={() => onPick(at)} aria-label={`Heard now: ${words.slice(hit.start, hit.end + 1).join(' ')}`}>
                       <span className="search-snippet">
                         {a > 0 && '… '}
                         {words.slice(a, b + 1).map((w, k) => (
@@ -161,7 +203,21 @@ export function SyncPanel({ words, paragraphEnds, bookSearch, time, guess, playi
                         ))}
                         {b < words.length - 1 && '…'}
                       </span>
-                      <span className="muted small">{Math.abs(at - guess) < 40 ? 'Near the marked word' : `${Math.abs(at - guess).toLocaleString()} words ${at < guess ? 'before' : 'after'} the marked word`}</span>
+                      <span className="muted small">
+                        {[chapterAt(at), Math.abs(at - guess) < 40 ? 'near the marked word' : `${formatTime(timeAt(at))} in the recording`].filter(Boolean).join(' · ')}
+                      </span>
+                    </button>
+                    {/* Exploring instead: take the recording to this passage, to hear where it really is. */}
+                    <button
+                      type="button"
+                      className="text-button sync-goto"
+                      onClick={() => {
+                        setQuery('')
+                        // A hair past its start, so the word marked there is this one, not the one before.
+                        seek(timeAt(at) + 0.01)
+                      }}
+                    >
+                      Go there
                     </button>
                   </li>
                 )

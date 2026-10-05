@@ -12,6 +12,7 @@ import {
   parseTimestamps,
   partsOf,
   partWindow,
+  setPace,
   speedFor,
   syncPoints,
   timeAt,
@@ -416,8 +417,19 @@ export function Reader({
   const timestamps = audio?.timestamps ?? ''
   const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
   const points = useMemo(() => (audio ? syncPoints(audio, chapters, transcript, words.length) : []), [audio, chapters, transcript, words.length])
-  const speed = audio && audio.matchSpeed !== false ? speedFor(wpm, paceAt(points, index)) : 1
+  /** The narrator's pace here: as set by hand from the last word synced on, or as measured from the points. */
+  const narratorPace = (i: number) => {
+    const anchor = audio?.pace ? Math.max(...audio.points.map((p) => p.seconds)) : Infinity
+    return audio?.pace && timeAt(points, i) >= anchor ? audio.pace : paceAt(points, i)
+  }
+  const speed = audio && audio.matchSpeed !== false ? speedFor(wpm, narratorPace(index)) : 1
   useEffect(() => setSpeed(speed), [speed, setSpeed])
+  /** Whether the guide follows the recording while it plays (the guide's own pause stops it, the recording plays on). */
+  const [following, setFollowing] = useState(true)
+  const followingNow = useRef(following)
+  useEffect(() => {
+    followingNow.current = following
+  }, [following])
   /** The last word moved to by following the narrator; any other move is the reader's own jump. */
   const followed = useRef(-1)
   /** YouTube's player reports the old time for a moment after a seek; don't follow until then. */
@@ -586,6 +598,8 @@ export function Reader({
   /** Play the recording from word `i`: lined up first, so it starts where the text is. */
   const playFrom = async (i: number) => {
     const token = ++startToken.current
+    setFollowing(true)
+    followingNow.current = true
     failedLining.current = false
     followed.current = i
     pauseAudio()
@@ -611,27 +625,24 @@ export function Reader({
     settling.current = performance.now() + 800
     playAudio(timeAt(now, i, letters))
   }
+  // The audio button pauses only the recording: if the guide was following
+  // it, the guide carries on at the reading speed by itself.
   const listen = () => {
     if (listening || preparing) {
       startToken.current++
       setPreparing(false)
       pauseAudio()
+      // Once it has stopped (the player says so a moment later).
+      if (listening && following) guideTakesOver.current = true
       return
     }
     pause()
     void playFrom(index)
   }
-  // Tapping a word while listening says "the narrator is here": it pins that
-  // word to this moment, and the book carries on from it.
-  const tapWord = (i: number) => {
-    if (!listening || !audio) {
-      seek(i)
-      return
-    }
-    onAudio({ ...audio, points: addPoint(audio.points, i, currentTime()) })
-    followed.current = i
-    seek(i)
-  }
+  // Tapping a word moves there, as when reading; while the guide follows the
+  // recording, the recording comes along. Syncing a word to the recording is
+  // done in the Sync sheet, where that's all a tap does.
+  const tapWord = (i: number) => seek(i)
   // Syncing by hand (SyncPanel): the recording is held at a moment, or plays
   // while the book stays still, until the word being said there is tapped.
   const syncing = useRef(false)
@@ -650,8 +661,23 @@ export function Reader({
     openPanel('sync')
   }
   const syncTime = () => (listening ? currentTime() : held)
-  const syncSkip = (seconds: number) => {
-    const t = Math.max(0, syncTime() + seconds)
+  /** The whole recording's length: its parts' when known, or the player's. */
+  const recordingLength = () => {
+    const parts = audio ? partsOf(audio.source) : []
+    return parts.length ? parts.reduce((sum, p) => sum + p.seconds, 0) : player.duration()
+  }
+  // Text pace: when the text runs ahead of the voice or falls behind, the
+  // narrator's pace is set a little slower or faster, from the word shown now.
+  const PACE_STEP = 1.06
+  const nudgePace = (faster: boolean) => {
+    if (!audio) return
+    const t = currentTime()
+    const pace = narratorPace(index) * (faster ? PACE_STEP : 1 / PACE_STEP)
+    onAudio(setPace(audio, pace, index, t))
+    followed.current = index
+  }
+  const syncSeek = (seconds: number) => {
+    const t = Math.max(0, seconds)
     if (listening) {
       settling.current = performance.now() + 800
       playAudio(t)
@@ -687,8 +713,6 @@ export function Reader({
     const follow = () => {
       const t = currentTime()
       setHeard(Math.floor(t))
-      // Lining up by hand: the passage being searched stays put.
-      if (syncing.current) return
       // Still moving to where it was asked to start: nothing new to follow yet.
       if (performance.now() < settling.current || audioSeeking()) return
       const k = fileAt(t)
@@ -699,6 +723,8 @@ export function Reader({
         const start = trackStarts(parts)[k]
         if (t - start > (parts[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
       }
+      // Lining up by hand, or the guide paused: the text stays put.
+      if (syncing.current || !followingNow.current) return
       // A touch ahead: the word shown should be the one being said, not the one just said.
       const i = wordHeardAt(points, t + FOLLOW_LEAD_SECONDS, words.length, letters)
       if (i === current.current) return
@@ -719,16 +745,41 @@ export function Reader({
   }, [panel, sourceKey, prepare])
   // A jump while listening (the progress bar, a chapter, a page turn) takes the recording there too.
   useEffect(() => {
-    if (!listening || index === followed.current) return
+    if (!listening || !following || index === followed.current) return
     void playFrom(index)
     // Only the reader's position moving should re-seek, not new points arriving.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [index])
-  // Reading on your own stops the recording.
+  // While listening, the guide's play and pause are whether it follows the
+  // recording; the recording itself plays on (the audio button pauses that).
+  const togglePlayback = () => {
+    if (!listening) {
+      toggle()
+      return
+    }
+    if (following) {
+      setFollowing(false)
+      return
+    }
+    // Back to following: from the word being said now, not from where the text stopped.
+    followed.current = -1
+    setFollowing(true)
+  }
+  const guideMoving = playing || (listening && following)
+  /** The recording was paused while the guide followed it: the guide goes on by itself once it stops. */
+  const guideTakesOver = useRef(false)
   useEffect(() => {
-    if (playing) pauseAudio()
-  }, [playing, pauseAudio])
-  const togglePlayback = listening ? pauseAudio : toggle
+    if (listening || !guideTakesOver.current) return
+    guideTakesOver.current = false
+    play()
+  }, [listening, play])
+  // The guide never runs on its own clock while it could follow the recording.
+  useEffect(() => {
+    if (playing && listening) {
+      pause()
+      setFollowing(true)
+    }
+  }, [playing, listening, pause])
 
   // Persist progress: whenever paused, and periodically while playing.
   const lastSaved = useRef(index)
@@ -1077,7 +1128,20 @@ export function Reader({
             <button type="button" className="text-button listen-sync" onClick={openSync} aria-label="Sync text and audio">
               Sync
             </button>
-            {listening && notice && <span className="muted listen-hint">{notice}</span>}
+            {listening && (
+              <span className="listen-pace" role="group" aria-label="Text pace">
+                <span className="muted">Text</span>
+                <button type="button" className="icon-button" onClick={() => nudgePace(false)} aria-label="Text slower" title="The text is ahead of the voice">
+                  <Icon name="minus" size={16} />
+                </button>
+                <button type="button" className="icon-button" onClick={() => nudgePace(true)} aria-label="Text faster" title="The text is behind the voice">
+                  <Icon name="plus" size={16} />
+                </button>
+              </span>
+            )}
+            {listening && (notice || !following) && (
+              <span className="muted listen-hint">{notice ?? 'Text paused while the recording plays. Press play to follow it again.'}</span>
+            )}
           </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
@@ -1165,10 +1229,10 @@ export function Reader({
                 type="button"
                 className="play-button"
                 onClick={togglePlayback}
-                aria-label={playing || listening ? 'Pause' : 'Play'}
+                aria-label={guideMoving ? 'Pause' : 'Play'}
                 title="Play / pause (Space)"
               >
-                <Icon name={playing || listening ? 'pause' : 'play'} size={22} />
+                <Icon name={guideMoving ? 'pause' : 'play'} size={22} />
               </button>
             )}
             <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
@@ -1223,7 +1287,7 @@ export function Reader({
           link={audio}
           startsAt={timeAt(points, index, letters)}
           transcriptMatches={transcript.length}
-          speed={speedFor(wpm, paceAt(points, index))}
+          speed={speedFor(wpm, narratorPace(index))}
           listening={listening}
           preparing={preparing}
           lining={lining > 0}
@@ -1242,10 +1306,13 @@ export function Reader({
           paragraphEnds={book.paragraphEnds}
           bookSearch={bookSearch}
           time={listening ? heard : held}
-          guess={wordHeardAt(points, listening ? heard : held, words.length, letters)}
+          duration={recordingLength()}
+          wordAt={(t) => wordHeardAt(points, t, words.length, letters)}
+          timeAt={(i) => timeAt(points, i, letters)}
+          chapterAt={(i) => (chapters.length > 1 ? chapterTitleAt(i) : '')}
           playing={listening}
           closing={closing}
-          onSkip={syncSkip}
+          onSeek={syncSeek}
           onTogglePlay={syncPlay}
           onPick={syncPick}
           onClose={closePanel}

@@ -379,7 +379,7 @@ function Linked({
           <>
             {' '}
             {link.points.length} {link.points.length === 1 ? 'word' : 'words'} synced ·{' '}
-            <button type="button" className="link-button" onClick={() => onLink({ ...link, points: [] })}>
+            <button type="button" className="link-button" onClick={() => onLink({ ...link, points: [], pace: undefined })}>
               Clear
             </button>
           </>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addPoint,
   fileParts,
+  setPace,
   trackAt,
   trackChapters,
   trackRange,
@@ -256,6 +257,22 @@ describe('which part of the book each track covers', () => {
     const far = trackRange(unnamed, 1, chapters, [{ index: 0, seconds: 0 }, { index: 1500, seconds: 300 }], 20000, 600)
     expect(far.start).toBeLessThan(3000 - 2500)
     expect(far.options.lead).toBeGreaterThan(5000)
+  })
+
+  it('moves the text at a pace set by hand, from the word synced', () => {
+    const link: AudioLink = { source: { kind: 'url', url: 'x' }, timestamps: '', points: [] }
+    // A slow narrator: 2 words a second, set while word 100 is heard at 60 s.
+    const paced = setPace(link, 2, 100, 60)
+    const points = syncPoints(paced, [], [], 10000)
+    expect(timeAt(points, 100)).toBeCloseTo(60)
+    expect(timeAt(points, 300)).toBeCloseTo(160)
+    expect(wordAt(points, 40, 10000)).toBe(60)
+    // Points found from the sound after the word synced give way to the pace; earlier ones stay.
+    const found = syncPoints({ ...paced, detected: { 0: [{ index: 20, seconds: 10 }, { index: 400, seconds: 120 }] } }, [], [], 10000)
+    expect(found.some((p) => p.index === 20)).toBe(true)
+    expect(found.some((p) => p.index === 400)).toBe(false)
+    // Paces stay within what a narrator could read at.
+    expect(setPace(link, 20, 0, 0).pace).toBeLessThan(6)
   })
 
   it('splits a long audiobook file into parts by its chapters', () => {

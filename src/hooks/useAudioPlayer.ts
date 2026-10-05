@@ -7,6 +7,7 @@ interface YTPlayer {
   pauseVideo(): void
   seekTo(seconds: number, allowSeekAhead: boolean): void
   getCurrentTime(): number
+  getDuration(): number
   setPlaybackRate(rate: number): void
   destroy(): void
 }
@@ -65,6 +66,8 @@ export interface AudioPlayer {
   pause: () => void
   /** Where playback is in the whole recording, in seconds. */
   currentTime: () => number
+  /** How long the whole recording is, in seconds (0 until known). */
+  duration: () => number
   /** Playback speed (1 = as recorded). */
   setSpeed: (speed: number) => void
   /**
@@ -313,6 +316,15 @@ export function useAudioPlayer(
     return (t.starts[t.current] ?? 0) + (audio.current?.currentTime ?? 0)
   }, [kind, seeking])
 
+  const duration = useCallback(() => {
+    if (kind === 'youtube') return yt.current?.getDuration() ?? 0
+    const total = tracks.current.list.reduce((sum, t) => sum + t.seconds, 0)
+    if (Number.isFinite(total)) return total
+    // A single file of unknown length: its own, once loaded.
+    const own = audio.current?.duration ?? 0
+    return Number.isFinite(own) ? own : 0
+  }, [kind])
+
   const unlock = useCallback(() => {
     const el = audio.current
     if (!el || !el.paused) return
@@ -353,6 +365,7 @@ export function useAudioPlayer(
     play,
     pause,
     currentTime,
+    duration,
     setSpeed,
     unlock,
     seeking,

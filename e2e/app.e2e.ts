@@ -1003,6 +1003,48 @@ test('syncing by hand pins the word heard to the moment in the recording, from t
   await expect(page.getByText('2 words synced')).toBeVisible()
 })
 
+test('the Sync sheet moves across the whole recording, and the text pace can be matched to the voice', async ({ page }) => {
+  await mockArchive(page)
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  // A slider across the whole recording, saying which chapter that moment is in.
+  await page.getByRole('button', { name: 'Sync text and audio' }).click()
+  const sync = page.getByRole('dialog', { name: 'Sync' })
+  const slider = sync.getByLabel('Position in the recording')
+  await expect(slider).toHaveAttribute('max', String(20 + Math.ceil(chapterTwo.audio.length / 8000)))
+  await slider.fill('40')
+  await slider.blur()
+  await expect(sync.locator('.sync-time')).toHaveText('0:40')
+  await expect(sync.locator('.sync-where')).toHaveText(/^Chapter 2 · 0:40 of /)
+  // A search result can take the recording to that passage instead of syncing it.
+  await sync.getByLabel('Search for words you heard').fill('rabbit')
+  await sync.getByRole('button', { name: 'Go there' }).first().click()
+  await expect(sync.locator('.sync-guess')).toHaveText('rabbit')
+  await page.keyboard.press('Escape')
+  await expect(sync).toBeHidden()
+
+  // While listening: the text pace, a little slower or faster than the voice.
+  // (Read slower, so the recording isn't already at its fastest.)
+  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Slower', exact: true }).click()
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  const speed = async () => Number((await page.locator('.listen-time').textContent())!.match(/([\d.]+)×/)?.[1] ?? 1)
+  const before = await speed()
+  // Text faster: the narrator reads more words a second than thought, so at the same reading speed the recording plays slower.
+  await page.getByRole('button', { name: 'Text faster' }).click()
+  await page.getByRole('button', { name: 'Text faster' }).click()
+  await expect.poll(speed).toBeLessThan(before)
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
+  await expect(page.getByText('1 word synced')).toBeVisible()
+})
+
 test('an audiobook is found for the book and lined up with it from its sound', async ({ page }) => {
   await mockArchive(page)
   await page.goto('./')
@@ -1041,12 +1083,12 @@ test('an audiobook is found for the book and lined up with it from its sound', a
   // It really is playing from there.
   await expect(page.locator('.listen-time')).toHaveText(/^0:2[7-9]|^0:3/, { timeout: 8000 })
 
-  // Tapping the word being heard syncs the book to it.
-  await page.locator('.context [data-i]', { hasText: /^shelves\.\s*$/ }).first().click()
-  await expect(page.locator('.word')).toHaveText('shelves.')
+  // Tapping a word while listening moves there, and the recording comes along (syncing is done in the Sync sheet).
+  await page.locator('.context [data-i]', { hasText: /^Lanterns\s*$/ }).first().click()
+  await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[4])}`), { timeout: 8000 })
   await page.getByRole('button', { name: 'Pause audiobook' }).click()
   await page.getByRole('button', { name: 'Listen (an audiobook is linked)' }).click()
-  await expect(page.getByText('1 word synced')).toBeVisible()
+  await expect(page.getByText(/synced/)).toHaveCount(0)
   await page.keyboard.press('Escape')
 
   // The recording is kept with the book.

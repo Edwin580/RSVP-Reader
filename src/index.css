@@ -1428,13 +1428,21 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .audio-results .audio-result-title { font-weight: 600; }
 /* Syncing by hand: the recording's controls, then the passage to tap. */
 .sync-audio { display: flex; align-items: center; justify-content: center; gap: 0.25rem; padding: 0 1rem 0.25rem; }
-.sync-skip { min-width: 3rem; min-height: 44px; font-variant-numeric: tabular-nums; }
+.sync-skip { min-width: 3rem; min-height: 44px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sync-play {
   display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0 1rem; margin: 0 0.25rem;
   border: 0; border-radius: var(--radius); background: var(--text); color: var(--bg); font-weight: 600;
 }
 .sync-time { font-variant-numeric: tabular-nums; min-width: 3rem; text-align: left; }
 .sync-hint mark, .sync-guess { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); border-radius: 3px; }
+.sync-scrub { display: grid; gap: 0.15rem; padding: 0.25rem 1rem 0; }
+.sync-scrub input { width: 100%; accent-color: var(--text); }
+.sync-where { text-align: center; font-variant-numeric: tabular-nums; }
+.sync-result { display: flex; align-items: center; }
+.sync-results .sync-result > button:first-child { flex: 1; width: auto; min-width: 0; }
+.sync-results .sync-goto { flex: none; width: auto; display: inline-flex; align-items: center; min-height: 44px; padding: 0 1rem; font-size: 0.9rem; white-space: nowrap; }
+.listen-pace { display: inline-flex; align-items: center; gap: 0; margin-left: 0.25rem; font-size: 0.85rem; }
+.listen-pace .icon-button { width: 36px; height: 36px; }
 .sync-search { padding: 0.25rem 1rem 0.5rem; }
 .sync-search input { width: 100%; flex: none; }
 .sync-passage { padding: 0 1rem 1rem; }

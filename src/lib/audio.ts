@@ -51,6 +51,11 @@ export interface AudioLink {
    * it was tried and nothing could be placed.
    */
   detected?: Record<string, SyncPoint[]>
+  /**
+   * The narrator's pace in words a second, set by hand: how fast the text
+   * moves where no points pin it (past the last one, before the first).
+   */
+  pace?: number
 }
 
 /** A typical audiobook narration pace (about 155 wpm), used until there's a better guess. */
@@ -439,10 +444,39 @@ export function syncPoints(link: AudioLink, chapters: Chapter[], transcript: Syn
   }
   // The most recent hand-set point wins over older ones it disagrees with.
   for (const p of [...link.points].reverse()) add(p)
-  for (const p of transcript) add(p)
-  for (const p of Object.values(link.detected ?? {}).flat()) add(p)
-  for (const p of chapterPoints(link, chapters, wordCount)) add(p)
+  // With a pace set by hand, the text goes at that pace from the last word
+  // synced by hand: points found any other way after it don't count.
+  const handUntil = link.pace ? Math.max(...link.points.map((p) => p.seconds), -Infinity) : Infinity
+  const found = (p: SyncPoint) => p.seconds <= handUntil && add(p)
+  for (const p of transcript) found(p)
+  for (const p of Object.values(link.detected ?? {}).flat()) found(p)
+  for (const p of chapterPoints(link, chapters, wordCount)) found(p)
+  // A pace set by hand carries the text on beyond the points at that pace
+  // (as points an hour either side, where nothing else is known).
+  if (link.pace && wordCount) {
+    if (!kept.length) kept.push({ index: 0, seconds: 0 })
+    const first = kept[0]
+    const last = kept[kept.length - 1]
+    const ahead = Math.min(wordCount - 1, last.index + Math.round(link.pace * PACE_REACH_SECONDS))
+    if (ahead > last.index) kept.push({ index: ahead, seconds: last.seconds + (ahead - last.index) / link.pace })
+    if (first.index > 0) kept.unshift({ index: 0, seconds: first.seconds - first.index / link.pace })
+  }
   return kept
+}
+
+/** How far a pace set by hand reaches past the last point. */
+const PACE_REACH_SECONDS = 3600
+
+/** Paces the narrator's can be set to, in words a second (about 80–330 wpm). */
+export const MIN_PACE = 1.3
+export const MAX_PACE = 5.5
+
+/**
+ * Sets the narrator's pace by hand, keeping the word being heard where it is:
+ * it's pinned to this moment, and the text moves on from it at the new pace.
+ */
+export function setPace(link: AudioLink, pace: number, index: number, seconds: number): AudioLink {
+  return { ...link, pace: Math.min(MAX_PACE, Math.max(MIN_PACE, pace)), points: addPoint(link.points, index, seconds) }
 }
 
 function rate(a: SyncPoint, b: SyncPoint): number {
