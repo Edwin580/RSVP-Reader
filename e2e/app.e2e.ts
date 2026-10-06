@@ -728,8 +728,8 @@ test('the settings sheet dims the page without a coloured layer over the top', a
   await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Dark' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   if (testInfo.project.name === 'phone') {
-    // The dimming comes from the sheet's shadow, which follows the theme.
-    await expect.poll(() => page.evaluate(`getComputedStyle(document.querySelector('.settings-menu')).boxShadow`)).toContain('rgba(0, 0, 0, 0.5)')
+    // The dimming comes from a shadow inside the backdrop (see #61), which follows the theme.
+    await expect.poll(() => page.evaluate(`getComputedStyle(document.querySelector('.popover-backdrop')).boxShadow`)).toContain('rgba(0, 0, 0, 0.5)')
     // The page background (where Safari takes its top bar colour from) is the
     // dimmed dark page, #121211 under half black, while the reader keeps its own.
     const pageColour = () => page.evaluate(`getComputedStyle(document.documentElement).backgroundColor`)

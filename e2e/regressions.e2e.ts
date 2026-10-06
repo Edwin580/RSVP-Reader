@@ -327,48 +327,71 @@ test('on a phone, bottom sheets cast no shadow below them (#61)', async ({ page 
   }
 })
 
-test('on a phone, every sheet dims the page with its own shadow, not a layer over the page (#61)', async ({ page }, testInfo) => {
-  // Reported on iPhone after the fix above: Settings looked right, but Search
-  // and Bookmarks didn't. They dimmed the page with a coloured layer over all
-  // of it, which Safari picks up to tint its toolbars (see .popover in the
-  // CSS); Settings dims it with the sheet's own shadow instead. And with the
-  // keyboard up, a strip of dimmed page showed between the search sheet and
-  // the keyboard, where Safari floats its address bar.
+test('on a phone, every sheet dims the page the same way, up to its edges and no further (#61)', async ({ page }, testInfo) => {
+  // Reported on iPhone after the fix above, in every theme: Search and
+  // Bookmarks didn't look like Settings. They dimmed the page with a coloured
+  // layer, which Safari picks up to tint its toolbars. Then, dimmed by a
+  // shadow spread out from the sheet, the page was dimmed twice past its
+  // edges (where the page background is already dimmed), a dark band under
+  // Safari's bars, and a strip of dimmed page showed below the sheet. Now
+  // the backdrop dims the page with a shadow inside it, which ends at the
+  // page's edges, and the sheet's colour carries on below the page.
   test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
   await page.goto('./')
   await upload(page)
-  const scrim = await page.evaluate(`(() => {
-    const probe = document.createElement('div')
-    probe.style.boxShadow = 'var(--shadow-scrim)'
-    document.body.append(probe)
-    const value = getComputedStyle(probe).boxShadow
-    probe.remove()
-    return value
-  })()`)
   const sheets: [string, () => Promise<unknown>, string][] = [
     ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
     ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
     ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
     ['Settings', () => openSettings(page), '.settings-menu'],
   ]
-  for (const [name, open, selector] of sheets) {
-    await open()
-    await expect(page.locator(selector)).toBeVisible()
-    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
-    const look = (await page.evaluate(`(() => {
-      const sheet = document.querySelector('${selector.replace(/'/g, "\\\\'")}')
-      // Fixed layers with a colour, outside the sheet, at the top and bottom edges of the screen.
-      const layers = [[2, 2], [2, innerHeight - 2]].flatMap(([x, y]) => document.elementsFromPoint(x, y))
-        .filter((el) => !sheet.contains(el) && getComputedStyle(el).position === 'fixed')
-        .filter((el) => !/rgba\\([^)]*,\\s*0\\)|transparent/.test(getComputedStyle(el).backgroundColor))
-        .map((el) => el.className)
-      const after = getComputedStyle(sheet, '::after')
-      return { layers, shadow: getComputedStyle(sheet).boxShadow, below: after.content !== 'none' && parseFloat(after.top) >= sheet.offsetHeight - 1 && parseFloat(after.height) > 0 }
-    })()`)) as { layers: string[]; shadow: string; below: boolean }
-    expect(look.layers, `${name}: coloured layers over the page`).toEqual([])
-    expect(look.shadow, `${name}'s shadow`).toBe(scrim)
-    if (name === 'Search') expect(look.below, 'the search sheet carries on below itself').toBe(true)
+  for (const theme of ['Light', 'Sepia', 'Dark']) {
+    await openSettings(page)
+    const more = page.getByRole('button', { name: 'More settings' })
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+    await page.getByRole('radio', { name: theme, exact: true }).click()
     await page.keyboard.press('Escape')
-    await expect(page.locator(selector)).toBeHidden()
+    await expect(page.locator('.settings-menu')).toBeHidden()
+    for (const [name, open, selector] of sheets) {
+      const where = `${theme}, ${name}`
+      await open()
+      await expect(page.locator(selector)).toBeVisible()
+      await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+      const look = (await page.evaluate(`(() => {
+        const sheet = document.querySelector('${selector.replace(/'/g, "\\\\'")}')
+        const clear = (c) => /rgba\\([^)]*,\\s*0\\)|transparent/.test(c)
+        const fixed = [...document.querySelectorAll('body *')].filter((el) => getComputedStyle(el).position === 'fixed')
+        // Shadows that reach past an element (and so maybe past the page's edges).
+        const spread = [...document.querySelectorAll('body *')].filter((el) =>
+          getComputedStyle(el).boxShadow.split(/,(?![^(]*\\))/).some((l) => !/inset/.test(l) && !clear(l) && l.includes('px') &&
+            parseFloat(l.replace(/rgba?\\([^)]*\\)/, '').trim().split(/\\s+/)[3] || '0') > 20)).map((el) => el.className)
+        // The layer that dims the page: it covers all of it, with the scrim inside.
+        const probe = document.createElement('div')
+        probe.style.boxShadow = 'var(--shadow-scrim)'
+        document.body.append(probe)
+        const scrim = getComputedStyle(probe).boxShadow
+        probe.remove()
+        const dims = fixed.filter((el) => {
+          const r = el.getBoundingClientRect()
+          return getComputedStyle(el).boxShadow === scrim && r.top <= 0 && r.left <= 0 && r.bottom >= innerHeight && r.right >= innerWidth
+        })
+        const below = dims.some((el) => {
+          const after = getComputedStyle(el, '::after')
+          return after.content !== 'none' && parseFloat(after.height) > 0 && after.backgroundColor === getComputedStyle(sheet).backgroundColor
+        })
+        // Coloured layers at the top and bottom edges, outside the sheet.
+        const layers = [[2, 2], [2, innerHeight - 2]].flatMap(([x, y]) => document.elementsFromPoint(x, y))
+          .filter((el) => !sheet.contains(el) && fixed.includes(el) && !clear(getComputedStyle(el).backgroundColor))
+          .map((el) => el.className)
+        return { layers, spread, dims: dims.length, below, shadow: getComputedStyle(sheet).boxShadow }
+      })()`)) as { layers: string[]; spread: string[]; dims: number; below: boolean; shadow: string }
+      expect(look.layers, `${where}: coloured layers over the page`).toEqual([])
+      expect(look.spread, `${where}: shadows spread past an element`).toEqual([])
+      expect(look.dims, `${where}: a layer dimming the whole page`).toBe(1)
+      expect(look.below, `${where}: the sheet's colour carries on below the page`).toBe(true)
+      expect(look.shadow, `${where}: the sheet's own shadow`).toBe('none')
+      await page.keyboard.press('Escape')
+      await expect(page.locator(selector)).toBeHidden()
+    }
   }
 })

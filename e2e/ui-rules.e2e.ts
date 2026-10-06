@@ -136,7 +136,7 @@ for (const popup of POPUPS) {
   })
 }
 
-test('every pop-up has the same shadow (the dimming one on a phone), and on a phone the same sheet corners (rules 2 and 3)', async ({ page }, testInfo) => {
+test('every pop-up has the same shadow (none on a phone), and on a phone the same sheet corners (rules 2 and 3)', async ({ page }, testInfo) => {
   const phone = testInfo.project.name === 'phone'
   await page.goto('./')
   await upload(page, 'story.txt', STORY)
@@ -155,14 +155,14 @@ test('every pop-up has the same shadow (the dimming one on a phone), and on a ph
   }
   const shadow = await page.evaluate(`(() => {
     const probe = document.createElement('div')
-    probe.style.boxShadow = '${phone ? 'var(--shadow-scrim)' : 'var(--shadow)'}'
+    probe.style.boxShadow = 'var(--shadow)'
     document.body.append(probe)
     const value = getComputedStyle(probe).boxShadow
     probe.remove()
     return value
   })()`)
-  // On a phone, sheets have no drop shadow: each dims the page around it with a shadow of its own.
-  for (const [name, look] of Object.entries(looks)) expect(look.shadow, `${name}'s shadow`).toBe(shadow)
+  // On a phone, sheets have no shadow: the backdrop behind them dims the page.
+  for (const [name, look] of Object.entries(looks)) expect(look.shadow, `${name}'s shadow`).toBe(phone ? 'none' : shadow)
   if (phone) {
     const corners = new Set(Object.values(looks).map((l) => l.corner))
     expect([...corners], 'sheet corners').toHaveLength(1)

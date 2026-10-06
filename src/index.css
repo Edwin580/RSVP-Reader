@@ -52,8 +52,8 @@
   --ring-swatch: 0 0 0 2px var(--bg), 0 0 0 2px var(--separator);
   --ring-swatch-on: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
   --shadow-cover: 0 1px 2px rgb(0 0 0 / 0.2), inset 2px 0 0 rgb(0 0 0 / 0.14);
-  --shadow-scrim: 0 0 0 100vmax var(--scrim);
-  --shadow-scrim-none: 0 0 0 100vmax transparent;
+  --shadow-scrim: inset 0 0 0 100vmax var(--scrim);
+  --shadow-scrim-none: inset 0 0 0 100vmax transparent;
   /* Fixed colours that don't follow the theme: titles printed on a plain
      book cover, and the custom focus colour's wheel. */
   --on-cover: #fbfaf7;
@@ -1187,6 +1187,8 @@ kbd {
   z-index: 10;
   animation: fade-in 0.15s ease;
 }
+/* Search keeps to what's visible above the keyboard (see useVisualViewport). */
+.search-backdrop { top: var(--vv-top, 0px); bottom: auto; height: var(--vv-height, 100%); }
 .search-panel {
   width: min(28rem, 100%);
   height: 100%;
@@ -1304,15 +1306,30 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     max-height: 80dvh;
     padding: 0.25rem var(--safe-right) 0 var(--safe-left);
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-    /* Dims the page, as the other sheets do (see .popover). */
-    box-shadow: var(--shadow-scrim);
-    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
+    box-shadow: none;
+    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .search-backdrop.is-sheet { background: none; animation: none; }
+  /* The backdrop covers the whole page and dims it, as for the other
+     sheets (see .popover-backdrop). */
+  .search-backdrop.is-sheet {
+    top: 0;
+    bottom: 0;
+    height: auto;
+    background: none;
+    box-shadow: var(--shadow-scrim);
+    animation: scrim-in 0.2s ease;
+  }
   .is-sheet .search-body { flex: 0 1 auto; }
-  /* Search: a tall sheet, from just below the top of what's visible (above
-     the keyboard, see useVisualViewport) to the bottom, with room for results. */
-  .is-sheet.is-tall .search-panel { position: relative; height: calc(100% - 0.75rem - var(--safe-top)); max-height: none; }
+  /* Search: a tall sheet, from just below the top of what's visible to the
+     bottom of it, above the keyboard (see useVisualViewport), with room for results. */
+  .is-sheet.is-tall .search-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--vv-top, 0px) + 0.75rem + var(--safe-top));
+    height: calc(var(--vv-height, 100%) - 0.75rem - var(--safe-top));
+    max-height: none;
+  }
   /* With the keyboard up, Safari floats its address bar between the sheet
      and the keyboard; the sheet carries on down behind it, so no strip of
      dimmed page shows there. */
@@ -1329,9 +1346,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   /* Pull either one down by its handle to put it away (useSheetDrag). */
   .search-panel > .sheet-handle { align-self: center; flex-shrink: 0; margin: 0.35rem 0 0; }
   .search-panel { overscroll-behavior-y: none; }
-  .search-backdrop.is-sheet.is-closing .search-panel {
-    animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards, scrim-out 0.2s ease-in forwards;
-  }
+  .search-backdrop.is-sheet.is-closing .search-panel { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 .panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
 .panel-title { font-family: var(--serif); font-size: 1.35rem; font-weight: 500; }
@@ -1394,16 +1409,31 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     border: 0;
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
     max-height: 85dvh;
-    /* A sheet dims the page with its own shadow, spread over everything
-       around it, not with a backdrop layer: Safari tints its toolbars from
-       a coloured layer covering the edges of the page and keeps that colour
-       after it's gone. And no drop shadow, which would fall below the sheet,
-       a smudge above Safari's toolbar. */
-    box-shadow: var(--shadow-scrim);
-    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
+    /* No drop shadow: it would fall below the sheet, a smudge above
+       Safari's toolbar. The dimmed page sets the sheet apart. */
+    box-shadow: none;
+    animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
-  .popover.is-closing {
-    animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards, scrim-out 0.2s ease-in forwards;
+  .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+  /* The page is dimmed by the backdrop behind a sheet, with a shadow inside
+     it rather than a background: Safari tints its toolbars from a coloured
+     layer covering the edges of the page, and keeps that colour after it's
+     gone (or a theme picked in the sheet). An inset shadow ends at the edges
+     of the page, where the dimmed page background (below) takes over in the
+     same colour. A shadow spread out from the sheet went past them and dimmed
+     that twice, as a dark band under Safari's bars. */
+  .popover-backdrop { box-shadow: var(--shadow-scrim); animation: scrim-in 0.2s ease; }
+  /* Below the page, behind Safari's toolbar, the sheet carries on in its
+     own colour rather than leaving a strip of dimmed page there. */
+  .popover-backdrop::after,
+  .search-backdrop.is-sheet::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 100vh;
+    background: var(--bg);
   }
   /* No bounce at the ends of a sheet's content: pulling down at the top
      moves the whole sheet instead (useSheetDrag). */
