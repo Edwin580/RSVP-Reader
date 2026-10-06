@@ -36,10 +36,28 @@
   --accent-l: #b3261e;
   --accent-d: #ff6f5e;
   --accent: var(--accent-l);
-  /* One corner for controls and cards, a larger one only for sheets that
-     rise from the bottom of a phone. */
+  /* Corners (docs/ui-rules.md): small marks, controls and cards, pop-overs,
+     and the top of sheets that rise from the bottom of a phone. */
+  --radius-sm: 2px;
   --radius: 4px;
+  --radius-lg: 8px;
   --radius-sheet: 12px;
+  /* A book's cover: a squarer spine edge on the left. */
+  --radius-cover: 1px 2px 2px 1px;
+  /* Shadows beyond --shadow (docs/ui-rules.md): the outline of a chosen
+     option, a softer one, the focus colour swatches' rings, a book cover, and
+     the dimmed page around a sheet (a shadow, so it follows a theme change). */
+  --ring: inset 0 0 0 1px var(--text);
+  --ring-soft: inset 0 0 0 1px color-mix(in srgb, var(--text) 45%, transparent);
+  --ring-swatch: 0 0 0 2px var(--bg), 0 0 0 2px var(--separator);
+  --ring-swatch-on: 0 0 0 2px var(--bg), 0 0 0 4px var(--text);
+  --shadow-cover: 0 1px 2px rgb(0 0 0 / 0.2), inset 2px 0 0 rgb(0 0 0 / 0.14);
+  --shadow-scrim: 0 0 0 100vmax var(--scrim);
+  --shadow-scrim-none: 0 0 0 100vmax transparent;
+  /* Fixed colours that don't follow the theme: titles printed on a plain
+     book cover, and the custom focus colour's wheel. */
+  --on-cover: #fbfaf7;
+  --color-wheel: conic-gradient(#e5484d, #f5a524, #46a758, #3e63dd, #8e4ec6, #e5484d);
 
   --font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --serif: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
@@ -189,7 +207,7 @@ h1, h2, p { margin: 0; }
   color: var(--text-2);
 }
 .brand { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.75rem; font-family: var(--serif); font-size: 1.1rem; font-weight: 600; }
-.brand svg { border-radius: 5px; }
+.brand svg { border-radius: var(--radius); }
 .library-header h1 { font-family: var(--serif); font-size: 3rem; font-weight: 400; line-height: 1.05; letter-spacing: -0.015em; }
 .library-header p { margin-top: 0.5rem; max-width: 34rem; text-wrap: pretty; }
 
@@ -279,14 +297,14 @@ h1, h2, p { margin: 0; }
   height: var(--cell, 10px);
   padding: 0;
   border: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--fill);
 }
 .stats-cell.level-1 { background: color-mix(in srgb, var(--accent) 22%, var(--fill)); }
 .stats-cell.level-2 { background: color-mix(in srgb, var(--accent) 45%, var(--fill)); }
 .stats-cell.level-3 { background: color-mix(in srgb, var(--accent) 70%, var(--fill)); }
 .stats-cell.level-4 { background: var(--accent); }
-.stats-grid .stats-cell.is-today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 45%, transparent); }
+.stats-grid .stats-cell.is-today { box-shadow: var(--ring-soft); }
 .stats-grid .stats-cell[aria-pressed='true'] { outline: 1.5px solid var(--text); outline-offset: 1px; }
 .stats-key { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: 0.75rem; color: var(--text-2); }
 .stats-picked { margin: 0; min-width: 0; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -330,7 +348,7 @@ h1, h2, p { margin: 0; }
 .dropzone svg { grid-row: span 2; }
 .dropzone-title { font-family: var(--serif); font-size: 1.2rem; font-weight: 500; line-height: 1.25; }
 .dropzone .muted { font-size: 0.875rem; }
-.dropzone.dragging { background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--text); }
+.dropzone.dragging { background: var(--bg-2); box-shadow: var(--ring); }
 @media (hover: hover) {
   .dropzone:hover { background: var(--bg-2); }
 }
@@ -465,10 +483,10 @@ h1, h2, p { margin: 0; }
   flex-shrink: 0;
   width: 48px;
   height: 72px;
-  border-radius: 1px 2px 2px 1px;
+  border-radius: var(--radius-cover);
   object-fit: cover;
   background: var(--fill);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2), inset 2px 0 0 rgb(0 0 0 / 0.14);
+  box-shadow: var(--shadow-cover);
 }
 /* Books without a cover image get a plain cloth cover with the title set on it. */
 .cover-plain {
@@ -477,7 +495,7 @@ h1, h2, p { margin: 0; }
   justify-content: center;
   padding: 0.35rem 0.3rem 0.35rem 0.45rem;
   overflow: hidden;
-  color: #fbfaf7;
+  color: var(--on-cover);
   font-family: var(--serif);
   font-size: 0.6rem;
   font-weight: 600;
@@ -914,7 +932,7 @@ h1, h2, p { margin: 0; }
 }
 .session-presets button:active { transform: scale(0.94); transition-duration: 0.05s; }
 .session-presets button { color: var(--text-2); }
-.session-presets button[aria-checked='true'] { border-color: var(--text); color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.session-presets button[aria-checked='true'] { border-color: var(--text); color: var(--text); box-shadow: var(--ring); }
 .session-lands { text-align: center; font-size: 0.875rem; color: var(--text-2); min-height: 2.5em; }
 .session-start { justify-content: center; width: 100%; }
 .session-chapters { margin: 0; padding: 0; list-style: none; gap: 0; }
@@ -1024,7 +1042,7 @@ h1, h2, p { margin: 0; }
   transform-origin: 0 0;
   will-change: transform;
 }
-.page-marker { border-radius: 2px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.page-marker { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .page-pacer { height: 2px; background: var(--accent); }
 
 /* Page mode guide (Aa menu): the highlight, the line, or both. */
@@ -1074,17 +1092,20 @@ h1, h2, p { margin: 0; }
   padding: 1rem;
   background: var(--bg);
   border: 1px solid var(--separator);
-  border-radius: calc(var(--radius) * 2);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   z-index: 20;
   max-height: calc(100dvh - 5rem);
+  /* One column, never wider than the pop-over (a row's content can't widen it). */
+  grid-template-columns: minmax(0, 1fr);
   overflow-y: auto;
   overscroll-behavior: contain;
   animation: fade-in 0.15s ease;
 }
 .popover-backdrop { position: fixed; inset: 0; z-index: 19; }
 .sheet-handle { display: none; }
-.setting { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+/* Rows wrap (the control under its name) rather than overflow a narrow sheet. */
+.setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
 .setting-stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
 .setting-name { font-family: var(--serif); font-size: 1.1rem; font-weight: 500; white-space: nowrap; }
 .stepper { display: flex; align-items: center; border: 1px solid var(--separator); border-radius: var(--radius); }
@@ -1092,8 +1113,8 @@ h1, h2, p { margin: 0; }
 /* Choices: a quiet row with the chosen one outlined in ink. Filled ink is
    kept for the one main action on each screen. */
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; padding: 2px; border: 1px solid var(--separator); border-radius: var(--radius); }
-.segmented button { min-height: 36px; padding: 0.35rem; border: 0; border-radius: 2px; background: none; color: var(--text-2); }
-.segmented button[aria-checked='true'] { color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--text); }
+.segmented button { min-height: 36px; padding: 0.35rem; border: 0; border-radius: var(--radius-sm); background: none; color: var(--text-2); }
+.segmented button[aria-checked='true'] { color: var(--text); font-weight: 600; box-shadow: var(--ring); }
 .hint { font-size: 0.85rem; color: var(--text-2); }
 .segmented .serif { font-family: var(--serif); }
 /* A choice beside its label (Mode, Font) stays compact. */
@@ -1120,7 +1141,7 @@ h1, h2, p { margin: 0; }
   .more-toggle:hover { color: var(--text); }
 }
 .more-settings { display: grid; gap: 1rem; animation: fade-in 0.2s ease; }
-.swatches { display: flex; gap: 0.6rem; }
+.swatches { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .swatch {
   width: 36px;
   height: 36px;
@@ -1128,15 +1149,15 @@ h1, h2, p { margin: 0; }
   border: 0;
   border-radius: 50%;
   background: var(--swatch);
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 2px var(--separator);
+  box-shadow: var(--ring-swatch);
 }
-.swatch[aria-checked='true'], .swatch.is-checked { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text); }
+.swatch[aria-checked='true'], .swatch.is-checked { box-shadow: var(--ring-swatch-on); }
 /* Custom colour: a colour wheel until one is picked, then that colour. */
 .swatch-custom {
   position: relative;
   overflow: hidden;
   cursor: pointer;
-  background: conic-gradient(#e5484d, #f5a524, #46a758, #3e63dd, #8e4ec6, #e5484d);
+  background: var(--color-wheel);
 }
 .swatch-custom.is-checked { background: var(--swatch); }
 .swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
@@ -1149,7 +1170,7 @@ kbd {
   font-size: 0.75rem;
   padding: 0.05rem 0.4rem;
   border: 1px solid var(--separator);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-2);
 }
 @media (pointer: coarse) {
@@ -1286,6 +1307,13 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .is-sheet .search-body { flex: 0 1 auto; }
+  /* Search: a tall sheet, from just below the top of what's visible (above
+     the keyboard, see useVisualViewport) to the bottom, with room for results. */
+  .is-sheet.is-tall .search-panel { height: calc(100% - 0.75rem - var(--safe-top)); max-height: none; }
+  .is-sheet.is-tall .search-body { flex: 1 1 auto; }
+  /* Pull either one down by its handle to put it away (useSheetDrag). */
+  .search-panel > .sheet-handle { align-self: center; flex-shrink: 0; margin: 0.35rem 0 0; }
+  .search-panel { overscroll-behavior-y: none; }
   .search-backdrop.is-sheet.is-closing .search-panel { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
 }
 .panel-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.5rem 0.25rem 1rem; }
@@ -1311,7 +1339,21 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .search-results .bookmark-remove { width: 44px; flex-shrink: 0; display: grid; padding: 0; margin-right: 0.5rem; color: var(--text-2); }
 .top-actions .is-marked { color: var(--accent); }
 
-.search-results mark { background: color-mix(in srgb, var(--accent) 14%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.search-results mark { background: color-mix(in srgb, var(--accent) 14%, transparent); color: inherit; border-radius: var(--radius-sm); padding: 0 1px; }
+
+/* ——— Touch screens ———
+   Everything that's tapped is at least 44 × 44px, Apple's minimum for a
+   thumb (docs/ui-rules.md, rule 7). Where the look should stay smaller, the
+   hit area grows and margins take back the extra space. */
+@media (pointer: coarse) {
+  .segmented button, .session-presets button, .stats-toggle { min-height: 44px; }
+  .swatch { width: 44px; height: 44px; }
+  .scrubber { height: 44px; margin-block: -6px; }
+  .shelf-tabs button { padding-top: 0.25rem; }
+  .search-bar input { height: 44px; }
+  /* A link inside a sentence: taller to the touch, the line as it was. */
+  .backup-status .text-button { padding-block: 12px; margin-block: -12px; }
+}
 
 /* ——— Phones ——— */
 @media (max-width: 640px) {
@@ -1348,7 +1390,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     width: 36px;
     height: 5px;
     margin: -0.6rem 0 -0.4rem;
-    border-radius: 3px;
+    border-radius: 999px;
     background: var(--separator);
   }
   /* The settings sheet dims the page with a shadow, not a backdrop (see
@@ -1362,15 +1404,15 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     background: var(--page-dimmed);
   }
   .settings-menu {
-    box-shadow: 0 0 0 100vmax var(--scrim);
+    box-shadow: var(--shadow-scrim);
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), scrim-in 0.2s ease;
   }
   .settings-menu.is-closing {
     animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards, scrim-out 0.2s ease-in forwards;
   }
 }
-@keyframes scrim-in { from { box-shadow: 0 0 0 100vmax transparent; } }
-@keyframes scrim-out { to { box-shadow: 0 0 0 100vmax transparent; } }
+@keyframes scrim-in { from { box-shadow: var(--shadow-scrim-none); } }
+@keyframes scrim-out { to { box-shadow: var(--shadow-scrim-none); } }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 @keyframes sheet-out { to { transform: translateY(100%); } }
 

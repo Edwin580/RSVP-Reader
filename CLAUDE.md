@@ -15,12 +15,22 @@ Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for
 ```bash
 npm test          # unit tests (Vitest)
 npx tsc -b        # type-check
-npm run lint      # oxlint
+npm run lint      # oxlint, then the UI rules (npm run check:ui)
 npm run build     # production build
 npm run test:e2e  # browser tests (Playwright); set PW_CHROMIUM_PATH to use an installed Chromium
 ```
 
 Run the first four before pushing, and the browser tests too for UI changes. CI runs all five on every pull request. For UI changes, also check the app in a browser at phone and desktop sizes.
+
+## UI rules
+
+The interface follows the rules in `docs/ui-rules.md`. In short:
+
+- Colours, shadows and corners come from the tokens at the top of `src/index.css`: one shadow (`--shadow`) for everything that floats, a small set of corners, no raw colours.
+- Every pop-up closes with Escape, a tap outside, and on a phone by dragging it down: there it's a bottom sheet with a grab handle (`useSheetDrag`).
+- On a phone nothing is wider than the screen (down to 320px), everything tappable is at least 44 × 44px, and text fields use 16px text or larger.
+
+`npm run check:ui` (part of `npm run lint`) checks the code, and `e2e/ui-rules.e2e.ts` checks the running app; both run in CI. A new pop-up goes in the list at the top of that test file.
 
 ## Bug fixes
 

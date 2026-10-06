@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Bookmark, Chapter } from '../lib/types'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 
 interface Props {
@@ -42,6 +43,9 @@ export function BookmarksPanel({
     return () => window.removeEventListener('keydown', esc, { capture: true })
   }, [onClose])
   const close = useRef<HTMLButtonElement>(null)
+  // On a phone it's a bottom sheet: pull it down to put it away.
+  const sheet = useRef<HTMLElement>(null)
+  useSheetDrag(sheet, onClose)
   useEffect(() => close.current?.focus(), [])
 
   const chapterTitle = (i: number) => {
@@ -53,11 +57,13 @@ export function BookmarksPanel({
   return (
     <div className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`} onClick={onClose}>
       <aside
+        ref={sheet}
         className="search-panel"
         role="dialog"
         aria-label="Bookmarks"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="sheet-handle" aria-hidden="true" />
         <div className="panel-bar">
           <h2 className="panel-title">Bookmarks</h2>
           <button type="button" className="icon-button" ref={close} onClick={onClose} aria-label="Close bookmarks">

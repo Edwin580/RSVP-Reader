@@ -5,6 +5,7 @@ import type { SearchHit, SearchResult } from '../lib/search'
 import type { BookSearch } from '../lib/searchClient'
 import type { Chapter } from '../lib/types'
 import { useVisualViewport } from '../hooks/useVisualViewport'
+import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 
 interface Props {
@@ -43,6 +44,9 @@ export function SearchPanel({ bookSearch, words, chapters, names, position, clos
   // The query the current results belong to, so stale results are never shown as fresh.
   const [answered, setAnswered] = useState<{ query: string; result: SearchResult } | null>(null)
   const input = useRef<HTMLInputElement>(null)
+  // On a phone it's a bottom sheet: pull it down to put it away.
+  const sheet = useRef<HTMLElement>(null)
+  useSheetDrag(sheet, onClose)
   const viewport = useVisualViewport()
   // People and places met so far, with no spoilers; tap one to see where you met them.
   const people = useMemo(() => (names ? joinCompoundNames(names) : []), [names])
@@ -115,16 +119,18 @@ export function SearchPanel({ bookSearch, words, chapters, names, position, clos
 
   return (
     <div
-      className={`search-backdrop${closing ? ' is-closing' : ''}`}
+      className={`search-backdrop is-sheet is-tall${closing ? ' is-closing' : ''}`}
       style={viewport ? { top: viewport.top, height: viewport.height, bottom: 'auto' } : undefined}
       onClick={onClose}
     >
       <aside
+        ref={sheet}
         className="search-panel"
         role="dialog"
         aria-label="Search in book"
         onClick={(e) => e.stopPropagation()}
       >
+        <div className="sheet-handle" aria-hidden="true" />
         <div className="search-bar">
           <input
             ref={input}
