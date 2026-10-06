@@ -161,11 +161,11 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
     <>
       {/* Catches the tap that closes the menu, so it can't also reach the
           reader underneath (where a tap plays, pauses or jumps to a word). */}
-      {/* On phones it also dims the page, with a shadow rather than a
-          background (see .popover-backdrop): Safari tints its top bar from a
-          coloured layer covering the top of the page and keeps that colour,
-          so a dim background left the bar in the old theme after changing it here. */}
-      <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
+      {/* Clear: on phones the page is dimmed by the sheet's shadow instead.
+          Safari tints its top bar from a coloured layer covering the top of
+          the page and keeps that colour, so a dim backdrop there left the bar
+          in the old theme after changing it here. */}
+      <div className={`popover-backdrop is-clear${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
       <div ref={sheet} className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
         <div className="sheet-handle" aria-hidden="true" />
         <div className="setting">

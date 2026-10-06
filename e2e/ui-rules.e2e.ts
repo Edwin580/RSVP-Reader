@@ -161,8 +161,12 @@ test('every pop-up has the same shadow (none on a phone), and on a phone the sam
     probe.remove()
     return value
   })()`)
-  // On a phone, sheets have no shadow: the backdrop behind them dims the page.
-  for (const [name, look] of Object.entries(looks)) expect(look.shadow, `${name}'s shadow`).toBe(phone ? 'none' : shadow)
+  for (const [name, look] of Object.entries(looks)) {
+    // On a phone, sheets have no drop shadow: the page dims behind them (the
+    // settings sheet does that with a shadow of its own; see the CSS).
+    if (!phone) expect(look.shadow, `${name}'s shadow`).toBe(shadow)
+    else if (name !== 'Settings') expect(look.shadow, `${name}'s shadow`).toBe('none')
+  }
   if (phone) {
     const corners = new Set(Object.values(looks).map((l) => l.corner))
     expect([...corners], 'sheet corners').toHaveLength(1)
