@@ -120,15 +120,15 @@ export function Library({
         )}
         <p className="brand">
           <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="#141414" />
+            <rect width="32" height="32" rx="7" fill="#141414" /* ui-allow: the logo keeps its colours */ />
             <path
               d="M7 7.5h18M16 7.5v3M7 24.5h18M16 24.5v-3"
-              stroke="#fbfaf7"
+              stroke="#fbfaf7" /* ui-allow: the logo keeps its colours */
               strokeWidth="2.2"
               strokeLinecap="round"
               fill="none"
             />
-            <circle cx="16" cy="16" r="3.6" fill="#e0483a" />
+            <circle cx="16" cy="16" r="3.6" fill="#e0483a" /* ui-allow: the logo keeps its colours */ />
           </svg>
           Chapter
         </p>
@@ -508,7 +508,8 @@ function ShelfRow({ book, progress, wpm, now, read, swiped, onSwipe, onOpen, onM
 }
 
 /** Muted cloth colours for books without a cover image, picked from the book id. */
-const COVER_TONES = ['#8a5a44', '#4f6b5a', '#5a6480', '#7a6a4a', '#6b4f6b', '#4a6a73']
+// ui-allow: cloth colours are the books' own, the same in every theme.
+const COVER_TONES = ['#8a5a44', '#4f6b5a', '#5a6480', '#7a6a4a', '#6b4f6b', '#4a6a73'] // ui-allow: as above
 
 function Cover({ book }: { book: BookMeta }) {
   if (book.cover) return <img className="cover" src={book.cover} alt="" loading="lazy" />

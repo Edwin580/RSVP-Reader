@@ -15,21 +15,25 @@ Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for
 ```bash
 npm test          # unit tests (Vitest)
 npx tsc -b        # type-check
-npm run lint      # oxlint
+npm run lint      # oxlint, then the UI rules (npm run check:ui)
 npm run build     # production build
 npm run test:e2e  # browser tests (Playwright); set PW_CHROMIUM_PATH to use an installed Chromium
 ```
 
 Run the first four before pushing, and the browser tests too for UI changes. CI runs all five on every pull request. For UI changes, also check the app in a browser at phone and desktop sizes.
 
-## Consistent styling
+## UI rules
 
-New UI looks and behaves like what's already there. Build it from the existing pieces instead of styling it afresh:
+The interface follows the rules in `docs/ui-rules.md`. In short:
 
-- Panels are sheets on phones and side panels on desktop: `search-backdrop is-sheet` around a `search-panel`, with a `sheet-handle`, a `panel-bar` and `panel-title`, a close `icon-button`, Escape to close, and `useSheetDrag` so it can be dragged down.
-- Buttons: `demo-button` for the one main action, `text-button` for secondary ones, `icon-button` for icons, `link-button` inside text, `segmented` for a choice between a few options. Section headings are `search-section`, explanations `search-hint`.
-- Colours, radii and shadows come from the variables in `index.css` (`--text`, `--text-2`, `--bg`, `--fill`, `--separator`, `--accent`, `--red`, `--radius`, `--shadow`), never literal values, so every theme follows. Only floating surfaces (panels, popovers, toasts) get `--shadow`.
-- Before pushing a UI change, screenshot each screen it touches at phone and desktop sizes, in light and dark, next to an existing screen of the same kind (a new sheet next to Bookmarks, say). Check type sizes, spacing, buttons and colours match, nothing wraps or overlaps, and nothing shows that shouldn't, such as a stray shadow or a hidden element peeking through. Say in the PR what was compared.
+- Colours, shadows and corners come from the tokens at the top of `src/index.css`: one shadow (`--shadow`) for everything that floats, a small set of corners, no raw colours.
+- Every pop-up closes with Escape, a tap outside, and on a phone by dragging it down: there it's a bottom sheet with a grab handle (`useSheetDrag`).
+- On a phone a sheet has no drop shadow and is itself `position: fixed` to the bottom of the screen; the page behind is dimmed by a `--scrim` backdrop that appears at once, over an undimmed page background. Safari colours its status bar and toolbar from these layers, so getting any of this wrong shows up as a mismatched grey bar (see rule 11).
+- On a phone nothing is wider than the screen (down to 320px), everything tappable is at least 44 × 44px, and text fields use 16px text or larger.
+
+`npm run check:ui` (part of `npm run lint`) checks the code, and `e2e/ui-rules.e2e.ts` checks the running app; both run in CI. A new pop-up goes in the list at the top of that test file.
+
+Before pushing a UI change, also look at it: screenshot each screen it touches at phone and desktop sizes, in light and dark, next to an existing screen of the same kind (a new sheet next to Bookmarks, say). Check that type sizes, spacing, buttons and colours match, nothing wraps or overlaps, and nothing shows that shouldn't, such as a hidden element peeking through. Say in the PR what was compared.
 
 ## Bug fixes
 

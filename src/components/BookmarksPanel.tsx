@@ -43,11 +43,10 @@ export function BookmarksPanel({
     return () => window.removeEventListener('keydown', esc, { capture: true })
   }, [onClose])
   const close = useRef<HTMLButtonElement>(null)
-  useEffect(() => close.current?.focus(), [])
-  // On phones it's a bottom sheet: pull it down to put it away.
+  // On a phone it's a bottom sheet: pull it down to put it away.
   const sheet = useRef<HTMLElement>(null)
-  const body = useRef<HTMLDivElement>(null)
-  useSheetDrag(sheet, onClose, body)
+  useSheetDrag(sheet, onClose)
+  useEffect(() => close.current?.focus(), [])
 
   const chapterTitle = (i: number) => {
     let title = ''
@@ -72,7 +71,7 @@ export function BookmarksPanel({
           </button>
         </div>
 
-        <div className="search-body" ref={body}>
+        <div className="search-body">
           <button type="button" className="bookmark-here" onClick={onToggleHere}>
             <Icon name={here ? 'bookmarkFilled' : 'bookmark'} size={18} />
             {here ? 'Remove bookmark here' : 'Bookmark this spot'}

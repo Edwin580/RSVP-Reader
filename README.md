@@ -76,7 +76,9 @@ npm run build    # type-check and build for production
 ## Project layout
 
 ```
-e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings
+e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings, UI rules
+docs/ui-rules.md       how the interface stays consistent and works on phones, and how each rule is checked
+scripts/check-ui.mjs   checks the code against those rules (npm run check:ui)
 service-worker/sw.js   offline cache; the build fills in the file list (vite.config.ts)
 src/
   lib/

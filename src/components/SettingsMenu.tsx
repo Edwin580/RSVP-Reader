@@ -69,10 +69,10 @@ const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
 
 /** Swatch colours; the CSS (data-accent) holds the light and dark shades used in the reader. */
 const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
-  { value: 'red', label: 'Red', color: '#b3261e' },
-  { value: 'blue', label: 'Blue', color: '#1f4fb4' },
-  { value: 'green', label: 'Green', color: '#1d6b43' },
-  { value: 'purple', label: 'Purple', color: '#6a3fb0' },
+  { value: 'red', label: 'Red', color: '#b3261e' }, // ui-allow: a swatch shows its colour
+  { value: 'blue', label: 'Blue', color: '#1f4fb4' }, // ui-allow: a swatch shows its colour
+  { value: 'green', label: 'Green', color: '#1d6b43' }, // ui-allow: a swatch shows its colour
+  { value: 'purple', label: 'Purple', color: '#6a3fb0' }, // ui-allow: a swatch shows its colour
 ]
 
 const SHORTCUTS: [string, string][] = [

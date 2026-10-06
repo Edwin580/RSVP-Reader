@@ -1035,6 +1035,11 @@ test('the Sync sheet moves across the whole recording, and the text pace can be 
   await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
   const speed = async () => Number((await page.locator('.listen-time').textContent())!.match(/([\d.]+)×/)?.[1] ?? 1)
+  // Thumb-sized, like everything else on a phone (docs/ui-rules.md, rule 7).
+  for (const name of ['Text slower', 'Text faster', 'Sync text and audio', 'Pause audiobook']) {
+    const box = (await page.getByRole('button', { name }).boundingBox())!
+    expect(Math.min(box.width, box.height), name).toBeGreaterThanOrEqual(44)
+  }
   const before = await speed()
   // Text faster: the narrator reads more words a second than thought, so at the same reading speed the recording plays slower.
   await page.getByRole('button', { name: 'Text faster' }).click()

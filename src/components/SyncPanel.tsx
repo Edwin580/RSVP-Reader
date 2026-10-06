@@ -56,7 +56,7 @@ export function SyncPanel(props: Props) {
   }, [onClose])
   const sheet = useRef<HTMLElement>(null)
   const body = useRef<HTMLDivElement>(null)
-  useSheetDrag(sheet, onClose, body)
+  useSheetDrag(sheet, onClose)
 
   // While the slider is dragged, the time and passage follow it; the
   // recording moves when it's let go.
@@ -134,7 +134,7 @@ export function SyncPanel(props: Props) {
         <div className="sync-audio">
           {SKIPS.slice(0, 2).map((s) => (
             <button key={s} type="button" className="text-button sync-skip" onClick={() => seek(time + s)} aria-label={`Back ${-s} seconds`}>
-              −{-s} s
+              −{-s}s
             </button>
           ))}
           <button type="button" className="sync-play" onClick={onTogglePlay} aria-label={playing ? 'Pause recording' : 'Play recording'}>
@@ -143,7 +143,7 @@ export function SyncPanel(props: Props) {
           </button>
           {SKIPS.slice(2).map((s) => (
             <button key={s} type="button" className="text-button sync-skip" onClick={() => seek(time + s)} aria-label={`Forward ${s} seconds`}>
-              +{s} s
+              +{s}s
             </button>
           ))}
         </div>

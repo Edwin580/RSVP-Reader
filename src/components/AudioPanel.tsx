@@ -65,7 +65,7 @@ export function AudioPanel(props: Props) {
   // On phones it's a bottom sheet: pull it down to put it away.
   const sheet = useRef<HTMLElement>(null)
   const body = useRef<HTMLDivElement>(null)
-  useSheetDrag(sheet, onClose, body)
+  useSheetDrag(sheet, onClose)
 
   const [timestamps, setTimestamps] = useState(link?.timestamps ?? '')
   // Saved a moment after typing stops (or pasting), once there's a recording to go with.
@@ -117,7 +117,7 @@ export function AudioPanel(props: Props) {
               <p className="search-hint">
                 Paste a video’s transcript and the book follows the narrator word for word. YouTube’s app doesn’t let you
                 copy it, so open the video on a computer, click <em>Show transcript</em> under the description, and copy it
-                all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, tap the word you hear while listening.
+                all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, use Sync while listening to line it up by hand.
               </p>
               <textarea
                 className="audio-times"
@@ -269,13 +269,12 @@ function Find({
         </button>
       </form>
       {pasteError && <p className="search-hint audio-error" role="alert">{pasteError}</p>}
-      <p className="search-hint">
-        <a className="link-button" href={youTubeSearch(title)} target="_blank" rel="noreferrer">
+      <div className="audio-actions">
+        <a className="text-button audio-action" href={youTubeSearch(title)} target="_blank" rel="noreferrer">
           Search YouTube
-        </a>{' '}
-        and paste a video’s link, or{' '}
-        <label className="audio-file">
-          <span className="link-button">choose an audio file</span>
+        </a>
+        <label className="text-button audio-action audio-file">
+          Choose a file
           <input
             type="file"
             accept="audio/*,.mp3,.m4a,.m4b,.ogg,.opus,.wav,.aac"
@@ -285,8 +284,8 @@ function Find({
             }}
           />
         </label>
-        .
-      </p>
+      </div>
+      <p className="search-hint">Paste a video’s link above, or use an audiobook file from this device.</p>
     </>
   )
 }
@@ -370,21 +369,19 @@ function Linked({
         </div>
       </div>
       <p className="search-hint">
-        The book follows the narrator. If it drifts,{' '}
-        <button type="button" className="link-button" onClick={onSync}>
-          sync it by hand
-        </button>
-        .
-        {link.points.length > 0 && (
-          <>
-            {' '}
-            {link.points.length} {link.points.length === 1 ? 'word' : 'words'} synced ·{' '}
-            <button type="button" className="link-button" onClick={() => onLink({ ...link, points: [], pace: undefined })}>
-              Clear
-            </button>
-          </>
-        )}
+        The book follows the narrator. If it drifts, sync it by hand.
+        {link.points.length > 0 && ` ${link.points.length} ${link.points.length === 1 ? 'word' : 'words'} synced so far.`}
       </p>
+      <div className="audio-actions">
+        <button type="button" className="text-button audio-action" onClick={onSync}>
+          Sync by hand
+        </button>
+        {link.points.length > 0 && (
+          <button type="button" className="text-button audio-action" onClick={() => onLink({ ...link, points: [], pace: undefined })}>
+            Clear synced words
+          </button>
+        )}
+      </div>
     </>
   )
 }
