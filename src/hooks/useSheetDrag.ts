@@ -45,10 +45,11 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
         // iOS decides on the very first move whether a touch scrolls, and
         // after that it can't be stopped. So decide straight away: pulling
         // down with the content at its top moves the sheet; anything else
-        // (scrolling up, or content already scrolled) is left to scroll.
+        // (scrolling up, or content already scrolled, the sheet's own or a
+        // list's inside it) is left to scroll.
         const dy = y - start.y
         if (dy === 0) return
-        if (dy < 0 || sheet.scrollTop > 0) {
+        if (dy < 0 || scrolledDown(e.target, sheet)) {
           start = null
           return
         }
@@ -89,4 +90,13 @@ export function useSheetDrag(ref: React.RefObject<HTMLElement | null>, onClose: 
       sheet.removeEventListener('touchcancel', up)
     }
   }, [ref])
+}
+
+/** Whether the touch is on content that's scrolled down: the sheet's own, or a scrolling part of it. */
+function scrolledDown(target: EventTarget | null, sheet: HTMLElement): boolean {
+  for (let el = target instanceof Element ? target : null; el && sheet.contains(el); el = el.parentElement) {
+    if (el.scrollTop > 0) return true
+    if (el === sheet) break
+  }
+  return false
 }

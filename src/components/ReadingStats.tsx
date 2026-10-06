@@ -79,6 +79,8 @@ export function ReadingStats({ stats }: { stats: Stats }) {
                           aria-label={describe(d)}
                           aria-pressed={!!shown && sameDay(d.date, shown.date)}
                           title={describe(d)}
+                          // A year of days can't have thumb-sized squares (docs/ui-rules.md, rule 7).
+                          data-small-target=""
                           onClick={() => setPicked(d)}
                         />
                       </li>

@@ -295,3 +295,150 @@ test('a PDF keeps just its text, without its running header and page numbers (#5
   expect(book.chapters.length).toBeGreaterThan(3)
   expect(book.words).toEqual(paragraphs.join(' ').split(' '))
 })
+
+test('on a phone, bottom sheets cast no shadow below them (#61)', async ({ page }, testInfo) => {
+  // Reported on iPhone with Read for, Search and Bookmarks: their drop shadow
+  // fell below the sheet, into the strip above Safari's toolbar, as a smudge.
+  // The page dimmed behind a sheet already sets it apart.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  const sheets: [string, () => Promise<unknown>, string][] = [
+    ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
+    ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
+    ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
+    ['Settings', () => openSettings(page), '.settings-menu'],
+  ]
+  for (const [name, open, selector] of sheets) {
+    await open()
+    await expect(page.locator(selector)).toBeVisible()
+    // Each shadow layer that shows: how far it reaches below the sheet (its downward offset plus blur).
+    const below = await page.evaluate(`(() => {
+      const shadow = getComputedStyle(document.querySelector('${selector.replace(/'/g, "\\\\'")}')).boxShadow
+      if (shadow === 'none') return []
+      return shadow.split(/,(?![^(]*\\))/).filter((l) => !/rgba\\([^)]*,\\s*0\\)|transparent/.test(l)).map((layer) => {
+        const n = layer.replace(/rgba?\\([^)]*\\)/, '').trim().split(/\\s+/).filter((p) => p !== 'inset').map(parseFloat)
+        return (n[1] || 0) + (n[2] || 0)
+      })
+    })()`)
+    expect(below, name).toEqual((below as number[]).map(() => 0))
+    await page.keyboard.press('Escape')
+    await expect(page.locator(selector)).toBeHidden()
+  }
+})
+
+test("on a phone, Safari's status bar is the same grey as the page dimmed behind a sheet, in every theme (#61)", async ({ page }, testInfo) => {
+  // Reported on iPhone: with Read for, Search or Bookmarks open, the status
+  // bar was a darker grey than the dimmed page. Safari colours the bar by
+  // laying the layer that dims the page over the page background, which was
+  // already dimmed, so the bar came out dimmed twice. The background now
+  // stays as it is under those sheets (the settings sheet, which dims the
+  // page with a shadow instead, still dims it), and the layer is there at
+  // once rather than fading in, so Safari sees it at full strength.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  const sheets: [string, () => Promise<unknown>, string][] = [
+    ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
+    ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
+    ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
+    ['Settings', () => openSettings(page), '.settings-menu'],
+  ]
+  for (const theme of ['Light', 'Sepia', 'Dark']) {
+    await openSettings(page)
+    const more = page.getByRole('button', { name: 'More settings' })
+    if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+    await page.getByRole('radio', { name: theme, exact: true }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.settings-menu')).toBeHidden()
+    for (const [name, open, selector] of sheets) {
+      const where = `${theme}, ${name}`
+      await open()
+      // As it first appears: the layers at the top of the screen, and whether any is still fading in.
+      const first = (await page.evaluate(`(() => {
+        const sheet = document.querySelector('${selector.replace(/'/g, "\\\\'")}')
+        const layers = document.elementsFromPoint(2, 2).filter((el) => !sheet.contains(el) && getComputedStyle(el).position === 'fixed')
+        return layers.some((el) => el.getAnimations().some((a) => a.effect?.getKeyframes().some((k) => 'opacity' in k)))
+      })()`)) as boolean
+      expect(first, `${where}: the dimming layer fades in`).toBe(false)
+      await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+      const bar = (await page.evaluate(`(() => {
+        const sheet = document.querySelector('${selector.replace(/'/g, "\\\\'")}')
+        const probe = document.createElement('div')
+        document.body.append(probe)
+        const rgba = (c) => {
+          probe.style.color = c
+          const v = getComputedStyle(probe).color
+          const n = v.match(/[\\d.]+/g).map(Number)
+          const srgb = v.startsWith('color(')
+          const [r, g, b] = srgb ? n.slice(0, 3).map((x) => x * 255) : n.slice(0, 3)
+          return [r, g, b, srgb ? (n[3] ?? 1) : (n[3] ?? 1)]
+        }
+        // What Safari shows: the page background, with any coloured fixed layer at the top laid over it.
+        let [r, g, b] = rgba(getComputedStyle(document.documentElement).backgroundColor)
+        const layers = document.elementsFromPoint(2, 2).filter((el) => !sheet.contains(el) && getComputedStyle(el).position === 'fixed').reverse()
+        for (const el of layers) {
+          const [lr, lg, lb, la] = rgba(getComputedStyle(el).backgroundColor)
+          r = r * (1 - la) + lr * la
+          g = g * (1 - la) + lg * la
+          b = b * (1 - la) + lb * la
+        }
+        const [dr, dg, db] = rgba('var(--page-dimmed)')
+        probe.remove()
+        return { bar: [r, g, b].map(Math.round), dimmed: [dr, dg, db].map(Math.round) }
+      })()`)) as { bar: number[]; dimmed: number[] }
+      expect(bar.bar.every((v, k) => Math.abs(v - bar.dimmed[k]) <= 2), `${where}: the bar is rgb(${bar.bar}), the dimmed page rgb(${bar.dimmed})`).toBe(true)
+      await page.keyboard.press('Escape')
+      await expect(page.locator(selector)).toBeHidden()
+    }
+  }
+})
+
+test("on a phone, Safari's toolbar takes its colour from the sheet, not the dimmed page (#61)", async ({ page }, testInfo) => {
+  // Reported on iPhone: under Bookmarks and Search, Safari's bottom toolbar
+  // was the grey of the dimmed page, under Settings the sheet's colour.
+  // Safari colours the toolbar from the fixed layer at the bottom edge of the
+  // screen: the settings sheet is fixed itself, while Bookmarks and Search
+  // sat inside the fixed, dimmed backdrop, so that was the layer it found.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  const sheets: [string, () => Promise<unknown>, string][] = [
+    ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
+    ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
+    ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
+    ['Settings', () => openSettings(page), '.settings-menu'],
+  ]
+  for (const [name, open, selector] of sheets) {
+    await open()
+    await expect(page.locator(selector)).toBeVisible()
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const bottom = await page.evaluate(`(() => {
+      const fixed = document.elementsFromPoint(innerWidth / 2, innerHeight - 1).find((el) => getComputedStyle(el).position === 'fixed')
+      return fixed === document.querySelector('${selector.replace(/'/g, "\\\\'")}') ? 'the sheet' : fixed?.className
+    })()`)
+    expect(bottom, `${name}: the fixed layer at the bottom of the screen`).toBe('the sheet')
+    await page.keyboard.press('Escape')
+    await expect(page.locator(selector)).toBeHidden()
+  }
+})
+
+test('on a phone, with the keyboard up, the search sheet runs down to it (#61)', async ({ page }, testInfo) => {
+  // Reported on iPhone: between the search sheet and the keyboard, around
+  // Safari's floating address bar, a strip of dimmed page showed. The sheet
+  // now carries on down behind it.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  const sheet = page.locator('[role=dialog][aria-label="Search in book"]')
+  await expect(sheet).toBeVisible()
+  const below = (await page.evaluate(`(() => {
+    const el = document.querySelector('[role=dialog][aria-label="Search in book"]')
+    const after = getComputedStyle(el, '::after')
+    return { content: after.content, height: parseFloat(after.height), colour: after.backgroundColor, sheet: getComputedStyle(el).backgroundColor }
+  })()`)) as { content: string; height: number; colour: string; sheet: string }
+  expect(below.content).not.toBe('none')
+  expect(below.height).toBeGreaterThan(0)
+  expect(below.colour).toBe(below.sheet)
+})
