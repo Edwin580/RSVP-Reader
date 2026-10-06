@@ -1,6 +1,31 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
+import { useAudioPlayer } from '../hooks/useAudioPlayer'
 import { useRsvp } from '../hooks/useRsvp'
+import { alignTranscript } from '../lib/align'
+import { authorFromTitle } from '../lib/archive'
+import {
+  addPoint,
+  fileParts,
+  formatTime,
+  paceAt,
+  parseTimestamps,
+  partsOf,
+  partWindow,
+  setPace,
+  speedFor,
+  syncPoints,
+  timeAt,
+  trackAt,
+  trackRange,
+  spokenLetters,
+  trackStarts,
+  wordAt as wordHeardAt,
+  type AudioLink,
+  type AudioSource,
+} from '../lib/audio'
+import { indexAudio, type AudioIndex } from '../lib/media'
+import { detectSync, MAX_BYTES } from '../lib/syncClient'
 import { glanceRange, pausedRange } from '../lib/glance'
 import { guideReading } from '../lib/guide'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
@@ -11,12 +36,14 @@ import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSen
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
 import type { Book, Bookmark } from '../lib/types'
+import { AudioPanel } from './AudioPanel'
 import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
 import { ScrollView } from './ScrollView'
 import { SearchPanel } from './SearchPanel'
+import { SyncPanel } from './SyncPanel'
 import { SessionMenu } from './SessionMenu'
 import { SettingsMenu } from './SettingsMenu'
 import { reducedMotion } from './transition'
@@ -32,6 +59,10 @@ interface Props {
   onProgress: (index: number) => void
   bookmarks: Bookmark[]
   onBookmarks: (bookmarks: Bookmark[]) => void
+  /** The audiobook linked to this book, and its file when it's one from the device. */
+  audio: AudioLink | null
+  audioFile: Blob | null
+  onAudio: (link: AudioLink | null, file?: File) => void
   /** Reports reading time (while playing) and words read, for statistics. */
   onReadingTime: (ms: number, words: number) => void
   /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
@@ -64,6 +95,9 @@ export function Reader({
   onProgress,
   bookmarks,
   onBookmarks,
+  audio,
+  audioFile,
+  onAudio,
   onReadingTime,
   onPlay,
   onClose,
@@ -213,7 +247,7 @@ export function Reader({
   const onTapWord = (target: Element | null, act: () => void) => {
     const tapped = wordAt(target)
     tapIndex.current = tapped ?? index
-    if (tapped !== null) seek(tapped)
+    if (tapped !== null) tapWord(tapped)
     else act()
   }
   // Always the first tap's word: that tap may have jumped to it, moving the
@@ -277,7 +311,7 @@ export function Reader({
       : {
           ignore: ignorePress,
           allowMenu: selectable,
-          onTap: (target) => onTapWord(target, toggle),
+          onTap: (target) => onTapWord(target, togglePlayback),
           onDoubleTap,
           onDismiss: onDismissTap,
           onHoldStart: (target) => {
@@ -324,7 +358,7 @@ export function Reader({
     const timer = window.setTimeout(() => setJumpedFrom(null), JUMP_BACK_MS)
     return () => window.clearTimeout(timer)
   }, [jumpedFrom])
-  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | null>(null)
+  const [panel, setPanel] = useState<'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | 'sync' | null>(null)
   // A closing panel stays mounted briefly so it can animate out.
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<number | undefined>(undefined)
@@ -346,7 +380,7 @@ export function Reader({
   }, [])
   useEffect(() => () => window.clearTimeout(closeTimer.current), [])
 
-  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session') => {
+  const openPanel = (which: 'search' | 'settings' | 'bookmarks' | 'session' | 'audio' | 'sync') => {
     pause()
     if (panel === which && !closing) {
       closePanel()
@@ -377,14 +411,388 @@ export function Reader({
     }
   }, [book.id, words])
 
+  // Listening along to an audiobook: the book follows the narrator, lined up
+  // by a matched transcript, chapter starts and words tapped while listening
+  // (src/lib/audio.ts). The recording plays at the reading speed.
+  const audioHost = useRef<HTMLDivElement>(null)
+  const player = useAudioPlayer(audio?.source ?? null, audioFile, audioHost)
+  const { currentTime, play: playAudio, pause: pauseAudio, setSpeed, seeking: audioSeeking, unlock: unlockAudio, provide: provideAudio } = player
+  const listening = player.playing
+  const timestamps = audio?.timestamps ?? ''
+  const transcript = useMemo(() => alignTranscript(parseTimestamps(timestamps), words), [timestamps, words])
+  const points = useMemo(() => (audio ? syncPoints(audio, chapters, transcript, words.length) : []), [audio, chapters, transcript, words.length])
+  /** The narrator's pace here: as set by hand from the last word synced on, or as measured from the points. */
+  const narratorPace = (i: number) => {
+    const anchor = audio?.pace ? Math.max(...audio.points.map((p) => p.seconds)) : Infinity
+    return audio?.pace && timeAt(points, i) >= anchor ? audio.pace : paceAt(points, i)
+  }
+  const speed = audio && audio.matchSpeed !== false ? speedFor(wpm, narratorPace(index)) : 1
+  useEffect(() => setSpeed(speed), [speed, setSpeed])
+  /** Whether the guide follows the recording while it plays (the guide's own pause stops it, the recording plays on). */
+  const [following, setFollowing] = useState(true)
+  const followingNow = useRef(following)
+  useEffect(() => {
+    followingNow.current = following
+  }, [following])
+  /** The last word moved to by following the narrator; any other move is the reader's own jump. */
+  const followed = useRef(-1)
+  /** YouTube's player reports the old time for a moment after a seek; don't follow until then. */
+  const settling = useRef(0)
+  // Lining each file up from its sound (pauses.ts): before playing from a
+  // spot, the file it's in; while listening, the next one before it's
+  // reached. Done once per file and saved with the link.
+  const narration = useMemo(() => buildTimeline(words, book.paragraphEnds, 'natural', headings).weights, [words, book.paragraphEnds, headings])
+  const latestAudio = useRef(audio)
+  useEffect(() => {
+    latestAudio.current = audio
+  })
+  /** The points as they are now, including files lined up since the last render. */
+  const pointsNow = useCallback(
+    () => (latestAudio.current ? syncPoints(latestAudio.current, chapters, transcript, words.length) : []),
+    [chapters, transcript, words.length],
+  )
+  /** The file (or part of a long file) playing `seconds` into the recording. */
+  const fileAt = useCallback((seconds: number) => {
+    const source = latestAudio.current?.source
+    return source ? trackAt(partsOf(source), seconds) : 0
+  }, [])
+  // A long audiobook file of one's own is read for where its chapters and
+  // each moment's sound are (media.ts), so it can be lined up a part at a
+  // time without decoding hours of it at once.
+  const indexes = useRef(new WeakMap<Blob, Promise<AudioIndex | null>>())
+  const indexOf = useCallback((file: Blob) => {
+    let index = indexes.current.get(file)
+    if (!index) {
+      index = indexAudio(file).catch(() => null)
+      indexes.current.set(file, index)
+    }
+    return index
+  }, [])
+  /** Splits a linked file into the parts it's lined up in, once (saved with the link). */
+  const ensureParts = useCallback(async () => {
+    const link = latestAudio.current
+    if (!link || link.source.kind !== 'file' || link.source.parts !== undefined || !audioFile) return
+    const index = await indexOf(audioFile)
+    const now = latestAudio.current
+    if (!now || now.source.kind !== 'file' || now.source.name !== link.source.name || now.source.parts !== undefined) return
+    const parts = index ? fileParts(index.duration, index.chapters, audioFile.size > MAX_BYTES) : []
+    // Points found from the file as a whole were in different parts' places: start afresh.
+    const next = { ...now, source: { ...now.source, parts }, detected: parts.length ? {} : now.detected }
+    latestAudio.current = next
+    onAudio(next)
+  }, [audioFile, indexOf, onAudio])
+  /** Letters said before each word: between sync points, time goes with letters, not words. */
+  const letters = useMemo(() => spokenLetters(words), [words])
+  const [lining, setLining] = useState(0)
+  /** How much of the file being lined up for Listen has downloaded (0–1), or null. */
+  const [progress, setProgress] = useState<number | null>(null)
+  const linings = useRef(new Map<string, Promise<void>>())
+  const lineUp = useCallback(
+    (k: number, showProgress = false): Promise<void> => {
+      const link = latestAudio.current
+      if (!link || k < 0 || link.detected?.[k] !== undefined) return Promise.resolve()
+      const { source } = link
+      // A file not yet split into parts is split first (prepare does that).
+      if (source.kind === 'file' && source.parts === undefined) return Promise.resolve()
+      const parts = partsOf(source)
+      const target = source.kind === 'archive' ? source.tracks[k]?.url : source.kind === 'url' ? source.url : source.kind === 'file' ? audioFile : null
+      if (!target || (parts.length ? k >= parts.length : k > 0)) return Promise.resolve()
+      const id = `${sourceId(source)}#${k}`
+      const running = linings.current.get(id)
+      if (running) return running
+      setLining((n) => n + 1)
+      /** What to decode, and where in the recording it starts: a part of a long file is just its own stretch. */
+      const audioFor = async (): Promise<{ audio: string | Blob; offset: number; keep?: [number, number] }> => {
+        if (source.kind === 'archive') return { audio: target, offset: trackStarts(parts)[k] }
+        if (source.kind !== 'file' || !parts.length || typeof target === 'string') return { audio: target, offset: 0 }
+        const index = await indexOf(target)
+        if (!index) throw new Error('This audiobook file can’t be read in parts.')
+        const window = partWindow(parts, k, pointsNow())
+        const stretch = index.stretch(target, window.from, window.to)
+        return { audio: new Blob(stretch.parts as BlobPart[], { type: stretch.type }), offset: stretch.start, keep: [window.start, window.end] }
+      }
+      let offset = 0
+      /** The part's own stretch of the recording: points in the neighbours' bits decoded with it are theirs to place. */
+      let keep: [number, number] = [-Infinity, Infinity]
+      const done = audioFor()
+        .then((chosen) => {
+          offset = chosen.offset
+          if (chosen.keep) keep = chosen.keep
+          return detectSync(
+            chosen.audio,
+            { words, weights: narration, paragraphEnds: book.paragraphEnds },
+            (duration) =>
+              trackRange(parts.length ? parts : [{ url: '', title: '', seconds: duration }], k, chapters, pointsNow(), words.length, duration, chosen.keep ? offset : undefined),
+            showProgress ? setProgress : undefined,
+          )
+        })
+        .then(({ points: found, audio: file }) => {
+          // Downloaded once: the player plays this copy instead of fetching it again.
+          if (source.kind === 'archive') provideAudio(k, file)
+          const now = latestAudio.current
+          if (!now || sourceId(now.source) !== sourceId(source)) return
+          const placed = found.map((p) => ({ index: p.index, seconds: p.seconds + offset })).filter((p) => p.seconds >= keep[0] && p.seconds < keep[1])
+          const next = { ...now, detected: { ...now.detected, [k]: placed } }
+          // Seen straight away by whatever is waiting on this, before the next render.
+          latestAudio.current = next
+          onAudio(next)
+        })
+        // Without lining up, chapter starts and taps still place the recording; say it's a guess.
+        .catch(() => {
+          if (showProgress) failedLining.current = true
+          // Not lined up after all: let a later try download it again.
+          linings.current.delete(id)
+        })
+        .finally(() => {
+          setLining((n) => n - 1)
+          if (showProgress) setProgress(null)
+        })
+      linings.current.set(id, done)
+      return done
+    },
+    [audioFile, words, narration, book.paragraphEnds, chapters, onAudio, pointsNow, provideAudio, indexOf],
+  )
+  /**
+   * Lines up the file that word `i` is in. The first guess at which file
+   * that is can be wrong (a book whose chapters the recording doesn't name),
+   * so if the word turns out to be outside the file, the file it's in now
+   * looks to be is lined up too.
+   */
+  const prepare = useCallback(
+    async (i: number, showProgress = false) => {
+      await ensureParts()
+      const seen = new Set<number>()
+      for (let step = 0; step < 4; step++) {
+        const k = fileAt(timeAt(pointsNow(), i, letters))
+        if (seen.has(k)) return
+        seen.add(k)
+        // A long file's parts without a chapter marker can only be placed after
+        // the part before them (their sound alone can't tell where in the book
+        // they are): line up the ones between the last placed and this, in order.
+        const link = latestAudio.current
+        const parts = link?.source.kind === 'file' ? partsOf(link.source) : []
+        let from = k
+        while (from > 0 && !parts[from]?.title && link?.detected?.[from - 1] === undefined) from--
+        for (let m = from; m < k; m++) {
+          if (showProgress) setProgress((m - from) / (k - from + 1))
+          await lineUp(m)
+          if (!latestAudio.current?.detected?.[m]?.length) break
+        }
+        await lineUp(k, showProgress)
+        const found = latestAudio.current?.detected?.[k]
+        if (!found || found.length < 2 || (i >= found[0].index && i <= found[found.length - 1].index)) return
+      }
+    },
+    [fileAt, lineUp, pointsNow, letters, ensureParts],
+  )
+  /**
+   * Listen waits for lining up rather than start from a guess (it shows how
+   * far the download has got); only a connection this slow gives up and
+   * starts from the best guess.
+   */
+  const PREPARE_MS = 90000
+  const [preparing, setPreparing] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** Lining up for Listen failed (no connection, say): the recording starts from a guess. */
+  const failedLining = useRef(false)
+  /** Further than this from anything lined up in the file, the passage probably isn't in the recording. */
+  const NOT_COVERED_WORDS = 300
+  /** Bumped by each new start, so an older one still lining up doesn't play once a newer one has begun. */
+  const startToken = useRef(0)
+  /** Play the recording from word `i`: lined up first, so it starts where the text is. */
+  const playFrom = async (i: number) => {
+    const token = ++startToken.current
+    setFollowing(true)
+    followingNow.current = true
+    failedLining.current = false
+    followed.current = i
+    pauseAudio()
+    // Phones only allow sound in response to a tap: allow it now, while lining up waits.
+    unlockAudio()
+    setPreparing(true)
+    await Promise.race([prepare(i, true), new Promise((resolve) => window.setTimeout(resolve, PREPARE_MS))])
+    if (token !== startToken.current) return
+    setPreparing(false)
+    const now = pointsNow()
+    // A recording of part of the book (or another edition) may not have this passage at all.
+    const k = fileAt(timeAt(now, i, letters))
+    const found = latestAudio.current?.detected?.[k]
+    setNotice(
+      failedLining.current
+        ? 'Couldn’t line up this chapter (check the connection), so it starts from a guess. Tap the word you hear to sync.'
+        : found && found.length > 2 && (i < found[0].index - NOT_COVERED_WORDS || i > found[found.length - 1].index + NOT_COVERED_WORDS)
+          ? 'This recording doesn’t seem to include this part of the book, so it plays the nearest part it has.'
+          : null,
+    )
+    failedLining.current = false
+    followed.current = i
+    settling.current = performance.now() + 800
+    playAudio(timeAt(now, i, letters))
+  }
+  // The audio button pauses only the recording: if the guide was following
+  // it, the guide carries on at the reading speed by itself.
+  const listen = () => {
+    if (listening || preparing) {
+      startToken.current++
+      setPreparing(false)
+      pauseAudio()
+      // Once it has stopped (the player says so a moment later).
+      if (listening && following) guideTakesOver.current = true
+      return
+    }
+    pause()
+    void playFrom(index)
+  }
+  // Tapping a word moves there, as when reading; while the guide follows the
+  // recording, the recording comes along. Syncing a word to the recording is
+  // done in the Sync sheet, where that's all a tap does.
+  const tapWord = (i: number) => seek(i)
+  // Syncing by hand (SyncPanel): the recording is held at a moment, or plays
+  // while the book stays still, until the word being said there is tapped.
+  const syncing = useRef(false)
+  useEffect(() => {
+    syncing.current = panel === 'sync'
+  }, [panel])
+  /** Where the recording is held while paused for syncing, in seconds. */
+  const [held, setHeld] = useState(0)
+  const openSync = () => {
+    if (!audio) return
+    startToken.current++
+    setPreparing(false)
+    // From where it's playing, or else where the book says the word being read is.
+    setHeld(listening ? currentTime() : timeAt(points, index, letters))
+    pauseAudio()
+    openPanel('sync')
+  }
+  const syncTime = () => (listening ? currentTime() : held)
+  /** The whole recording's length: its parts' when known, or the player's. */
+  const recordingLength = () => {
+    const parts = audio ? partsOf(audio.source) : []
+    return parts.length ? parts.reduce((sum, p) => sum + p.seconds, 0) : player.duration()
+  }
+  // Text pace: when the text runs ahead of the voice or falls behind, the
+  // narrator's pace is set a little slower or faster, from the word shown now.
+  const PACE_STEP = 1.06
+  const nudgePace = (faster: boolean) => {
+    if (!audio) return
+    const t = currentTime()
+    const pace = narratorPace(index) * (faster ? PACE_STEP : 1 / PACE_STEP)
+    onAudio(setPace(audio, pace, index, t))
+    followed.current = index
+  }
+  const syncSeek = (seconds: number) => {
+    const t = Math.max(0, seconds)
+    if (listening) {
+      settling.current = performance.now() + 800
+      playAudio(t)
+    } else setHeld(t)
+  }
+  const syncPlay = () => {
+    if (listening) {
+      setHeld(currentTime())
+      pauseAudio()
+    } else {
+      settling.current = performance.now() + 800
+      playAudio(held)
+    }
+  }
+  /** Word `i` is what's said now: pinned there, and listening carries on from it. */
+  const syncPick = (i: number) => {
+    if (!audio) return
+    const t = syncTime()
+    onAudio({ ...audio, points: addPoint(audio.points, i, t) })
+    followed.current = i
+    seek(i)
+    setNotice(null)
+    closePanel()
+    if (!listening) {
+      settling.current = performance.now() + 800
+      playAudio(t)
+    }
+  }
+  /** The whole second being heard, for the time shown while listening. */
+  const [heard, setHeard] = useState(0)
+  useEffect(() => {
+    if (!listening) return
+    const follow = () => {
+      const t = currentTime()
+      setHeard(Math.floor(t))
+      // Still moving to where it was asked to start: nothing new to follow yet.
+      if (performance.now() < settling.current || audioSeeking()) return
+      const k = fileAt(t)
+      void lineUp(k)
+      // Halfway through a chapter's file, line up the next one too.
+      const parts = latestAudio.current ? partsOf(latestAudio.current.source) : []
+      if (parts.length) {
+        const start = trackStarts(parts)[k]
+        if (t - start > (parts[k]?.seconds ?? Infinity) / 2) void lineUp(k + 1)
+      }
+      // Lining up by hand, or the guide paused: the text stays put.
+      if (syncing.current || !followingNow.current) return
+      // A touch ahead: the word shown should be the one being said, not the one just said.
+      const i = wordHeardAt(points, t + FOLLOW_LEAD_SECONDS, words.length, letters)
+      if (i === current.current) return
+      followed.current = i
+      seek(i)
+    }
+    const timer = window.setInterval(follow, 100)
+    return () => window.clearInterval(timer)
+  }, [listening, points, currentTime, words.length, seek, fileAt, lineUp, audioSeeking, letters])
+  // With a recording linked, line up the part for where the reader is, so
+  // pressing Listen can start straight away.
+  const sourceKey = audio ? sourceId(audio.source) : ''
+  useEffect(() => {
+    if (sourceKey) void prepare(current.current)
+  }, [sourceKey, prepare])
+  useEffect(() => {
+    if (panel === 'audio' && sourceKey) void prepare(current.current)
+  }, [panel, sourceKey, prepare])
+  // A jump while listening (the progress bar, a chapter, a page turn) takes the recording there too.
+  useEffect(() => {
+    if (!listening || !following || index === followed.current) return
+    void playFrom(index)
+    // Only the reader's position moving should re-seek, not new points arriving.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [index])
+  // While listening, the guide's play and pause are whether it follows the
+  // recording; the recording itself plays on (the audio button pauses that).
+  const togglePlayback = () => {
+    if (!listening) {
+      toggle()
+      return
+    }
+    if (following) {
+      setFollowing(false)
+      return
+    }
+    // Back to following: from the word being said now, not from where the text stopped.
+    followed.current = -1
+    setFollowing(true)
+  }
+  const guideMoving = playing || (listening && following)
+  /** The recording was paused while the guide followed it: the guide goes on by itself once it stops. */
+  const guideTakesOver = useRef(false)
+  useEffect(() => {
+    if (listening || !guideTakesOver.current) return
+    guideTakesOver.current = false
+    play()
+  }, [listening, play])
+  // The guide never runs on its own clock while it could follow the recording.
+  useEffect(() => {
+    if (playing && listening) {
+      pause()
+      setFollowing(true)
+    }
+  }, [playing, listening, pause])
+
   // Persist progress: whenever paused, and periodically while playing.
   const lastSaved = useRef(index)
   useEffect(() => {
-    if (!playing || Math.abs(index - lastSaved.current) >= 50) {
+    if (!(playing || listening) || Math.abs(index - lastSaved.current) >= 50) {
       lastSaved.current = index
       onProgress(index)
     }
-  }, [index, playing, onProgress])
+  }, [index, playing, listening, onProgress])
   const current = useRef(index)
   useEffect(() => {
     current.current = index
@@ -427,7 +835,7 @@ export function Reader({
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
         if (guided) pageNav.current?.nextLine?.()
-        else if (!holdToRead) toggle()
+        else if (!holdToRead) togglePlayback()
         else if (!e.repeat) startHold()
         break
       case 'ArrowLeft':
@@ -600,6 +1008,15 @@ export function Reader({
         </div>
 
         <div className="top-actions">
+          <button
+            type="button"
+            className={`icon-button${audio ? ' is-marked' : ''}`}
+            onClick={() => openPanel('audio')}
+            title="Listen to an audiobook"
+            aria-label={audio ? 'Listen (an audiobook is linked)' : 'Listen'}
+          >
+            <Icon name="headphones" size={21} />
+          </button>
           <button type="button" className="icon-button" onClick={() => openPanel('search')} title="Search (/)" aria-label="Search">
             <Icon name="search" size={21} />
           </button>
@@ -677,7 +1094,7 @@ export function Reader({
               focusLines={settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' || guided ? 1 : 0}
               onSeek={seek}
               onSelectWord={selectWord}
-              onToggle={holdToRead || guided ? noop : toggle}
+              onToggle={holdToRead || guided ? noop : togglePlayback}
               guide={guided}
               onPage={onPage}
               navRef={pageNav}
@@ -737,6 +1154,41 @@ export function Reader({
             <Icon name="chevronLeft" size={16} />
             <span>Back to {describePosition(jumpedFrom)}</span>
           </button>
+        )}
+        {audio && (
+          <div className="listen-bar">
+            <button
+              type="button"
+              className="text-button"
+              onClick={listen}
+              aria-label={listening ? 'Pause audiobook' : preparing ? 'Stop lining up' : 'Listen from here'}
+            >
+              <Icon name={listening ? 'pause' : 'headphones'} size={16} />
+              {listening ? 'Listening' : preparing ? `Lining up…${progress !== null && progress < 1 ? ` ${Math.round(progress * 100)}%` : ''}` : 'Listen'}
+            </button>
+            <span className="muted listen-time">
+              {formatTime(listening ? heard : timeAt(points, index, letters))}
+              {speed !== 1 && ` · ${speed}×`}
+              {lining > 0 && !preparing && ' · lining up'}
+            </span>
+            <button type="button" className="text-button listen-sync" onClick={openSync} aria-label="Sync text and audio">
+              Sync
+            </button>
+            {listening && (
+              <span className="listen-pace" role="group" aria-label="Text pace">
+                <span className="muted">Text</span>
+                <button type="button" className="icon-button" onClick={() => nudgePace(false)} aria-label="Text slower" title="The text is ahead of the voice">
+                  <Icon name="minus" size={16} />
+                </button>
+                <button type="button" className="icon-button" onClick={() => nudgePace(true)} aria-label="Text faster" title="The text is behind the voice">
+                  <Icon name="plus" size={16} />
+                </button>
+              </span>
+            )}
+            {listening && (notice || !following) && (
+              <span className="muted listen-hint">{notice ?? 'Text paused while the recording plays. Press play to follow it again.'}</span>
+            )}
+          </div>
         )}
         <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
 
@@ -824,8 +1276,14 @@ export function Reader({
                 Hold to read
               </button>
             ) : (
-              <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
-                <Icon name={playing ? 'pause' : 'play'} size={22} />
+              <button
+                type="button"
+                className="play-button"
+                onClick={togglePlayback}
+                aria-label={guideMoving ? 'Pause' : 'Play'}
+                title="Play / pause (Space)"
+              >
+                <Icon name={guideMoving ? 'pause' : 'play'} size={22} />
               </button>
             )}
             <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
@@ -865,6 +1323,49 @@ export function Reader({
             closePanel()
           }}
           onRemove={(i) => onBookmarks(bookmarks.filter((b) => b.index !== i))}
+          onClose={closePanel}
+        />
+      )}
+
+      {audio?.source.kind === 'youtube' && <div ref={audioHost} className="audio-video" />}
+
+      {panel === 'audio' && (
+        <AudioPanel
+          title={book.title}
+          author={book.author ?? authorFromTitle(book.title)}
+          wordCount={words.length}
+          chapters={chapters}
+          link={audio}
+          startsAt={timeAt(points, index, letters)}
+          transcriptMatches={transcript.length}
+          speed={speedFor(wpm, narratorPace(index))}
+          listening={listening}
+          preparing={preparing}
+          lining={lining > 0}
+          error={player.error}
+          closing={closing}
+          onLink={onAudio}
+          onListen={listen}
+          onSync={openSync}
+          onClose={closePanel}
+        />
+      )}
+
+      {panel === 'sync' && audio && (
+        <SyncPanel
+          words={words}
+          paragraphEnds={book.paragraphEnds}
+          bookSearch={bookSearch}
+          time={listening ? heard : held}
+          duration={recordingLength()}
+          wordAt={(t) => wordHeardAt(points, t, words.length, letters)}
+          timeAt={(i) => timeAt(points, i, letters)}
+          chapterAt={(i) => (chapters.length > 1 ? chapterTitleAt(i) : '')}
+          playing={listening}
+          closing={closing}
+          onSeek={syncSeek}
+          onTogglePlay={syncPlay}
+          onPick={syncPick}
           onClose={closePanel}
         />
       )}
@@ -966,6 +1467,9 @@ function Glance({ words, index, headings }: { words: string[]; index: number; he
 
 const noop = () => {}
 
+/** Follow the narrator this far ahead (seconds of recording): the book was measured to trail by about this much. */
+const FOLLOW_LEAD_SECONDS = 0.3
+
 /** Report reading while playing: every 30s, on pause, and when the reader closes. */
 const STATS_FLUSH_MS = 30_000
 
@@ -1052,4 +1556,12 @@ function useIdle(active: boolean, ms: number): boolean {
     }
   }, [active, ms])
   return idle
+}
+
+/** What identifies a recording, to tell whether it's still the one linked. */
+function sourceId(source: AudioSource): string {
+  if (source.kind === 'youtube') return `yt:${source.videoId}`
+  if (source.kind === 'archive') return `ia:${source.identifier}`
+  if (source.kind === 'url') return `url:${source.url}`
+  return `file:${source.name}`
 }

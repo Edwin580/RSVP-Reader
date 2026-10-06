@@ -1,5 +1,6 @@
 import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval'
 import { storageName } from './preview'
+import type { AudioLink } from './audio'
 import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
 import type { Book, BookMeta, Bookmark, Progress } from './types'
@@ -15,6 +16,10 @@ const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
 const progressKey = (id: string) => `progress:${id}`
 const bookmarksKey = (id: string) => `bookmarks:${id}`
+const audioKey = (id: string) => `audio:${id}`
+/** An audiobook file from the device. Kept out of backups, which are JSON and can't hold it. */
+const AUDIO_FILE_PREFIX = 'audiofile:'
+const audioFileKey = (id: string) => `${AUDIO_FILE_PREFIX}${id}`
 
 export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
@@ -58,6 +63,8 @@ export async function deleteBook(id: string): Promise<void> {
   await del(bookKey(id), store)
   await del(progressKey(id), store)
   await del(bookmarksKey(id), store)
+  await del(audioKey(id), store)
+  await del(audioFileKey(id), store)
 }
 
 export function loadProgress(id: string): Promise<Progress | undefined> {
@@ -76,10 +83,33 @@ export function saveBookmarks(id: string, bookmarks: Bookmark[]): Promise<void> 
   return set(bookmarksKey(id), bookmarks, store)
 }
 
-/** Every stored entry, for backups. */
+/** The audiobook linked to a book, if any. */
+export async function loadAudio(id: string): Promise<AudioLink | null> {
+  return (await get<AudioLink>(audioKey(id), store)) ?? null
+}
+
+export function loadAudioFile(id: string): Promise<Blob | undefined> {
+  return get<Blob>(audioFileKey(id), store)
+}
+
+/** Link (or with null, unlink) an audiobook. A file from the device is stored with it; a link to one drops it. */
+export async function saveAudio(id: string, link: AudioLink | null, file?: Blob): Promise<void> {
+  if (!link) {
+    await del(audioKey(id), store)
+    await del(audioFileKey(id), store)
+    return
+  }
+  if (file) await set(audioFileKey(id), file, store)
+  else if (link.source.kind !== 'file') await del(audioFileKey(id), store)
+  await set(audioKey(id), link, store)
+}
+
+/** Every stored entry, for backups (audiobook files aside). */
 export async function allEntries(): Promise<[string, unknown][]> {
   const all = await entries<IDBValidKey, unknown>(store)
-  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string')
+  return all.filter(
+    (e): e is [string, unknown] => typeof e[0] === 'string' && !e[0].startsWith(AUDIO_FILE_PREFIX),
+  )
 }
 
 export function writeEntries(writes: [string, unknown][]): Promise<void> {

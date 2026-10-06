@@ -27,6 +27,8 @@ interface Props {
   /** Line focus: how many lines stay clear around the current one (0 = off); the rest black out. */
   focusLines?: number
   onSeek: (index: number) => void
+  /** A tap on a word; jumps there (onSeek) unless given. */
+  onTapWord?: (index: number) => void
   /** Double-tap on a word: select it, for the system's Look Up, Copy and so on. */
   onSelectWord?: (index: number) => void
   onToggle: () => void
@@ -88,6 +90,7 @@ export function PageView({
   durationOf,
   focusLines = 0,
   onSeek,
+  onTapWord = onSeek,
   onSelectWord,
   onToggle,
   onPage,
@@ -515,7 +518,7 @@ export function PageView({
         if (before && before.i === i && now - before.at < DOUBLE_TAP_MS && onSelectWord) {
           lastClick.current = null
           onSelectWord(i)
-        } else if (!guide) onSeek(i) // The guide has already moved to the line on the press.
+        } else if (!guide) onTapWord(i) // The guide has already moved to the line on the press.
       }}
     >
       <div

@@ -1,6 +1,7 @@
+import { writeFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 import JSZip from 'jszip'
-import { upload } from './helpers.ts'
+import { chapterTwo, clock, LISTEN_BOOK, longAudiobook, mockArchive, SECOND, upload } from './helpers.ts'
 
 /*
  * Bugs that were fixed and must stay fixed. Each test names the bug as it
@@ -294,6 +295,185 @@ test('a PDF keeps just its text, without its running header and page numbers (#5
   })`)) as { words: string[]; chapters: unknown[] }
   expect(book.chapters.length).toBeGreaterThan(3)
   expect(book.words).toEqual(paragraphs.join(' ').split(' '))
+})
+
+test('pressing Listen in the middle of a chapter plays from the sentence being read (#56)', async ({ page }) => {
+  // On a slow connection, the recording used to start from a guess straight
+  // away, the book jumped to the chapter's start while the file loaded, and
+  // then the recording moved to wherever the book had got to.
+  const archive = await mockArchive(page, { delay: 1500 })
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  // Partway into chapter 2, which hasn't been lined up yet.
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.locator('.context [data-i]', { hasText: /^Lanterns\s*$/ }).click()
+  await expect(page.locator('.word')).toHaveText('Lanterns')
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+
+  // It lines the chapter up first, keeping the reader's place…
+  await expect(page.getByRole('button', { name: 'Stop lining up' })).toBeVisible()
+  await expect(page.locator('.word')).toHaveText('Lanterns')
+  // …then plays from exactly where that sentence is read.
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[SECOND.findIndex((s) => s.startsWith('Lanterns'))])}`))
+  await expect(page.locator('.word')).toHaveText('Lanterns')
+  // The chapter downloaded for lining up is the one played: it isn't downloaded twice.
+  expect(archive.downloads.filter((name) => name === 'story_02_64kb.mp3')).toHaveLength(1)
+})
+
+test('an excerpt of a chapter, like the demo’s, lines up with the full recording of it (#56)', async ({ page }) => {
+  // The book has only the first four sentences of chapter 2; the recording
+  // reads all nine. Assuming it read only the excerpt made the narrator
+  // impossibly slow, and listening started minutes away from the text.
+  await mockArchive(page)
+  const excerpt = ['Chapter 1', '', 'The rabbit ran across the field. Alice followed it to a hole under the hedge.', '', 'Chapter 2', '', SECOND.slice(0, 4).join(' ')].join('\n')
+  await page.goto('./')
+  await upload(page, 'story.txt', excerpt)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.locator('.context [data-i]', { hasText: /^Marmalade\s*$/ }).click()
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  await expect(page.locator('.listen-time')).toHaveText(new RegExp(`^${clock(20 + chapterTwo.starts[2])}`))
+  await expect(page.locator('.word')).toHaveText('Marmalade')
+})
+
+test('a whole audiobook file of one’s own lines up wherever the reader is, however long it is (#56)', async ({ page }, testInfo) => {
+  // A file over 60 MB (any audiobook of a few hours) was too big to line up,
+  // so listening started from a guess, minutes away from the text.
+  test.setTimeout(120000)
+  const book = longAudiobook(33)
+  // Far into the file: in its third ten-minute part, so the ones before it are lined up first.
+  const target = book.sentences.findIndex((s) => s.start > 20 * 60)
+  const marked = book.text.replace(book.sentences[target].text, `Xylophone ${book.sentences[target].text}`)
+  const file = testInfo.outputPath('audiobook.wav')
+  writeFileSync(file, book.audio)
+  await page.route('https://archive.org/**', (route) => route.fulfill({ json: { response: { docs: [] } } }))
+  // Where playback is sent to start, as the player seeks there (the time shown moves on as it plays).
+  await page.addInitScript(`
+    window.seeks = []
+    const play = HTMLMediaElement.prototype.play
+    HTMLMediaElement.prototype.play = function () {
+      if (!this.dataset.watched) {
+        this.dataset.watched = '1'
+        this.addEventListener('seeked', () => window.seeks.push(this.currentTime))
+      }
+      return play.call(this)
+    }
+  `)
+  await page.goto('./')
+  await upload(page, 'long.txt', marked)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.locator('.audio-file input').setInputFiles(file)
+  await expect(page.locator('.audio-source-name')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await page.getByLabel('Search text').fill('Xylophone')
+  await page.locator('.search-results button').first().click()
+  await expect(page.locator('.word')).toHaveText('Xylophone')
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 90000 })
+  // It starts where the sentence is read (the made-up narrator doesn't say the marker word), not from a guess.
+  const start = book.sentences[target].start
+  const seeked = await page.evaluate(() => (globalThis as unknown as { seeks: number[] }).seeks.at(-1))
+  expect(Math.abs(seeked! - start)).toBeLessThan(1)
+})
+
+test('finding a recording leaves out other books of a similar name and flags a dramatization (#56)', async ({ page }) => {
+  // For "Rebecca", the Archive offered "Rebecca of Sunnybrook Farm" (another
+  // book) and an 84-minute radio play, neither of which can follow the text.
+  await page.route('https://archive.org/advancedsearch.php**', (route) =>
+    route.fulfill({
+      json: {
+        response: {
+          docs: [
+            { identifier: 'sunnybrook', title: 'Rebecca of Sunnybrook Farm', creator: 'Kate Douglas Wiggin' },
+            { identifier: 'rebecca_radio', title: 'Rebecca', creator: 'Daphne du Maurier' },
+          ],
+        },
+      },
+    }),
+  )
+  await page.route('https://archive.org/metadata/rebecca_radio', (route) =>
+    route.fulfill({ json: { files: [{ name: 'rebecca.mp3', format: 'VBR MP3', title: 'Rebecca', length: '84:00' }] } }),
+  )
+  // A full-length novel: far longer than 84 minutes to read aloud.
+  const sentence = 'Last night I dreamt I went to Manderley again, and the drive wound away in front of me.'
+  const text = ['Chapter 1', '', Array.from({ length: 1400 }, () => sentence).join(' ')].join('\n')
+  await page.goto('./')
+  await upload(page, 'Rebecca by Daphne du Maurier.txt', text)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  const result = page.locator('.audio-results li')
+  await expect(result).toHaveCount(1)
+  await expect(result).toContainText('Daphne du Maurier')
+  await expect(result).toContainText('abridged or dramatized')
+  await expect(page.getByText('Rebecca of Sunnybrook Farm')).toHaveCount(0)
+})
+
+test('while listening, the guide’s pause stops only the text and the audio button stops only the recording (#56)', async ({ page }) => {
+  // Both used to stop both, so there was no way to hold the text still while
+  // the recording played on, or to read on while the recording was paused.
+  await mockArchive(page)
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByRole('button', { name: /Story A\. Writer · LibriVox/ }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.search-backdrop')).toBeHidden()
+  await page.getByLabel('Jump to chapter').selectOption({ label: 'Chapter 2' })
+  await page.getByRole('button', { name: 'Listen from here', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible({ timeout: 15000 })
+  const word = () => page.locator('.word').textContent()
+  const time = () => page.locator('.listen-time').textContent()
+
+  // The guide's pause: the text holds still, the recording plays on.
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  const held = await word()
+  const at = await time()
+  await expect.poll(time, { timeout: 5000 }).not.toBe(at)
+  expect(await word()).toBe(held)
+  await expect(page.getByRole('button', { name: 'Pause audiobook' })).toBeVisible()
+
+  // Play again: the text catches up with the recording and follows it.
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect.poll(word, { timeout: 5000 }).not.toBe(held)
+
+  // The audio button: the recording stops, and the text reads on by itself.
+  await page.getByRole('button', { name: 'Pause audiobook' }).click()
+  await expect(page.getByRole('button', { name: 'Listen from here', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeVisible()
+  const reading = await word()
+  await expect.poll(word, { timeout: 5000 }).not.toBe(reading)
+})
+
+test('a linked YouTube video’s hidden player is clipped away, not just transparent (#56)', async ({ page }) => {
+  // On iPhones video is drawn on a layer of its own that ignores opacity, so
+  // the invisible player's dark gradients showed through as a shadow.
+  await mockArchive(page)
+  await page.route('https://www.youtube.com/**', (route) => route.abort())
+  await page.goto('./')
+  await upload(page, 'story.txt', LISTEN_BOOK)
+  await page.getByRole('button', { name: 'Listen', exact: true }).click()
+  await page.getByLabel('Audiobook link').fill('https://youtu.be/dQw4w9WgXcQ')
+  await page.getByRole('button', { name: 'Add', exact: true }).click()
+  await page.keyboard.press('Escape')
+  const host = page.locator('.audio-video')
+  await expect(host).toHaveCount(1)
+  // Still the size YouTube needs to play, but nothing of it can be drawn.
+  await expect(host).toHaveCSS('width', '200px')
+  await expect(host).toHaveCSS('clip-path', 'inset(50%)')
+  await expect(host).toHaveCSS('overflow', 'hidden')
 })
 
 test('on a phone, bottom sheets cast no shadow below them (#61)', async ({ page }, testInfo) => {

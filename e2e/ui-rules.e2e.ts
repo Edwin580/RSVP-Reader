@@ -23,6 +23,32 @@ const POPUPS: { name: string; open: (page: Page) => Promise<unknown>; dialog: st
   { name: 'Bookmarks', open: (page) => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), dialog: '[role=dialog][aria-label="Bookmarks"]' },
   { name: 'Search', open: (page) => page.getByRole('button', { name: 'Search', exact: true }).click(), dialog: '[role=dialog][aria-label="Search in book"]' },
   { name: 'Read for', open: (page) => page.locator('.session-open').click(), dialog: '.session-menu' },
+  {
+    name: 'Listen',
+    open: async (page) => {
+      // No recordings found, so the sheet shows its search and its "add your own" form.
+      await page.route('https://archive.org/**', (route) => route.fulfill({ json: { response: { docs: [] } } }))
+      await page.getByRole('button', { name: /^Listen( \(an audiobook is linked\))?$/ }).first().click()
+    },
+    dialog: '[role=dialog][aria-label="Listen"]',
+  },
+  {
+    name: 'Sync',
+    open: async (page) => {
+      // Sync needs a recording linked: a link to an audio file will do.
+      if (!(await page.getByRole('button', { name: 'Sync text and audio' }).count())) {
+        await page.route('https://archive.org/**', (route) => route.fulfill({ json: { response: { docs: [] } } }))
+        await page.route('https://example.com/**', (route) => route.abort())
+        await page.getByRole('button', { name: 'Listen', exact: true }).first().click()
+        await page.getByLabel('Audiobook link').fill('https://example.com/book.mp3')
+        await page.getByRole('button', { name: 'Add', exact: true }).click()
+        await page.keyboard.press('Escape')
+        await expect(page.locator('[role=dialog][aria-label="Listen"]')).toBeHidden()
+      }
+      await page.getByRole('button', { name: 'Sync text and audio' }).click()
+    },
+    dialog: '[role=dialog][aria-label="Sync"]',
+  },
 ]
 
 /** Problems with the screen as it is now: anything wider than it, small targets, zooming fields. */

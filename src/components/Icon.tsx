@@ -14,9 +14,12 @@ const PATHS = {
   trash: 'M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12',
   upload: 'M12 16V4m-5 5 5-5 5 5M5 20h14',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
   clock: 'M12 7.5V12l3 2M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17Z',
   bookmark: 'M7 4.5h10v15l-5-3.8-5 3.8z',
   bookmarkFilled: 'M7 4.5h10v15l-5-3.8-5 3.8z',
+  headphones: 'M4.5 15.5V12a7.5 7.5 0 0 1 15 0v3.5M4.5 15a2 2 0 0 1 2-2h1v6.5h-1a2 2 0 0 1-2-2zM19.5 15a2 2 0 0 0-2-2h-1v6.5h1a2 2 0 0 0 2-2z',
+  sync: 'M12 4v3M12 17v3M4 12h3M17 12h3M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
 } as const
 
 export type IconName = keyof typeof PATHS

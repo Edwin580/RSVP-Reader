@@ -74,7 +74,9 @@ function extractParagraphs(root: Element): { paragraphs: string[]; headings: num
   return { paragraphs, headings }
 }
 
-export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; sections: Section[]; cover?: string }> {
+export async function parseEpub(
+  data: ArrayBuffer,
+): Promise<{ title?: string; author?: string; sections: Section[]; cover?: string }> {
   const zip = await JSZip.loadAsync(data)
   const read = async (path: string) => {
     const file = zip.file(path)
@@ -88,6 +90,7 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
   const opf = parseXml(await read(opfPath), 'application/xml')
 
   const title = opf.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() || undefined
+  const author = opf.getElementsByTagNameNS('*', 'creator')[0]?.textContent?.trim() || undefined
 
   const manifest = new Map<string, ManifestItem>()
   for (const item of Array.from(opf.getElementsByTagNameNS('*', 'item'))) {
@@ -120,7 +123,7 @@ export async function parseEpub(data: ArrayBuffer): Promise<{ title?: string; se
   }
 
   if (sections.length === 0) throw new Error('There’s no readable text in this EPUB.')
-  return { title, sections, cover: await epubCover(zip, opf, opfPath, manifest) }
+  return { title, author, sections, cover: await epubCover(zip, opf, opfPath, manifest) }
 }
 
 async function epubCover(zip: JSZip, opf: Document, opfPath: string, manifest: Map<string, ManifestItem>) {

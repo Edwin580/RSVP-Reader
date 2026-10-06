@@ -1,0 +1,427 @@
+import { useEffect, useRef, useState } from 'react'
+import {
+  formatTime,
+  matchChapters,
+  parseTimestamps,
+  sourceFromLink,
+  trackStarts,
+  youTubeSearch,
+  type AudioLink,
+  type AudioSource,
+} from '../lib/audio'
+import { loadRecording, sameBook, searchRecordings, seemsAbridged, type Recording } from '../lib/archive'
+import type { Chapter } from '../lib/types'
+import { useSheetDrag } from '../hooks/useSheetDrag'
+import { Icon } from './Icon'
+
+interface Props {
+  title: string
+  author?: string
+  /** The book's length, to tell a full recording from an abridged one. */
+  wordCount: number
+  chapters: Chapter[]
+  link: AudioLink | null
+  /** Where the recording would start for the word being read, in seconds. */
+  startsAt: number
+  /** How many spots a pasted transcript was matched to the book at. */
+  transcriptMatches: number
+  /** The playback speed that matches the reading speed. */
+  speed: number
+  listening: boolean
+  /** Lining up before playing. */
+  preparing: boolean
+  /** A file of the recording is being lined up with the book from its sound. */
+  lining: boolean
+  error: string | null
+  /** Animating out; the reader unmounts it shortly after. */
+  closing?: boolean
+  onLink: (link: AudioLink | null, file?: File) => void
+  onListen: () => void
+  /** Open syncing by hand (SyncPanel). */
+  onSync: () => void
+  onClose: () => void
+}
+
+type Search = { state: 'searching' } | { state: 'done'; results: Recording[] } | { state: 'failed'; message: string }
+
+/**
+ * Find an audiobook of the book (the Internet Archive is searched straight
+ * away), or add a video or file, and line it up with a transcript or
+ * chapter times.
+ */
+export function AudioPanel(props: Props) {
+  const { title, author, wordCount, chapters, link, startsAt, transcriptMatches, speed, listening, preparing, lining, error, closing, onLink, onListen, onSync, onClose } = props
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      onClose()
+    }
+    window.addEventListener('keydown', esc, { capture: true })
+    return () => window.removeEventListener('keydown', esc, { capture: true })
+  }, [onClose])
+  const close = useRef<HTMLButtonElement>(null)
+  useEffect(() => close.current?.focus(), [])
+  // On phones it's a bottom sheet: pull it down to put it away.
+  const sheet = useRef<HTMLElement>(null)
+  const body = useRef<HTMLDivElement>(null)
+  useSheetDrag(sheet, onClose)
+
+  const [timestamps, setTimestamps] = useState(link?.timestamps ?? '')
+  // Saved a moment after typing stops (or pasting), once there's a recording to go with.
+  useEffect(() => {
+    if (!link || timestamps === link.timestamps) return
+    const timer = window.setTimeout(() => onLink({ ...link, timestamps }), 400)
+    return () => window.clearTimeout(timer)
+  }, [timestamps, link, onLink])
+
+  const use = (source: AudioSource, file?: File) => onLink({ source, timestamps, points: [], matchSpeed: true }, file)
+
+  return (
+    <div className={`search-backdrop is-sheet${closing ? ' is-closing' : ''}`} onClick={onClose}>
+      <aside ref={sheet} className="search-panel audio-panel" role="dialog" aria-label="Listen" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" aria-hidden="true" />
+        <div className="panel-bar">
+          <h2 className="panel-title">Listen</h2>
+          <button type="button" className="icon-button" ref={close} onClick={onClose} aria-label="Close listen">
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+
+        <div className="search-body" ref={body}>
+          {link ? (
+            <Linked
+              link={link}
+              wordCount={wordCount}
+              chapters={chapters}
+              startsAt={startsAt}
+              speed={speed}
+              listening={listening}
+              preparing={preparing}
+              lining={lining}
+              error={error}
+              onLink={onLink}
+              onListen={onListen}
+              onSync={onSync}
+            />
+          ) : (
+            <Find title={title} author={author} wordCount={wordCount} onUse={use} />
+          )}
+
+          {/* A recording lines itself up from its sound; a video can't, so it's for videos (or what was pasted before). */}
+          {(!link || link.source.kind === 'youtube' || timestamps.trim() !== '') && (
+            <>
+              <h3 className="search-section">
+                Transcript or chapter times <span className="muted">(optional)</span>
+              </h3>
+              <p className="search-hint">
+                Paste a video’s transcript and the book follows the narrator word for word. YouTube’s app doesn’t let you
+                copy it, so open the video on a computer, click <em>Show transcript</em> under the description, and copy it
+                all. A chapter list (<em>0:00 Chapter 1</em>) works too. Without either, use Sync while listening to line it up by hand.
+              </p>
+              <textarea
+                className="audio-times"
+                rows={4}
+                placeholder={'0:00\nChapter one. Down the rabbit hole.\n0:06\nAlice was beginning to get very tired…'}
+                value={timestamps}
+                onChange={(e) => setTimestamps(e.target.value)}
+                aria-label="Transcript or chapter times"
+                spellCheck={false}
+              />
+              <SyncStatus timestamps={timestamps} chapters={chapters} transcriptMatches={transcriptMatches} linked={!!link} />
+            </>
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+/** Recordings of the book on the Internet Archive, and other ways to add one. */
+/** "8 h 21 min", "52 min". */
+function duration(seconds: number): string {
+  const minutes = Math.round(seconds / 60)
+  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`
+}
+
+function Find({
+  title,
+  author,
+  wordCount,
+  onUse,
+}: {
+  title: string
+  author?: string
+  wordCount: number
+  onUse: (source: AudioSource, file?: File) => void
+}) {
+  const [search, setSearch] = useState<Search>({ state: 'searching' })
+  const [loading, setLoading] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [pasted, setPasted] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
+
+  // Each recording's files, fetched alongside the list, to show how long it is and open it straight away.
+  const [details, setDetails] = useState<Record<string, AudioSource | 'failed'>>({})
+  useEffect(() => {
+    let live = true
+    searchRecordings(title, author).then(
+      (found) => {
+        if (!live) return
+        // Only recordings of this book: a similar title isn't enough.
+        const results = found.filter((r) => sameBook(r, title, author)).slice(0, 5)
+        setSearch({ state: 'done', results })
+        for (const r of results) {
+          loadRecording(r).then(
+            (source) => live && setDetails((d) => ({ ...d, [r.identifier]: source })),
+            () => live && setDetails((d) => ({ ...d, [r.identifier]: 'failed' })),
+          )
+        }
+      },
+      () => live && setSearch({ state: 'failed', message: 'The Internet Archive couldn’t be reached. Check your connection.' }),
+    )
+    return () => {
+      live = false
+    }
+  }, [title, author])
+
+  const choose = async (recording: Recording) => {
+    setLoading(recording.identifier)
+    setLoadError(null)
+    try {
+      const known = details[recording.identifier]
+      onUse(known && known !== 'failed' ? known : await loadRecording(recording))
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : String(e))
+      setLoading(null)
+    }
+  }
+
+  const addPasted = () => {
+    const source = sourceFromLink(pasted)
+    if (!source) {
+      setPasteError('That doesn’t look like a link. Paste a YouTube video or an audio file’s address.')
+      return
+    }
+    setPasteError(null)
+    onUse(source)
+  }
+
+  return (
+    <>
+      <h3 className="search-section">Recordings of this book</h3>
+      {search.state === 'searching' && <p className="search-hint">Looking on the Internet Archive…</p>}
+      {search.state === 'failed' && <p className="search-hint audio-error">{search.message}</p>}
+      {search.state === 'done' && search.results.length === 0 && (
+        <p className="search-hint">
+          The Internet Archive has no recording of this book. LibriVox only records books out of copyright; for
+          others, add an audiobook file of your own below.
+        </p>
+      )}
+      {search.state === 'done' && search.results.length > 0 && (
+        <ol className="search-results audio-results">
+          {search.results.map((r) => {
+            const known = details[r.identifier]
+            const seconds = known && known !== 'failed' && known.kind === 'archive' ? known.tracks.reduce((sum, t) => sum + t.seconds, 0) : 0
+            const files = known && known !== 'failed' && known.kind === 'archive' ? known.tracks.length : 0
+            return (
+              <li key={r.identifier}>
+                <button type="button" onClick={() => choose(r)} disabled={loading !== null}>
+                  <span className="audio-result-title">{r.title || r.identifier}</span>
+                  <span className="muted small">
+                    {[r.creator, r.librivox ? 'LibriVox' : 'Internet Archive', seconds ? duration(seconds) : '', files > 1 ? `${files} parts` : '']
+                      .filter(Boolean)
+                      .join(' · ')}
+                    {loading === r.identifier && ' · Opening…'}
+                  </span>
+                  {seemsAbridged(seconds, wordCount) && (
+                    <span className="small audio-warning">Much shorter than the book: abridged or dramatized, so it can’t follow the text.</span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+      {loadError && <p className="search-hint audio-error" role="alert">{loadError}</p>}
+
+      <h3 className="search-section">Or add your own</h3>
+      <form
+        className="search-bar audio-link"
+        onSubmit={(e) => {
+          e.preventDefault()
+          addPasted()
+        }}
+      >
+        <input
+          type="url"
+          inputMode="url"
+          placeholder="Paste a YouTube or MP3 link"
+          value={pasted}
+          onChange={(e) => setPasted(e.target.value)}
+          aria-label="Audiobook link"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
+        <button type="submit" className="text-button" disabled={!pasted.trim()}>
+          Add
+        </button>
+      </form>
+      {pasteError && <p className="search-hint audio-error" role="alert">{pasteError}</p>}
+      <div className="audio-actions">
+        <a className="text-button audio-action" href={youTubeSearch(title)} target="_blank" rel="noreferrer">
+          Search YouTube
+        </a>
+        <label className="text-button audio-action audio-file">
+          Choose a file
+          <input
+            type="file"
+            accept="audio/*,.mp3,.m4a,.m4b,.ogg,.opus,.wav,.aac"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) onUse({ kind: 'file', name: file.name }, file)
+            }}
+          />
+        </label>
+      </div>
+      <p className="search-hint">Paste a video’s link above, or use an audiobook file from this device.</p>
+    </>
+  )
+}
+
+function Linked({
+  link,
+  wordCount,
+  chapters,
+  startsAt,
+  speed,
+  listening,
+  preparing,
+  lining,
+  error,
+  onLink,
+  onListen,
+  onSync,
+}: {
+  link: AudioLink
+  wordCount: number
+  chapters: Chapter[]
+  startsAt: number
+  speed: number
+  listening: boolean
+  preparing: boolean
+  lining: boolean
+  error: string | null
+  onLink: (link: AudioLink | null) => void
+  onListen: () => void
+  /** Open syncing by hand (SyncPanel). */
+  onSync: () => void
+}) {
+  const { source } = link
+  const tracksMatched =
+    source.kind === 'archive'
+      ? matchChapters(
+          trackStarts(source.tracks).map((seconds, k) => ({ seconds, label: source.tracks[k].title, text: '' })),
+          chapters,
+        ).length
+      : 0
+  const matchSpeed = link.matchSpeed !== false
+  const lined = Object.values(link.detected ?? {}).filter((points) => points.length > 0).length
+  return (
+    <>
+      <div className="audio-source">
+        <Icon name="headphones" size={18} />
+        <span className="audio-source-name">{describe(link)}</span>
+        <button type="button" className="text-button" onClick={() => onLink(null)}>
+          Remove
+        </button>
+      </div>
+      <p className="search-hint" aria-live="polite">
+        {source.kind === 'youtube'
+          ? 'A video can’t be lined up from its sound, so it starts at a guess. Sync it by hand, or paste its transcript below.'
+          : `The first time you listen to ${source.kind === 'archive' ? 'a chapter' : 'it'}, its sound is matched to the text, sentence by sentence.`}
+        {lining && ' Lining up now…'}
+        {!lining && lined > 0 && source.kind === 'archive' && ` ${lined} of ${source.tracks.length} lined up so far.`}
+        {!lining && lined > 0 && source.kind !== 'archive' && ' Lined up.'}
+        {source.kind === 'archive' && tracksMatched === 0 && ' Its tracks aren’t named after this book’s chapters, so each is found by its sound.'}
+      </p>
+      {source.kind === 'archive' && seemsAbridged(source.tracks.reduce((sum, t) => sum + t.seconds, 0), wordCount) && (
+        <p className="search-hint audio-warning">
+          This recording is much shorter than the book: it’s abridged or dramatized, so it can’t follow the text. Look
+          for an unabridged one.
+        </p>
+      )}
+      <button type="button" className="demo-button audio-listen" onClick={onListen}>
+        <Icon name={listening ? 'pause' : 'play'} size={16} />
+        {listening ? 'Pause' : preparing ? 'Lining up… (tap to stop)' : `Listen from here · ${formatTime(startsAt)}`}
+      </button>
+      {error && <p className="search-hint audio-error" role="alert">{error}</p>}
+      <div className="setting setting-stack audio-speed">
+        <span className="setting-name">Speed</span>
+        <div className="segmented" role="radiogroup" aria-label="Playback speed">
+          <button type="button" role="radio" aria-checked={!matchSpeed} onClick={() => onLink({ ...link, matchSpeed: false })}>
+            As recorded
+          </button>
+          <button type="button" role="radio" aria-checked={matchSpeed} onClick={() => onLink({ ...link, matchSpeed: true })}>
+            Your speed{matchSpeed && speed !== 1 ? ` (${speed}×)` : ''}
+          </button>
+        </div>
+      </div>
+      <p className="search-hint">
+        The book follows the narrator. If it drifts, sync it by hand.
+        {link.points.length > 0 && ` ${link.points.length} ${link.points.length === 1 ? 'word' : 'words'} synced so far.`}
+      </p>
+      <div className="audio-actions">
+        <button type="button" className="text-button audio-action" onClick={onSync}>
+          Sync by hand
+        </button>
+        {link.points.length > 0 && (
+          <button type="button" className="text-button audio-action" onClick={() => onLink({ ...link, points: [], pace: undefined })}>
+            Clear synced words
+          </button>
+        )}
+      </div>
+    </>
+  )
+}
+
+function SyncStatus({
+  timestamps,
+  chapters,
+  transcriptMatches,
+  linked,
+}: {
+  timestamps: string
+  chapters: Chapter[]
+  transcriptMatches: number
+  linked: boolean
+}) {
+  const stamps = parseTimestamps(timestamps)
+  if (stamps.length === 0) return null
+  // The reader matches what's saved; until then (or before there's a recording) only the chapter count is known.
+  const saved = linked && transcriptMatches > 0
+  const matched = matchChapters(stamps, chapters).length
+  return (
+    <p className="search-hint" aria-live="polite">
+      {saved
+        ? `Transcript matched to the book at ${transcriptMatches} ${transcriptMatches === 1 ? 'spot' : 'spots'}.`
+        : matched > 0
+          ? `Matched ${matched} of ${stamps.length} times to chapters.`
+          : `${stamps.length} times found.`}
+    </p>
+  )
+}
+
+function describe(link: AudioLink): string {
+  const { source } = link
+  if (source.kind === 'youtube') return 'YouTube video'
+  if (source.kind === 'file') return source.name
+  if (source.kind === 'archive') return source.title || source.identifier
+  try {
+    const url = new URL(source.url)
+    return decodeURIComponent(url.pathname.split('/').pop() || url.hostname)
+  } catch {
+    return source.url
+  }
+}

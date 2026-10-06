@@ -1,6 +1,7 @@
 import type { AssembleRequest } from '../assemble'
 import { assembleInBackground } from '../parseClient'
 import type { Book } from '../types'
+import { gutenbergAuthor } from '../archive'
 
 export const ACCEPTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
 
@@ -28,11 +29,13 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
   // heavy work of splitting it into words happens in a background worker.
   let request: AssembleRequest
   let cover: string | undefined
+  let author: string | undefined
   switch (ext) {
     case '.epub': {
       const { parseEpub } = await import('./epub')
       const parsed = await parseEpub(data)
       cover = parsed.cover
+      author = parsed.author
       request = { kind: 'sections', id, title: parsed.title || fallbackTitle, sections: parsed.sections }
       break
     }
@@ -40,6 +43,7 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
       const { parsePdf } = await import('./pdf')
       const parsed = await parsePdf(data, onProgress)
       cover = parsed.cover
+      author = parsed.author
       request = { kind: 'sections', id, title: parsed.title || fallbackTitle, sections: parsed.sections }
       break
     }
@@ -47,6 +51,8 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
     case '.md':
     case '.markdown':
       request = { kind: ext === '.txt' ? 'text' : 'markdown', id, title: fallbackTitle, data }
+      // Project Gutenberg texts open with "Author: …".
+      author = gutenbergAuthor(new TextDecoder().decode(data.slice(0, 4000)))
       break
     default:
       throw new Error('Chapter reads EPUB, PDF, TXT and Markdown files.')
@@ -54,5 +60,5 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
 
   const book = await assembleInBackground(request)
   if (book.words.length === 0) throw new Error('There’s no readable text in it.')
-  return cover ? { ...book, cover } : book
+  return { ...book, ...(cover && { cover }), ...(author && { author }) }
 }

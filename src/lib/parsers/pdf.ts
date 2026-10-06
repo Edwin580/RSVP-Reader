@@ -44,7 +44,7 @@ function joinLines(lines: string[]): string {
 export async function parsePdf(
   data: ArrayBuffer,
   onProgress?: (fraction: number) => void,
-): Promise<{ title?: string; sections: Section[]; cover?: string }> {
+): Promise<{ title?: string; author?: string; sections: Section[]; cover?: string }> {
   // pdf.js takes over the buffer it's given, so the copy for a second
   // worker has to be made first (see SECOND_WORKER_MIN_PAGES).
   const copy =
@@ -57,7 +57,7 @@ export async function parsePdf(
   secondReader?.catch(() => {})
   try {
     const meta = await doc.getMetadata().catch(() => null)
-    const info = meta?.info as { Title?: string } | undefined
+    const info = meta?.info as { Title?: string; Author?: string } | undefined
 
     const lines = await readPages(doc.numPages, pageReader(doc), secondReader, onProgress)
     // Without the running headers, footers and page numbers.
@@ -70,7 +70,7 @@ export async function parsePdf(
     }
     const outline = await outlineChapters(doc).catch(() => [])
     const cover = await firstPageImage(doc).catch(() => undefined)
-    return { title: info?.Title?.trim() || undefined, sections: groupPages(pages, outline), cover }
+    return { title: info?.Title?.trim() || undefined, author: info?.Author?.trim() || undefined, sections: groupPages(pages, outline), cover }
   } finally {
     await Promise.all([task.destroy(), second?.destroy()])
   }

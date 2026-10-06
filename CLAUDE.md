@@ -33,6 +33,8 @@ The interface follows the rules in `docs/ui-rules.md`. In short:
 
 `npm run check:ui` (part of `npm run lint`) checks the code, and `e2e/ui-rules.e2e.ts` checks the running app; both run in CI. A new pop-up goes in the list at the top of that test file.
 
+Before pushing a UI change, also look at it: screenshot each screen it touches at phone and desktop sizes, in light and dark, next to an existing screen of the same kind (a new sheet next to Bookmarks, say). Check that type sizes, spacing, buttons and colours match, nothing wraps or overlaps, and nothing shows that shouldn't, such as a hidden element peeking through. Say in the PR what was compared.
+
 ## Bug fixes
 
 Every bug fix comes with a test that would have caught it, so it can't quietly come back:
