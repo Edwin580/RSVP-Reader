@@ -23,7 +23,9 @@ would fall below the sheet as a smudge above Safari's toolbar. Instead the
 backdrop behind every sheet dims the page with `--shadow-scrim`, a shadow
 inside it that ends at the page's edges. Not a coloured background, which
 Safari picks up to tint its toolbars, and not a shadow spread out from the
-sheet, which dims Safari's bars a second time. A chosen option is outlined with `--ring`; the
+sheet, which dims Safari's bars a second time. Past the bottom of the page,
+where Safari shows the page background above its toolbar, that background is
+the sheet's colour. A chosen option is outlined with `--ring`; the
 focus colour swatches use `--ring-swatch` and `--ring-swatch-on`. Book covers
 have their own `--shadow-cover`. No other shadows: a `box-shadow` is `none` or
 made only of these tokens.

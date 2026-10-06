@@ -1455,6 +1455,15 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)) body {
     background: var(--page-dimmed);
   }
+  /* But from halfway down, and on past the bottom of the page, it's the
+     sheet's colour: Safari shows a strip of the page background between the
+     sheet and its toolbar, which was a grey line under every sheet. */
+  html:has(.settings-menu:not(.is-closing), .session-menu:not(.is-closing), .search-backdrop:not(.is-closing)) {
+    background-image: linear-gradient(var(--bg), var(--bg));
+    background-repeat: no-repeat;
+    background-position: 0 50vh;
+    background-size: 100% 300vh;
+  }
 }
 @keyframes scrim-in { from { box-shadow: var(--shadow-scrim-none); } }
 @keyframes scrim-out { to { box-shadow: var(--shadow-scrim-none); } }

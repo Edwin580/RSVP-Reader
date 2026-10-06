@@ -390,6 +390,39 @@ test('on a phone, every sheet dims the page the same way, up to its edges and no
       expect(look.dims, `${where}: a layer dimming the whole page`).toBe(1)
       expect(look.below, `${where}: the sheet's colour carries on below the page`).toBe(true)
       expect(look.shadow, `${where}: the sheet's own shadow`).toBe('none')
+      // Past the page's edges Safari shows the page background: dimmed at the
+      // top, under its bar, and the sheet's colour at the bottom, where a strip
+      // of it showed between the sheet and Safari's toolbar. Seen here by
+      // hiding the page and making it short, so the background shows around it.
+      await page.evaluate(`document.body.style.visibility = 'hidden'; document.documentElement.style.height = '30vh'`)
+      const shot = await page.screenshot()
+      await page.evaluate(`document.body.style.visibility = ''; document.documentElement.style.height = ''`)
+      const edges = (await page.evaluate(`(async () => {
+        const img = new Image()
+        img.src = 'data:image/png;base64,${shot.toString('base64')}'
+        await img.decode()
+        const c = document.createElement('canvas')
+        c.width = img.width
+        c.height = img.height
+        const x = c.getContext('2d')
+        x.drawImage(img, 0, 0)
+        const at = (y) => 'rgb(' + Array.from(x.getImageData(4, y, 1, 1).data.slice(0, 3)).join(', ') + ')'
+        const probe = document.createElement('div')
+        document.body.append(probe)
+        const colour = (v) => {
+          probe.style.color = v
+          const c = getComputedStyle(probe).color
+          const n = c.match(/[\\d.]+/g).map(Number)
+          const rgb = c.startsWith('color(') ? n.slice(0, 3).map((v) => Math.round(v * 255)) : n.slice(0, 3)
+          return 'rgb(' + rgb.join(', ') + ')'
+        }
+        const result = { top: at(2), bottom: at(img.height - 2), dimmed: colour('var(--page-dimmed)'), sheet: getComputedStyle(document.querySelector('${selector.replace(/'/g, "\\\\'")}')).backgroundColor }
+        probe.remove()
+        return result
+      })()`)) as { top: string; bottom: string; dimmed: string; sheet: string }
+      const near = (a: string, b: string) => a.match(/\d+/g)!.every((n, k) => Math.abs(Number(n) - Number(b.match(/\d+/g)![k])) <= 2)
+      expect(near(edges.top, edges.dimmed), `${where}: page background at the top is ${edges.top}, not the dimmed page ${edges.dimmed}`).toBe(true)
+      expect(near(edges.bottom, edges.sheet), `${where}: page background at the bottom is ${edges.bottom}, not the sheet's ${edges.sheet}`).toBe(true)
       await page.keyboard.press('Escape')
       await expect(page.locator(selector)).toBeHidden()
     }
