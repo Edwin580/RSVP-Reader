@@ -17,13 +17,15 @@ The few that can't follow the theme are marked with `ui-allow` and say why:
 the logo, the book cover cloths, the colour wheel and the accent swatches.
 *Checked by:* `check:ui`.
 
-**2. One shadow for everything that floats.** Sheets, pop-overs, panels, cards
-and toasts all use `--shadow`. A chosen option is outlined with `--ring`; the
+**2. One shadow for everything that floats.** Pop-overs, panels, cards and
+toasts all use `--shadow`. Bottom sheets on a phone have none: the page is
+dimmed behind them instead, and a drop shadow would fall below the sheet, as a
+smudge above Safari's toolbar. A chosen option is outlined with `--ring`; the
 focus colour swatches use `--ring-swatch` and `--ring-swatch-on`. Book covers
 have their own `--shadow-cover`. No other shadows: a `box-shadow` is `none` or
 made only of these tokens.
 *Checked by:* `check:ui`, and the browser tests compare the shadows of every
-pop-up as drawn.
+pop-up as drawn, and check that no sheet casts one below it on a phone.
 
 **3. A small set of corners.** `--radius-sm` (2px) for small marks,
 `--radius` (4px) for buttons, fields and cards, `--radius-lg` (8px) for

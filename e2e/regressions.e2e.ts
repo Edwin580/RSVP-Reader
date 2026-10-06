@@ -295,3 +295,34 @@ test('a PDF keeps just its text, without its running header and page numbers (#5
   expect(book.chapters.length).toBeGreaterThan(3)
   expect(book.words).toEqual(paragraphs.join(' ').split(' '))
 })
+
+test('on a phone, bottom sheets cast no shadow below them (#61)', async ({ page }, testInfo) => {
+  // Reported on iPhone with Read for, Search and Bookmarks: their drop shadow
+  // fell below the sheet, into the strip above Safari's toolbar, as a smudge.
+  // The page dimmed behind a sheet already sets it apart.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  const sheets: [string, () => Promise<unknown>, string][] = [
+    ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
+    ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
+    ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
+    ['Settings', () => openSettings(page), '.settings-menu'],
+  ]
+  for (const [name, open, selector] of sheets) {
+    await open()
+    await expect(page.locator(selector)).toBeVisible()
+    // Each shadow layer that shows: how far it reaches below the sheet (its downward offset plus blur).
+    const below = await page.evaluate(`(() => {
+      const shadow = getComputedStyle(document.querySelector('${selector.replace(/'/g, "\\\\'")}')).boxShadow
+      if (shadow === 'none') return []
+      return shadow.split(/,(?![^(]*\\))/).filter((l) => !/rgba\\([^)]*,\\s*0\\)|transparent/.test(l)).map((layer) => {
+        const n = layer.replace(/rgba?\\([^)]*\\)/, '').trim().split(/\\s+/).filter((p) => p !== 'inset').map(parseFloat)
+        return (n[1] || 0) + (n[2] || 0)
+      })
+    })()`)
+    expect(below, name).toEqual((below as number[]).map(() => 0))
+    await page.keyboard.press('Escape')
+    await expect(page.locator(selector)).toBeHidden()
+  }
+})

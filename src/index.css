@@ -1304,6 +1304,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     max-height: 80dvh;
     padding: 0.25rem var(--safe-right) 0 var(--safe-left);
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+    box-shadow: none; /* As for the other sheets (see .popover). */
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .is-sheet .search-body { flex: 0 1 auto; }
@@ -1377,6 +1378,9 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
     border: 0;
     border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
     max-height: 85dvh;
+    /* No drop shadow on a sheet: it would fall below it, a smudge above
+       Safari's toolbar, and the dimmed page already sets the sheet apart. */
+    box-shadow: none;
     animation: sheet-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .popover.is-closing { animation: sheet-out 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
