@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { mockCatalog, openBrowse } from './catalog.ts'
 import { STORY, upload } from './helpers.ts'
 
 /*
@@ -9,8 +10,12 @@ import { STORY, upload } from './helpers.ts'
  * and at the phone project's size.
  */
 
-/** Every pop-up: how to open it from the reader, and the element that is it. A new pop-up goes here. */
-const POPUPS: { name: string; open: (page: Page) => Promise<unknown>; dialog: string }[] = [
+/**
+ * Every pop-up: how to open it, and the element that is it. A new pop-up goes
+ * here. Most open from the reader; one from elsewhere says how to get there
+ * (`from`), starting from the library.
+ */
+const POPUPS: { name: string; from?: (page: Page) => Promise<unknown>; open: (page: Page) => Promise<unknown>; dialog: string }[] = [
   {
     name: 'Settings',
     open: async (page) => {
@@ -23,7 +28,25 @@ const POPUPS: { name: string; open: (page: Page) => Promise<unknown>; dialog: st
   { name: 'Bookmarks', open: (page) => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), dialog: '[role=dialog][aria-label="Bookmarks"]' },
   { name: 'Search', open: (page) => page.getByRole('button', { name: 'Search', exact: true }).click(), dialog: '[role=dialog][aria-label="Search in book"]' },
   { name: 'Read for', open: (page) => page.locator('.session-open').click(), dialog: '.session-menu' },
+  {
+    name: 'Add a free book',
+    from: async (page) => {
+      await openBrowse(page)
+      await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+      await expect(page.getByRole('button', { name: 'Add to library' })).toBeEnabled()
+    },
+    open: (page) => page.getByRole('button', { name: 'Add to library' }).click(),
+    dialog: '[role=dialog][aria-label="Add Pride and Prejudice"]',
+  },
 ]
+
+/** Get to a pop-up's starting point: the reader, or wherever it says (the free books stood in for, see catalog.ts). */
+async function startFor(page: Page, popup: (typeof POPUPS)[number]) {
+  await mockCatalog(page)
+  await page.goto('./')
+  if (popup.from) await popup.from(page)
+  else await upload(page, 'story.txt', STORY)
+}
 
 /** Problems with the screen as it is now: anything wider than it, small targets, zooming fields. */
 const problems = (page: Page, touch: boolean) =>
@@ -55,7 +78,12 @@ const problems = (page: Page, touch: boolean) =>
       if (field && parseFloat(getComputedStyle(el).fontSize) < 16) found.push(label(el) + ': text under 16px, iOS would zoom in')
       if (!shown(el)) continue
       const r = el.getBoundingClientRect()
-      if (r.right > width + 1 || r.left < -1) found.push(label(el) + ': off the side of the screen')
+      // Off the side, unless it's in a row that scrolls sideways on its own (the subjects).
+      let inScroller = false
+      for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+        if (/auto|scroll/.test(getComputedStyle(a).overflowX) && a.scrollWidth > a.clientWidth) inScroller = true
+      }
+      if (!inScroller && (r.right > width + 1 || r.left < -1)) found.push(label(el) + ': off the side of the screen')
       // The one exception, marked where it's made: the reading calendar's day squares.
       if (${touch} && !el.hasAttribute('data-small-target') && (r.width < 44 || r.height < 44)) found.push(label(el) + ': ' + Math.round(r.width) + ' × ' + Math.round(r.height) + 'px, under 44px')
     }
@@ -73,11 +101,12 @@ for (const width of [320, null]) {
       await settled(page)
       expect(await problems(page, true), where).toEqual([])
     }
+    await mockCatalog(page)
     await page.goto('./')
     await check('the library, empty')
     await upload(page, 'story.txt', STORY)
     await check('reading, word mode')
-    for (const popup of POPUPS) {
+    for (const popup of POPUPS.filter((p) => !p.from)) {
       await popup.open(page)
       await expect(page.locator(popup.dialog)).toBeVisible()
       await check(popup.name)
@@ -104,14 +133,30 @@ for (const width of [320, null]) {
     await page.reload()
     await page.locator('.stats-toggle').click()
     await check('the library, with a book and stats')
+
+    // Free books: the list, a book, its preview, and the pop-ups found there.
+    await openBrowse(page)
+    await check('free books')
+    await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+    await expect(page.getByRole('button', { name: 'Add to library' })).toBeEnabled()
+    await check('a free book')
+    for (const popup of POPUPS.filter((p) => p.from)) {
+      await popup.open(page)
+      await expect(page.locator(popup.dialog)).toBeVisible()
+      await check(popup.name)
+      await page.keyboard.press('Escape')
+      await expect(page.locator(popup.dialog)).toBeHidden()
+    }
+    await page.getByRole('button', { name: 'Read a preview' }).click()
+    await expect(page.getByText(/^It is a truth universally acknowledged/)).toBeVisible()
+    await check('a free book’s preview')
   })
 }
 
 for (const popup of POPUPS) {
   test(`${popup.name}: on a phone it's a sheet with a handle, and dragging it down puts it away (rule 4)`, async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'phone', 'Dragging sheets is for phones')
-    await page.goto('./')
-    await upload(page, 'story.txt', STORY)
+    await startFor(page, popup)
     await popup.open(page)
     const dialog = page.locator(popup.dialog)
     await expect(dialog).toBeVisible()
@@ -138,10 +183,16 @@ for (const popup of POPUPS) {
 
 test('every pop-up has the same shadow (none on a phone), and on a phone the same sheet corners (rules 2 and 3)', async ({ page }, testInfo) => {
   const phone = testInfo.project.name === 'phone'
+  await mockCatalog(page)
   await page.goto('./')
   await upload(page, 'story.txt', STORY)
   const looks: Record<string, { shadow: string; corner: string }> = {}
-  for (const popup of POPUPS) {
+  // Those from the reader first, then those from elsewhere, from the library.
+  for (const popup of [...POPUPS.filter((p) => !p.from), ...POPUPS.filter((p) => p.from)]) {
+    if (popup.from) {
+      if (await page.locator('.reader').isVisible()) await page.locator('.nav-button').click()
+      await popup.from(page)
+    }
     await popup.open(page)
     const dialog = page.locator(popup.dialog)
     await expect(dialog).toBeVisible()

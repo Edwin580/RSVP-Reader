@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html><body>
+<main class="ebooks">
+	<h1>Browse Ebooks</h1>
+	<nav class="ebooks-navigation">
+		<ul>
+			<li><a href="/collections">Browse by collection</a></li>
+			<li><a href="/authors">Browse by author</a></li>
+		</ul>
+	</nav>
+	<form action="/ebooks" method="GET" rel="search" role="search">
+	<label class="tags">Subjects
+		<select  multiple="multiple" name="tags[]">
+			<option value="all">All</option>
+							<option value="adventure">Adventure</option>
+							<option value="autobiography">Autobiography</option>
+							<option value="biography">Biography</option>
+							<option value="childrens">Children’s</option>
+							<option value="comedy">Comedy</option>
+							<option value="drama">Drama</option>
+							<option value="fantasy">Fantasy</option>
+							<option value="fiction">Fiction</option>
+							<option value="horror">Horror</option>
+							<option value="memoir">Memoir</option>
+							<option value="mystery">Mystery</option>
+							<option value="nonfiction">Nonfiction</option>
+							<option value="philosophy">Philosophy</option>
+							<option value="poetry">Poetry</option>
+							<option value="satire">Satire</option>
+							<option value="science-fiction">Science Fiction</option>
+							<option value="shorts">Shorts</option>
+							<option value="spirituality">Spirituality</option>
+							<option value="travel">Travel</option>
+					</select>
+	</label>
+	<label>Keywords
+		<input type="search" name="query" value="austen"/>
+	</label>
+	<label class="sort">
+		<span>Sort</span>
+		<select name="sort">
+							<option value="relevance">Relevance</option>
+				<option value="newest">S.E. release date (new → old)</option>
+						<option value="author-alpha">Author name (a → z)</option>
+			<option value="reading-ease">Reading ease (easy → hard)</option>
+			<option value="length">Length (short → long)</option>
+			<option value="popularity">Popularity (most → least)</option>
+		</select>
+	</label>
+	<label class="view">
+		<span>View</span>
+		<select name="view">
+			<option value="grid">Grid</option>
+			<option value="list" selected="selected">List</option>
+		</select>
+	</label>
+	<label class="per-page">
+		<span>Per page</span>
+		<select name="per-page">
+			<option value="12" selected="selected">12</option>
+			<option value="24">24</option>
+			<option value="48">48</option>
+		</select>
+	</label>
+	<button>Filter</button>
+</form>
+			<ol class="ebooks-list list">
+						<li typeof="schema:Book" about="/ebooks/ring-lardner/short-fiction">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/ring-lardner/short-fiction" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/ring-lardner_short-fiction/36da1ac442edcc3e7b3e3556589fc1ad12536093/cover@2x.avif 2x, /images/covers/ring-lardner_short-fiction/36da1ac442edcc3e7b3e3556589fc1ad12536093/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/ring-lardner_short-fiction/36da1ac442edcc3e7b3e3556589fc1ad12536093/cover@2x.jpg 2x, /images/covers/ring-lardner_short-fiction/36da1ac442edcc3e7b3e3556589fc1ad12536093/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/ring-lardner_short-fiction/36da1ac442edcc3e7b3e3556589fc1ad12536093/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/ring-lardner/short-fiction" property="schema:url"><span property="schema:name">Short Fiction</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/ring-lardner">Ring Lardner</a></p>
+								</div>
+				<div class="details">
+																							<p>456,572 words • 81.53 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/comedy">Comedy</a>
+								</li>
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+															<li>
+									<a href="/subjects/satire">Satire</a>
+								</li>
+															<li>
+									<a href="/subjects/shorts">Shorts</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/northanger-abbey">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/northanger-abbey" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_northanger-abbey/425395aabd215dd5589126afb1b0650788f2f1eb/cover@2x.avif 2x, /images/covers/jane-austen_northanger-abbey/425395aabd215dd5589126afb1b0650788f2f1eb/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_northanger-abbey/425395aabd215dd5589126afb1b0650788f2f1eb/cover@2x.jpg 2x, /images/covers/jane-austen_northanger-abbey/425395aabd215dd5589126afb1b0650788f2f1eb/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_northanger-abbey/425395aabd215dd5589126afb1b0650788f2f1eb/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/northanger-abbey" property="schema:url"><span property="schema:name">Northanger Abbey</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>77,464 words • 66.88 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+															<li>
+									<a href="/subjects/satire">Satire</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/mansfield-park">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/mansfield-park" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_mansfield-park/d6b15e98d1827b91a1a38eb8b8b95621a9e3966b/cover@2x.avif 2x, /images/covers/jane-austen_mansfield-park/d6b15e98d1827b91a1a38eb8b8b95621a9e3966b/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_mansfield-park/d6b15e98d1827b91a1a38eb8b8b95621a9e3966b/cover@2x.jpg 2x, /images/covers/jane-austen_mansfield-park/d6b15e98d1827b91a1a38eb8b8b95621a9e3966b/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_mansfield-park/d6b15e98d1827b91a1a38eb8b8b95621a9e3966b/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/mansfield-park" property="schema:url"><span property="schema:name">Mansfield Park</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>159,867 words • 66.27 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/sense-and-sensibility">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/sense-and-sensibility" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_sense-and-sensibility/ed72d1edcf0dcf84676ce5745afc350f72b5c724/cover@2x.avif 2x, /images/covers/jane-austen_sense-and-sensibility/ed72d1edcf0dcf84676ce5745afc350f72b5c724/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_sense-and-sensibility/ed72d1edcf0dcf84676ce5745afc350f72b5c724/cover@2x.jpg 2x, /images/covers/jane-austen_sense-and-sensibility/ed72d1edcf0dcf84676ce5745afc350f72b5c724/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_sense-and-sensibility/ed72d1edcf0dcf84676ce5745afc350f72b5c724/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/sense-and-sensibility" property="schema:url"><span property="schema:name">Sense and Sensibility</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>119,255 words • 66.17 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/persuasion">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/persuasion" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_persuasion/e80c9b60fbe9897d91b4d5f613ef5802ef4a6894/cover@2x.avif 2x, /images/covers/jane-austen_persuasion/e80c9b60fbe9897d91b4d5f613ef5802ef4a6894/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_persuasion/e80c9b60fbe9897d91b4d5f613ef5802ef4a6894/cover@2x.jpg 2x, /images/covers/jane-austen_persuasion/e80c9b60fbe9897d91b4d5f613ef5802ef4a6894/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_persuasion/e80c9b60fbe9897d91b4d5f613ef5802ef4a6894/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/persuasion" property="schema:url"><span property="schema:name">Persuasion</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>83,304 words • 66.78 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/emma">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/emma" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_emma/70dfb3dfc5142a3bef85c87dc9e32a3241b49553/cover@2x.avif 2x, /images/covers/jane-austen_emma/70dfb3dfc5142a3bef85c87dc9e32a3241b49553/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_emma/70dfb3dfc5142a3bef85c87dc9e32a3241b49553/cover@2x.jpg 2x, /images/covers/jane-austen_emma/70dfb3dfc5142a3bef85c87dc9e32a3241b49553/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_emma/70dfb3dfc5142a3bef85c87dc9e32a3241b49553/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/emma" property="schema:url"><span property="schema:name">Emma</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>159,862 words • 71.04 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+					<li typeof="schema:Book" about="/ebooks/jane-austen/pride-and-prejudice">
+						<div class="thumbnail-container" aria-hidden="true">				<a href="/ebooks/jane-austen/pride-and-prejudice" tabindex="-1" property="schema:url">
+											<picture>
+							<source srcset="/images/covers/jane-austen_pride-and-prejudice/495dd49502f1fd5609a27a16f5af2f0a387accb4/cover@2x.avif 2x, /images/covers/jane-austen_pride-and-prejudice/495dd49502f1fd5609a27a16f5af2f0a387accb4/cover.avif 1x" type="image/avif"/>							<source srcset="/images/covers/jane-austen_pride-and-prejudice/495dd49502f1fd5609a27a16f5af2f0a387accb4/cover@2x.jpg 2x, /images/covers/jane-austen_pride-and-prejudice/495dd49502f1fd5609a27a16f5af2f0a387accb4/cover.jpg 1x" type="image/jpeg"/>							<img src="/images/covers/jane-austen_pride-and-prejudice/495dd49502f1fd5609a27a16f5af2f0a387accb4/cover@2x.jpg" alt="" property="schema:image" height="335" width="224" loading="lazy"/>
+						</picture>
+									</a>
+			</div>
+			<p><a href="/ebooks/jane-austen/pride-and-prejudice" property="schema:url"><span property="schema:name">Pride and Prejudice</span></a></p>
+							<div>
+									<p class="author"><a href="/ebooks/jane-austen">Jane Austen</a></p>
+								</div>
+				<div class="details">
+																							<p>121,970 words • 60.95 reading ease</p>
+												<ul class="tags">
+															<li>
+									<a href="/subjects/fiction">Fiction</a>
+								</li>
+													</ul>
+									</div>
+					</li>
+	</ol>
+				<nav class="pagination" aria-label="Pagination">
+			<a aria-disabled="true">Back</a>
+			<ol>
+							<li>
+					<a aria-current="page" href="#">1</a>
+				</li>
+						</ol>
+			<a aria-disabled="true">Next</a>
+		</nav>
+	<p class="feeds-alert">We also have <a href="/bulk-downloads">bulk ebook downloads</a> and a <a href="/collections">list of collections</a> available, as well as <a href="/feeds">ebook catalog feeds</a> for use directly in your ereader app or RSS reader.</p>
+	</main>
+</body></html>

@@ -1,6 +1,6 @@
 # Chapter
 
-Chapter (formerly RSVP Reader) is a speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown) and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main` (via the `gh-pages` branch), and every pull request gets a preview at `/pr-preview/pr-<number>/` with its own separate storage.
+Chapter (formerly RSVP Reader) is a speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown), or add a free one from Standard Ebooks, and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main` (via the `gh-pages` branch), and every pull request gets a preview at `/pr-preview/pr-<number>/` with its own separate storage.
 
 ## Stack and layout
 
@@ -9,6 +9,7 @@ Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for
 - `src/lib/` — pure logic (parsing, timing, pagination, search, storage). Keep it framework-free and unit-tested.
 - `src/components/` — UI. `Reader` owns playback; `PageView` and `WordDisplay` are the two reading modes.
 - `src/hooks/useRsvp.ts` — the playback clock shared by both modes.
+- `src/lib/catalog.ts` and `src/components/Browse.tsx` — free books from Standard Ebooks, read from its public pages in the browser. The parsers only follow links to `/ebooks/<author>/<title>` (the pages carry a trap link that bans whoever follows it). Browser tests use the stand-in in `e2e/catalog.ts` and never touch the real site.
 
 ## Commands
 

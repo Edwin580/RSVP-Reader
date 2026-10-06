@@ -1367,6 +1367,129 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 
 .search-results mark { background: color-mix(in srgb, var(--accent) 14%, transparent); color: inherit; border-radius: var(--radius-sm); padding: 0 1px; }
 
+/* ——— Free books (Browse) ——— */
+.browse-entry { margin-top: 0.75rem; border-color: var(--separator); }
+.browse-header { position: relative; margin-bottom: 1.25rem; }
+.browse-header h1 { font-family: var(--serif); font-size: 2.6rem; font-weight: 400; line-height: 1.1; letter-spacing: -0.015em; }
+.browse-header p { margin-top: 0.5rem; max-width: 34rem; text-wrap: pretty; }
+.browse-back { margin: -0.5rem 0 0.75rem -0.65rem; }
+.browse-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--separator);
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text-2);
+}
+.browse-search:focus-within { border-color: var(--text); }
+.browse-search input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 17px; /* ≥16px stops iOS zooming on focus */
+  outline: none;
+}
+/* Subjects: one row of chips that scrolls sideways, edge to edge on a phone. */
+.browse-subjects {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.75rem calc(-1.25rem - var(--safe-right)) 0 calc(-1.25rem - var(--safe-left));
+  padding: 0 calc(1.25rem + var(--safe-right)) 0.25rem calc(1.25rem + var(--safe-left));
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.browse-subjects::-webkit-scrollbar { display: none; }
+.chip {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-2);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  transition: background-color 0.18s ease-out, color 0.18s ease-out;
+}
+.chip[aria-pressed='true'] { border-color: var(--text); background: var(--text); color: var(--bg); font-weight: 600; }
+.chip:active { background: var(--fill); transition-duration: 0.05s; }
+.chip[aria-pressed='true']:active { background: var(--text); opacity: 0.8; }
+@media (hover: hover) {
+  .chip:not([aria-pressed='true']):hover { background: var(--fill); color: var(--text); }
+}
+.browse-sort { margin-top: 0.75rem; }
+.browse-list { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1px solid var(--text); }
+.browse-list li { border-bottom: 1px solid var(--separator); }
+.browse-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.85rem 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  transition: opacity 0.18s ease-out;
+}
+.browse-item:active { opacity: 0.55; transition-duration: 0.05s; }
+.browse-item > svg { flex-shrink: 0; color: var(--text-2); }
+.browse-item-text { flex: 1; min-width: 0; display: grid; gap: 0.15rem; }
+.browse-title { font-family: var(--serif); font-size: 1.15rem; font-weight: 500; line-height: 1.25; }
+.browse-author { color: var(--text); font-size: 0.95rem; }
+.browse-meta { font-size: 0.85rem; }
+.browse .cover-plain { background: var(--fill); color: var(--text); }
+.browse-status { margin: 1.5rem 0; text-align: center; }
+.browse-status p { margin-bottom: 0.25rem; }
+.browse-more { display: block; margin: 1rem auto 0; }
+.browse-credit { margin-top: 2.5rem; font-size: 0.8rem; line-height: 1.5; text-wrap: pretty; }
+.browse-credit a { color: inherit; text-underline-offset: 2px; }
+
+/* A book: cover and facts, the actions, then what it's about. */
+.browse-nav { margin: -0.5rem 0 1rem -0.6rem; }
+.browse-back-text { display: inline-flex; align-items: center; gap: 0.2rem; max-width: 100%; padding-left: 0.35rem; }
+.browse-book-head { display: flex; gap: 1.25rem; align-items: flex-start; }
+.browse-book-head h1 { font-family: var(--serif); font-size: 2rem; font-weight: 400; line-height: 1.15; letter-spacing: -0.01em; }
+.browse-book-head .browse-author { margin-top: 0.35rem; font-size: 1.05rem; }
+.browse-book-head p.muted { margin-top: 0.35rem; font-size: 0.9rem; line-height: 1.45; }
+.cover-large { width: 112px; height: 168px; }
+.cover-plain.cover-large { font-size: 0.85rem; padding: 0.6rem; }
+.browse-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 1.5rem 0; }
+.menu-anchor { position: relative; display: inline-flex; }
+.demo-button:disabled { opacity: 0.45; }
+.browse-about { display: grid; gap: 0.9rem; max-width: 36rem; font-family: var(--reading-font, var(--serif)); font-size: 1.08rem; line-height: 1.6; }
+.browse-summary { font-style: italic; }
+@media (max-width: 420px) {
+  .browse-book-head { flex-direction: column; }
+  .browse-book-head h1 { font-size: 1.75rem; }
+}
+
+/* Adding: asked once, with the download's progress in the same place. */
+.add-sheet { display: grid; gap: 0.75rem; }
+/* Elsewhere, a pop-over below the button, as the book's actions are near the top. */
+@media (min-width: 641px) {
+  .add-sheet { top: calc(100% + 0.6rem); bottom: auto; left: 0; right: auto; width: 24rem; }
+}
+.add-title { font-family: var(--serif); font-size: 1.25rem; font-weight: 500; line-height: 1.3; }
+.add-sheet .error { margin: 0; }
+.add-progress { display: grid; font-size: 0.9rem; }
+.add-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.25rem; }
+
+/* The preview: the opening, set like the page view. */
+.browse-preview-label { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.browse-preview-text { display: grid; gap: 0.9rem; margin-top: 1rem; max-width: 36rem; font-family: var(--reading-font, var(--serif)); font-size: 1.15rem; line-height: 1.65; }
+.browse-preview-nav { display: flex; justify-content: space-between; margin: 1.5rem -0.6rem 0; }
+.browse-preview-nav .text-button { display: inline-flex; align-items: center; gap: 0.2rem; }
+.browse-preview-add { margin-top: 1rem; border-top: 1px solid var(--separator); }
+
 /* ——— Touch screens ———
    Everything that's tapped is at least 44 × 44px, Apple's minimum for a
    thumb (docs/ui-rules.md, rule 7). Where the look should stay smaller, the
@@ -1377,8 +1500,10 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .scrubber { height: 44px; margin-block: -6px; }
   .shelf-tabs button { padding-top: 0.25rem; }
   .search-bar input { height: 44px; }
+  .chip { min-height: 44px; }
   /* A link inside a sentence: taller to the touch, the line as it was. */
   .backup-status .text-button { padding-block: 12px; margin-block: -12px; }
+  .browse-credit a { display: inline-block; padding-block: 14px; margin-block: -14px; }
 }
 
 /* ——— Phones ——— */

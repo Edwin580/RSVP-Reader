@@ -9,6 +9,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser, and splitting a book into words runs in a background Web Worker so the page stays responsive while a long book loads.
+- **Free books**: *Find a free book* in the library browses about 1,500 public-domain classics from [Standard Ebooks](https://standardebooks.org), a volunteer project that edits and typesets them carefully. Search by title, author or subject, filter by subject and sort by popularity, newest, easiest or shortest. Each book shows its description, length, reading time at your speed and how hard it is to read, and *Read a preview* opens its first chapter (past the title page) a section at a time. Nothing is downloaded until you tap *Add to library* and confirm; the EPUB is then added like any book you upload, and opens at its first chapter. The app reads Standard Ebooks' public pages directly (their site allows it), with no server of its own.
 - **Demo for first-time visitors**: while the library is empty, a "Try the demo" card opens a short sample (tips plus the opening of *Alice's Adventures in Wonderland*, public domain) to try both reading modes, chapters and search. The sample is never saved and the card disappears once you add a book.
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
@@ -75,7 +76,8 @@ npm run build    # type-check and build for production
 ## Project layout
 
 ```
-e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings, UI rules
+e2e/                   browser tests: demo, upload and resume, chapters, page mode, search, settings, free books, UI rules
+                       (catalog.ts stands in for Standard Ebooks, so no test touches the real site)
 docs/ui-rules.md       how the interface stays consistent and works on phones, and how each rule is checked
 scripts/check-ui.mjs   checks the code against those rules (npm run check:ui)
 service-worker/sw.js   offline cache; the build fills in the file list (vite.config.ts)
@@ -84,6 +86,7 @@ src/
     appearance.ts      applies theme, reading font and focus color to the page
     backup.ts          backup file format and merging a restore into the library
     bookmarks.ts       adding and removing bookmarks (saved per sentence)
+    catalog.ts         free books from Standard Ebooks: reading its catalog pages, previews, downloads
     covers.ts          finding EPUB cover images and making cover thumbnails
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
@@ -106,7 +109,7 @@ src/
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts, parse.worker.ts
-  components/          Library, ReadingStats, Reader, SessionMenu, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
+  components/          Library, Browse, ReadingStats, Reader, SessionMenu, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
 ```
 
 ## Roadmap
@@ -130,6 +133,7 @@ src/
 
 ### Later
 
+- **Project Gutenberg** in *Find a free book*, for its 75,000+ books. Its search and book pages can be read from the app, but its book files can't: browsers block a page from reading files on another site unless that site allows it (CORS), and Gutenberg and its mirrors don't. Downloads need a small relay: most simply a Cloudflare Worker (free) that fetches only from gutenberg.org, deployed once.
 - Backend with accounts, so the library and progress sync across devices. Optional, depending on the storage decision above.
 - More formats (`.docx`, `.mobi`), plus OCR for scanned PDFs
 - Showing multiple words at a time
