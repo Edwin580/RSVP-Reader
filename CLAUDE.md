@@ -28,6 +28,7 @@ The interface follows the rules in `docs/ui-rules.md`. In short:
 
 - Colours, shadows and corners come from the tokens at the top of `src/index.css`: one shadow (`--shadow`) for everything that floats, a small set of corners, no raw colours.
 - Every pop-up closes with Escape, a tap outside, and on a phone by dragging it down: there it's a bottom sheet with a grab handle (`useSheetDrag`).
+- On a phone a sheet has no drop shadow and is itself `position: fixed` to the bottom of the screen; the page behind is dimmed by a `--scrim` backdrop that appears at once, over an undimmed page background. Safari colours its status bar and toolbar from these layers, so getting any of this wrong shows up as a mismatched grey bar (see rule 11).
 - On a phone nothing is wider than the screen (down to 320px), everything tappable is at least 44 × 44px, and text fields use 16px text or larger.
 
 `npm run check:ui` (part of `npm run lint`) checks the code, and `e2e/ui-rules.e2e.ts` checks the running app; both run in CI. A new pop-up goes in the list at the top of that test file.

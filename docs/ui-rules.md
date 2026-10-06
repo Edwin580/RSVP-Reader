@@ -74,6 +74,24 @@ screen pads itself with `--safe-top`, `--safe-bottom`, `--safe-left` or
 in the wrong theme (see CLAUDE.md, "Bug fixes").
 *Checked by:* the browser tests in `e2e/regressions.e2e.ts`.
 
+**11. Sheets and Safari's bars.** On a phone, Safari colours its status bar
+and toolbar from the page, so a sheet is built the same way every time:
+- The sheet itself is `position: fixed` to the bottom of the screen, not
+  placed inside its backdrop. Safari colours its toolbar from the fixed layer
+  at the bottom edge, which should be the sheet.
+- The page behind is dimmed by the backdrop, a fixed layer of `--scrim` that
+  is there at once rather than fading in. Safari colours its status bar from
+  that layer, laid over the page background, so the page background stays
+  undimmed under it, or the bar comes out darker than the page.
+- The settings sheet is the one exception. It dims the page with
+  `--shadow-scrim` on the sheet and a dimmed page background
+  (`--page-dimmed`), so the bar follows a theme picked in it.
+- With the keyboard up, a tall sheet (Search) carries on down behind
+  Safari's address bar to the keyboard.
+
+*Checked by:* the browser tests in `e2e/regressions.e2e.ts` marked (#61), in
+each theme.
+
 ## Adding to the interface
 
 Use the existing pieces before making new ones: `.icon-button` for icon
