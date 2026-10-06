@@ -164,8 +164,8 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
       {/* Clear: on phones the page is dimmed by the sheet's shadow instead.
           Safari tints its top bar from a coloured layer covering the top of
           the page and keeps that colour, so a dim backdrop there left the bar
-          in the old theme after changing it here. */}
-      <div className={`popover-backdrop is-clear${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
+          in the old theme after changing it here (see .popover). */}
+      <div className={`popover-backdrop${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
       <div ref={sheet} className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
         <div className="sheet-handle" aria-hidden="true" />
         <div className="setting">
