@@ -1299,7 +1299,14 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 @media (max-width: 640px) {
   /* Dimmed at once, as for the other sheets (see .popover-backdrop). */
   .search-backdrop.is-sheet { align-items: flex-end; animation: none; }
+  /* Fixed to the bottom of the screen itself, as the other sheets are:
+     Safari colours its toolbar from the fixed layer at the bottom edge, which
+     was the dimmed backdrop around the sheet rather than the sheet. */
   .is-sheet .search-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
     width: 100%;
     height: auto;
     max-height: 80dvh;
@@ -1311,7 +1318,12 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .is-sheet .search-body { flex: 0 1 auto; }
   /* Search: a tall sheet, from just below the top of what's visible (above
      the keyboard, see useVisualViewport) to the bottom, with room for results. */
-  .is-sheet.is-tall .search-panel { position: relative; height: calc(100% - 0.75rem - var(--safe-top)); max-height: none; }
+  .is-sheet.is-tall .search-panel {
+    top: calc(var(--vv-top, 0px) + 0.75rem + var(--safe-top));
+    bottom: auto;
+    height: calc(var(--vv-height, 100dvh) - 0.75rem - var(--safe-top));
+    max-height: none;
+  }
   /* With the keyboard up, Safari floats its address bar between the sheet
      and the keyboard. The sheet carries on down behind it, to the keyboard,
      rather than leaving a strip of dimmed page there. */

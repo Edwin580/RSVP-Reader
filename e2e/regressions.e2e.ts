@@ -394,6 +394,35 @@ test("on a phone, Safari's status bar is the same grey as the page dimmed behind
   }
 })
 
+test("on a phone, Safari's toolbar takes its colour from the sheet, not the dimmed page (#61)", async ({ page }, testInfo) => {
+  // Reported on iPhone: under Bookmarks and Search, Safari's bottom toolbar
+  // was the grey of the dimmed page, under Settings the sheet's colour.
+  // Safari colours the toolbar from the fixed layer at the bottom edge of the
+  // screen: the settings sheet is fixed itself, while Bookmarks and Search
+  // sat inside the fixed, dimmed backdrop, so that was the layer it found.
+  test.skip(testInfo.project.name !== 'phone', 'Sheets are for phones')
+  await page.goto('./')
+  await upload(page)
+  const sheets: [string, () => Promise<unknown>, string][] = [
+    ['Read for', () => page.locator('.session-open').click(), '.session-menu'],
+    ['Bookmarks', () => page.getByRole('button', { name: 'Bookmarks', exact: true }).click(), '[role=dialog][aria-label="Bookmarks"]'],
+    ['Search', () => page.getByRole('button', { name: 'Search', exact: true }).click(), '[role=dialog][aria-label="Search in book"]'],
+    ['Settings', () => openSettings(page), '.settings-menu'],
+  ]
+  for (const [name, open, selector] of sheets) {
+    await open()
+    await expect(page.locator(selector)).toBeVisible()
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const bottom = await page.evaluate(`(() => {
+      const fixed = document.elementsFromPoint(innerWidth / 2, innerHeight - 1).find((el) => getComputedStyle(el).position === 'fixed')
+      return fixed === document.querySelector('${selector.replace(/'/g, "\\\\'")}') ? 'the sheet' : fixed?.className
+    })()`)
+    expect(bottom, `${name}: the fixed layer at the bottom of the screen`).toBe('the sheet')
+    await page.keyboard.press('Escape')
+    await expect(page.locator(selector)).toBeHidden()
+  }
+})
+
 test('on a phone, with the keyboard up, the search sheet runs down to it (#61)', async ({ page }, testInfo) => {
   // Reported on iPhone: between the search sheet and the keyboard, around
   // Safari's floating address bar, a strip of dimmed page showed. The sheet

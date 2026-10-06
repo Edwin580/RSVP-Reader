@@ -120,7 +120,11 @@ export function SearchPanel({ bookSearch, words, chapters, names, position, clos
   return (
     <div
       className={`search-backdrop is-sheet is-tall${closing ? ' is-closing' : ''}`}
-      style={viewport ? { top: viewport.top, height: viewport.height, bottom: 'auto' } : undefined}
+      style={
+        viewport
+          ? ({ top: viewport.top, height: viewport.height, bottom: 'auto', '--vv-top': `${viewport.top}px`, '--vv-height': `${viewport.height}px` } as React.CSSProperties)
+          : undefined
+      }
       onClick={onClose}
     >
       <aside
