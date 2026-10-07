@@ -3,6 +3,7 @@ import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
 import { draggedLine, groupLines, lineAt, lineOf, lineSpacing, type Line } from '../lib/guide'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
+import { reducedMotion } from './transition'
 
 interface Props {
   words: string[]
@@ -166,7 +167,7 @@ export function PageView({
     // Keep a copy of the outgoing page on screen to slide it away.
     const direction = next > start ? 'forward' : 'back'
     const g = ghost.current
-    if (g && text.current && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    if (g && text.current && !reducedMotion()) {
       const copy = text.current.cloneNode(true) as HTMLElement
       copy.className = text.current.className.replace(/\s*entering-\w+/, '') // drop its own entrance animation
       g.replaceChildren(copy)

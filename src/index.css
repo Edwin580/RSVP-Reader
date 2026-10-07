@@ -125,6 +125,35 @@
   --page-dimmed: color-mix(in srgb, var(--bg), rgb(40 28 10) 28%);
 }
 
+/* Paper: as close to an e-ink reader as a lit screen gets. A matte, light
+   grey page with a faint grain, near-black ink, no colour (the focus letter
+   is underlined instead), no shadows and no motion: everything changes at
+   once, as e-ink does (see also reducedMotion in transition.ts). */
+:root[data-theme='paper'] {
+  color-scheme: light;
+  --bg: #e9e8e3;
+  --bg-2: #e1e0db;
+  --fill: #d8d7d1;
+  --raised: #eeede8;
+  --text: #1a1a1a;
+  --text-2: #4d4d4b;
+  --separator: #c4c3bd;
+  --red: #1a1a1a;
+  --accent: var(--text);
+  --shadow: 0 0 0 1px var(--separator);
+  --shadow-cover: inset 2px 0 0 rgb(0 0 0 / 0.14);
+  --scrim: rgb(0 0 0 / 0.18);
+  --page-dimmed: color-mix(in srgb, var(--bg), black 18%);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+:root[data-theme='paper'] body, :root[data-theme='paper'] .reader { background-image: var(--grain); }
+:root[data-theme='paper'] .word-pivot { text-decoration: underline 2px; text-underline-offset: 0.12em; }
+:root[data-theme='paper'] .cover { filter: grayscale(1); }
+:root[data-theme='paper'] *, :root[data-theme='paper'] *::before, :root[data-theme='paper'] *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
 :root[data-accent='blue'] { --accent-l: #1f4fb4; --accent-d: #7ea2ff; }
 :root[data-accent='green'] { --accent-l: #1d6b43; --accent-d: #5fc48e; }
 :root[data-accent='purple'] { --accent-l: #6a3fb0; --accent-d: #b595f5; }
@@ -1117,6 +1146,8 @@ h1, h2, p { margin: 0; }
 .segmented button[aria-checked='true'] { color: var(--text); font-weight: 600; box-shadow: var(--ring); }
 .hint { font-size: 0.85rem; color: var(--text-2); }
 .segmented .serif { font-family: var(--serif); }
+/* Five choices (the themes) fit side by side on a 320px phone. */
+.segmented:has(> :nth-child(5)) button { font-size: 0.875rem; }
 /* A choice beside its label (Mode, Font) stays compact. */
 .setting:not(.setting-stack) > .segmented { flex: 0 1 11rem; }
 /* Everything past the essentials, behind one quiet toggle. */

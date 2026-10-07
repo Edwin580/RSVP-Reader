@@ -1159,3 +1159,35 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
 })
+
+test('paper looks like e-ink: matte grey page, ink only, nothing moves, and it sticks from the first paint', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radiogroup', { name: 'Theme' }).getByRole('radio', { name: 'Paper' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'paper')
+  // No colour to pick: the focus letter is ink, underlined.
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await expect(page.getByRole('radiogroup', { name: 'Focus color' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.settings-menu')).toHaveCount(0)
+  await expect(page.locator('.word-pivot')).toHaveCSS('color', 'rgb(26, 26, 26)')
+  await expect(page.locator('.word-pivot')).toHaveCSS('text-decoration-line', 'underline')
+  await expect(page.locator('.reader')).toHaveCSS('background-image', /^url\("data:image\/svg/)
+  // Safari's bars take the paper colour.
+  const bar = () => page.evaluate(`[...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.content).join(' ')`)
+  await expect.poll(bar).toBe('#e9e8e3')
+
+  // Panels and page turns appear at once, as on e-ink.
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  expect(await page.evaluate('document.getAnimations().length')).toBe(0)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.keyboard.press('m')
+  await page.keyboard.press('PageDown')
+  expect(await page.evaluate('document.getAnimations().length')).toBe(0)
+
+  // Opened again: paper from the first paint, never a flash of white.
+  await page.reload()
+  expect(await page.evaluate(`document.documentElement.dataset.theme`)).toBe('paper')
+})

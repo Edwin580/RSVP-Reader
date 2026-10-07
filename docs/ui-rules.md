@@ -10,7 +10,7 @@ and desktop sizes. CI runs both on every pull request.
 **1. Colours come from the theme.** Every colour is a token defined at the top
 of `src/index.css` (`--bg`, `--bg-2`, `--fill`, `--raised`, `--text`,
 `--text-2`, `--separator`, `--red`, `--accent`, `--scrim`), with values for
-light, sepia and dark. Anything else uses those tokens, or mixes them with
+light, sepia, paper and dark. Anything else uses those tokens, or mixes them with
 `color-mix()`, so a new theme or dark mode can't leave a stray colour behind.
 A raw colour only appears where a token is defined (a `--name: value` line).
 The few that can't follow the theme are marked with `ui-allow` and say why:
