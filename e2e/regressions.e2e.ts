@@ -458,3 +458,16 @@ test('free books: picking a subject lists that subject’s books (#62)', async (
   await expect(page.getByRole('alert')).toHaveCount(0)
   expect(catalog.requests.some((u) => u.pathname.startsWith('/subjects/'))).toBe(false)
 })
+
+test('free books: a word still being typed finds the book (#62)', async ({ page }) => {
+  // Reported: searching was poor. The site's search only matches whole,
+  // exactly spelled words, so "sherl" (and "dostoyevsky") found nothing
+  // while typing; the stand-in searches the same way. Titles and authors are
+  // now searched on the device, from a list fetched on the first search.
+  await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  await page.getByRole('searchbox', { name: 'Search free books' }).fill('sherl')
+  await expect(page.getByRole('list', { name: 'Books' }).getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
+  await expect(page.getByText('No books match.')).toHaveCount(0)
+})

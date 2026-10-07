@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import {
   CATALOG_NAME,
+  PER_PAGE,
   SORTS,
   SUBJECTS,
   downloadBook,
@@ -12,7 +13,8 @@ import {
   type CatalogSort,
   type ContentsEntry,
 } from '../lib/catalog'
-import { loadContents, loadDetails, loadResults, loadSection } from '../lib/catalogStore'
+import { rerank, searchIndex } from '../lib/catalogIndex'
+import { loadContents, loadDetails, loadIndex, loadResults, loadSection } from '../lib/catalogStore'
 import { formatMinutes } from '../lib/rsvp'
 import type { BookMeta } from '../lib/types'
 import { Icon } from './Icon'
@@ -173,8 +175,35 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
     // Only when a page arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.data])
-  const shown = results?.key === key ? results : null
-  const searching = !!search.query.trim()
+  const fromSite = results?.key === key ? results : null
+  const searching = !!(search.query.trim() || typed.trim())
+  // Searching: the list of every title and author, fetched the first time
+  // (then kept), searched here as you type. Until it's here, the site's own
+  // results, those matching a title or author first.
+  const index = useLoad(searching ? 'index' : null, () => loadIndex())
+  const [localLimit, setLocalLimit] = useState(PER_PAGE)
+  useEffect(() => setLocalLimit(PER_PAGE), [key])
+  const local = useMemo(
+    // Following each key, not waiting for typing to pause: it's all on the device.
+    () => (typed.trim() && index.data ? searchIndex(index.data, { query: typed, subject: search.subject || undefined, sort: search.sort }) : null),
+    [typed, index.data, search.subject, search.sort],
+  )
+  let list: CatalogBook[] | null
+  let more: (() => void) | null = null
+  if (local) {
+    // Title and author matches, then any the site found by other words (in
+    // their descriptions), then those a typing slip away.
+    const ids = new Set([...local.matches, ...local.close].map((b) => b.id))
+    const extra = search.query.trim() === typed.trim() ? (fromSite?.books ?? []).filter((b) => !ids.has(b.id)) : []
+    const all = [...local.matches, ...extra, ...local.close]
+    list = all.slice(0, localLimit)
+    if (localLimit < all.length) more = () => setLocalLimit((n) => n + PER_PAGE)
+    else if (fromSite?.hasMore && !page.loading) more = () => setPages((n) => n + 1)
+  } else {
+    list = fromSite && (searching ? rerank(fromSite.books, search.query, search.sort) : fromSite.books)
+    if (fromSite?.hasMore && !page.loading) more = () => setPages((n) => n + 1)
+  }
+  const waiting = page.loading || (searching && index.loading && !list?.length)
 
   return (
     <>
@@ -223,7 +252,7 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
       </div>
 
       <div className="segmented browse-sort" role="radiogroup" aria-label="Order">
-        {(searching ? [{ value: 'relevance' as const, label: 'Best match' }, ...SORTS] : SORTS).map((o) => (
+        {(searching ? [{ value: 'relevance' as const, label: 'Best match' }, ...SORTS.filter((o) => o.value !== 'newest')] : SORTS).map((o) => (
           <button
             key={o.value}
             type="button"
@@ -236,9 +265,9 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
         ))}
       </div>
 
-      {shown && shown.books.length > 0 && (
+      {list && list.length > 0 && (
         <ul className="browse-list" aria-label="Books">
-          {shown.books.map((b) => {
+          {list.map((b) => {
             const owned = inLibrary(books, b.title)
             const time = readingTime(b.words, wpm)
             return (
@@ -260,7 +289,7 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
         </ul>
       )}
 
-      {page.loading && <p className="browse-status muted" role="status">Loading books…</p>}
+      {waiting && <p className="browse-status muted" role="status">{searching ? 'Searching…' : 'Loading books…'}</p>}
       {page.error && (
         <div className="browse-status" role="alert">
           <p>{page.error}</p>
@@ -269,11 +298,11 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
           </button>
         </div>
       )}
-      {shown && shown.books.length === 0 && !page.loading && !page.error && (
+      {list && list.length === 0 && !waiting && !page.error && (
         <p className="browse-status muted">No books match. Try other words, or another subject.</p>
       )}
-      {shown?.hasMore && !page.loading && !page.error && (
-        <button type="button" className="text-button browse-more" onClick={() => setPages((n) => n + 1)}>
+      {more && !page.error && (
+        <button type="button" className="text-button browse-more" onClick={more}>
           Show more
         </button>
       )}

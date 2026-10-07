@@ -64,7 +64,17 @@ describe('parseCatalogPage', () => {
   })
 
   it('finds nothing on a page with no results', () => {
-    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false })
+    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false, lastPage: 1 })
+  })
+
+  it('lists books with several authors or translators, whose addresses have underscores (#62)', () => {
+    // 36 books were missing, War and Peace among them.
+    const html = `<ol><li typeof="schema:Book" about="/ebooks/leo-tolstoy/war-and-peace/louise-maude_aylmer-maude"><span property="schema:name">War and Peace</span></li>
+      <li typeof="schema:Book" about="/ebooks/alexander-hamilton_john-jay_james-madison/the-federalist-papers"><span property="schema:name">The Federalist Papers</span></li></ol>`
+    expect(parseCatalogPage(html).books.map((b) => b.id)).toEqual([
+      'leo-tolstoy/war-and-peace/louise-maude_aylmer-maude',
+      'alexander-hamilton_john-jay_james-madison/the-federalist-papers',
+    ])
   })
 
   it('skips anything that isn’t a link to a book in the catalog', () => {
@@ -136,7 +146,7 @@ describe('book ids and addresses', () => {
   it('accepts only catalog paths', () => {
     expect(isBookId('jane-austen/pride-and-prejudice')).toBe(true)
     expect(isBookId('leo-tolstoy/anna-karenina/constance-garnett')).toBe(true)
-    for (const bad of ['', 'jane-austen', '../x/y', 'a/b?c', 'A/B', 'a//b', 'https://x/a/b']) expect(isBookId(bad)).toBe(false)
+    for (const bad of ['', 'jane-austen', '../x/y', 'a/b?c', 'A/B', 'a//b', 'https://x/a/b', 'a/b.c']) expect(isBookId(bad)).toBe(false)
     expect(() => bookUrl('../../honeypot')).toThrow()
   })
 

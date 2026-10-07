@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAX_KEPT, RESULTS_MAX_AGE_MS, cached, loadResults, memoryStore, prune, setStore } from '../catalogStore'
+import { MAX_KEPT, RESULTS_MAX_AGE_MS, cached, loadIndex, loadResults, memoryStore, prune, setStore } from '../catalogStore'
 
 beforeEach(() => setStore(memoryStore()))
 
@@ -76,5 +76,47 @@ describe('loadResults', () => {
     const page = await loadResults({ subject: 'adventure' }, fetcher)
     expect(page.books.map((b) => b.id)).toEqual(['c/d'])
     expect(String(fetcher.mock.calls[0][0])).toContain('tags%5B%5D=adventure&tags%5B%5D=adventure')
+  })
+})
+
+describe('loadIndex', () => {
+  /** The whole catalog, 48 a page: `count` books. */
+  function catalog(count: number) {
+    const requests: URL[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input))
+      requests.push(url)
+      const page = Number(url.searchParams.get('page') ?? 1)
+      const last = Math.ceil(count / 48)
+      const ids = Array.from({ length: count }, (_, k) => `a/b${k}`).slice((page - 1) * 48, page * 48)
+      const links = Array.from({ length: last }, (_, k) => `<a href="/ebooks?page=${k + 1}">${k + 1}</a>`).join('')
+      return new Response(`${results(ids.map((id) => [id, ['fiction']]))}<nav class="pagination">${links}</nav>`)
+    })
+    return { fetcher, requests }
+  }
+
+  it('fetches every page once, keeps the list compactly, and reads it back', async () => {
+    const store = memoryStore()
+    setStore(store)
+    const { fetcher, requests } = catalog(130)
+    const books = await loadIndex(fetcher)
+    expect(books).toHaveLength(130)
+    expect(books[0]).toMatchObject({ id: 'a/b0', popular: 0, tags: ['fiction'] })
+    expect(books[129].popular).toBe(129)
+    expect(requests.map((u) => u.searchParams.get('page') ?? '1').sort()).toEqual(['1', '2', '3'])
+    expect(requests.every((u) => u.searchParams.get('per-page') === '48' && !u.search.includes('tags'))).toBe(true)
+    // Kept as rows, not whole books.
+    expect((store.map.get('index') as { value: unknown[] }).value[0]).toEqual(['a/b0', 'a/b0', '', null, null, 'fiction'])
+    setStore(store)
+    expect(await loadIndex(catalog(130).fetcher)).toHaveLength(130)
+  })
+
+  it('isn’t counted against the cap on what’s kept', async () => {
+    const store = memoryStore()
+    setStore(store)
+    await store.set('index', { at: 0, value: [] })
+    for (let k = 0; k < MAX_KEPT + 5; k++) await store.set(`k${k}`, { at: k + 1, value: k })
+    await prune()
+    expect(store.map.has('index')).toBe(true)
   })
 })

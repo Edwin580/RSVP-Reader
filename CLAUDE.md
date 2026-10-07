@@ -9,7 +9,7 @@ Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for
 - `src/lib/` — pure logic (parsing, timing, pagination, search, storage). Keep it framework-free and unit-tested.
 - `src/components/` — UI. `Reader` owns playback; `PageView` and `WordDisplay` are the two reading modes.
 - `src/hooks/useRsvp.ts` — the playback clock shared by both modes.
-- `src/lib/catalog.ts` and `src/components/Browse.tsx` — free books from Standard Ebooks, read from its public pages in the browser. The parsers only follow links to `/ebooks/<author>/<title>` (the pages carry a trap link that bans whoever follows it). Keep it light: fetch only what's shown, and keep only what's been looked at (`catalogStore.ts`). A subject filter goes in the address twice (`searchUrl`): given once, the site sends it to a `/subjects/` page the app isn't allowed to read. Browser tests use the stand-in in `e2e/catalog.ts` and never touch the real site.
+- `src/lib/catalog.ts` and `src/components/Browse.tsx` — free books from Standard Ebooks, read from its public pages in the browser. The parsers only follow links to `/ebooks/<author>/<title>` (the pages carry a trap link that bans whoever follows it). Keep it light: fetch only what's shown, and keep only what's been looked at (`catalogStore.ts`). A subject filter goes in the address twice (`searchUrl`): given once, the site sends it to a `/subjects/` page the app isn't allowed to read. The site's search only matches whole, exactly spelled words, so searching uses a compact list of every title and author, fetched on the first search and kept a week (`catalogIndex.ts`), with the site's results for description matches after. Browser tests use the stand-in in `e2e/catalog.ts` and never touch the real site.
 
 ## Commands
 

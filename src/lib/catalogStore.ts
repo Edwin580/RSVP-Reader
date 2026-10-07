@@ -1,6 +1,8 @@
 import { createStore, del, entries, get, set, type UseStore } from 'idb-keyval'
 import {
+  INDEX_PER_PAGE,
   bookUrl,
+  indexUrl,
   fetchText,
   parseCatalogPage,
   parseContents,
@@ -13,12 +15,14 @@ import {
   type ContentsEntry,
   type PreviewSection,
 } from './catalog'
+import { packIndex, unpackIndex, type IndexRow, type IndexedBook } from './catalogIndex'
 import { storageName } from './preview'
 
 /**
  * What's been looked at in the catalog, kept on the device: pages of
- * results, books' pages and preview sections. Nothing is fetched or kept
- * ahead of being shown, what's kept is the parsed essentials (a few KB
+ * results, books' pages and preview sections, and (once someone searches)
+ * the list of every book's title and author. Nothing is fetched or kept
+ * ahead of being needed, what's kept is the parsed essentials (a few KB
  * each, not the pages' HTML), and only the most recent are kept.
  *
  * It's a separate database from the library's, so backups don't carry it
@@ -59,6 +63,7 @@ export function setStore(store: KeyValue) {
   kv = store
   memory.clear()
   pruned = null
+  index = null
 }
 
 /** How long a page of results is used without asking again: the catalog changes weekly at most. */
@@ -105,7 +110,8 @@ export function cached<T>(key: string, load: () => Promise<T>, maxAge = PAGE_MAX
 
 /** Keep only the most recent MAX_KEPT entries. */
 export async function prune(): Promise<void> {
-  const all = (await kv.entries()).map(([key, v]) => [key, (v as Kept<unknown> | undefined)?.at ?? 0] as const)
+  // The list searched on the device is one entry, kept apart from the count.
+  const all = (await kv.entries()).filter(([key]) => key !== 'index').map(([key, v]) => [key, (v as Kept<unknown> | undefined)?.at ?? 0] as const)
   if (all.length <= MAX_KEPT) return
   const oldest = [...all].sort((a, b) => a[1] - b[1]).slice(0, all.length - MAX_KEPT)
   for (const [key] of oldest) await kv.del(key)
@@ -141,3 +147,57 @@ export function loadContents(details: Pick<CatalogDetails, 'id' | 'contents'>, f
 export function loadSection(href: string, fetcher: typeof fetch = fetch): Promise<PreviewSection> {
   return cached(`section:${href}`, async () => parseSection(await fetchText(href, fetcher)))
 }
+
+// ——— The list searched on the device ———
+
+/** How long the list of every book is used before it's fetched again (in the background). */
+export const INDEX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+/** Pages fetched at once: quick, and gentle on a volunteer site. */
+const CONCURRENCY = 4
+/** Tries for each page, so one bad moment on the network doesn't stop the whole list. */
+const PAGE_TRIES = 3
+const PAGE_RETRY_MS = 800
+
+async function indexPage(page: number, fetcher: typeof fetch): Promise<CatalogPage> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return parseCatalogPage(await fetchText(indexUrl(page), fetcher))
+    } catch (e) {
+      if (attempt >= PAGE_TRIES) throw e
+      await new Promise((done) => setTimeout(done, PAGE_RETRY_MS * attempt))
+    }
+  }
+}
+
+/** Every book in the catalog, most popular first, a few pages at a time (about 32 small pages). */
+export async function fetchIndex(fetcher: typeof fetch = fetch): Promise<IndexedBook[]> {
+  const first = await indexPage(1, fetcher)
+  const pages: CatalogPage['books'][] = [first.books]
+  let next = 2
+  const worker = async () => {
+    while (next <= first.lastPage) {
+      const page = next++
+      pages[page - 1] = (await indexPage(page, fetcher)).books
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, first.lastPage - 1) }, worker))
+  const seen = new Set<string>()
+  return pages
+    .flatMap((books, p) => books.map((b, k) => ({ ...b, popular: p * INDEX_PER_PAGE + k })))
+    .filter((b) => !seen.has(b.id) && seen.add(b.id))
+}
+
+/**
+ * The list of every book, for searching: fetched the first time someone
+ * searches, then kept, and refreshed in the background once a week old.
+ */
+export function loadIndex(fetcher: typeof fetch = fetch): Promise<IndexedBook[]> {
+  index ??= cached<IndexRow[]>('index', async () => packIndex(await fetchIndex(fetcher)), INDEX_MAX_AGE_MS)
+    .then(unpackIndex)
+    .catch((e) => {
+      index = null
+      throw e
+    })
+  return index
+}
+let index: Promise<IndexedBook[]> | null = null

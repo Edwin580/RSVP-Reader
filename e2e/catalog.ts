@@ -45,8 +45,10 @@ const BOOKS: { id: string; title: string; author: string; words: number; ease: n
   { id: 'robert-louis-stevenson/treasure-island', title: 'Treasure Island', author: 'Robert Louis Stevenson', words: 67000, ease: 80.1, tags: ['adventure', 'fiction'] },
   { id: 'arthur-conan-doyle/the-hound-of-the-baskervilles', title: 'The Hound of the Baskervilles', author: 'Arthur Conan Doyle', words: 59000, ease: 75.4, tags: ['fiction', 'mystery'] },
   { id: 'jane-austen/emma', title: 'Emma', author: 'Jane Austen', words: 160000, ease: 63.1, tags: ['fiction'] },
+  { id: 'arthur-conan-doyle/the-adventures-of-sherlock-holmes', title: 'The Adventures of Sherlock Holmes', author: 'Arthur Conan Doyle', words: 105000, ease: 74.2, tags: ['fiction', 'mystery', 'shorts'] },
+  { id: 'leo-tolstoy/war-and-peace/louise-maude_aylmer-maude', title: 'War and Peace', author: 'Leo Tolstoy', words: 566000, ease: 68.3, tags: ['fiction'] },
   { id: 'jules-verne/twenty-thousand-leagues-under-the-seas', title: 'Twenty Thousand Leagues Under the Seas', author: 'Jules Verne', words: 140000, ease: 70.2, tags: ['adventure', 'fiction', 'science-fiction'] },
-  ...Array.from({ length: 54 }, (_, k) => ({
+  ...Array.from({ length: 52 }, (_, k) => ({
     id: `author-${k}/book-${k}`,
     title: `Book ${k + 1}`,
     author: `Author ${k + 1}`,
@@ -61,9 +63,11 @@ export const CATALOG_SIZE = BOOKS.length
 function listPage(params: URLSearchParams) {
   const perPage = Number(params.get('per-page') ?? 12)
   const page = Number(params.get('page') ?? 1)
-  const query = (params.get('query') ?? '').toLowerCase()
+  // Whole words only, as the site matches them: "sherl" finds nothing.
+  const query = (params.get('query') ?? '').toLowerCase().split(/\W+/).filter(Boolean)
   const tag = params.get('tags[]')
-  let books = BOOKS.filter((b) => (!tag || b.tags.includes(tag)) && (!query || `${b.title} ${b.author}`.toLowerCase().includes(query)))
+  const words = (b: (typeof BOOKS)[number]) => `${b.title} ${b.author}`.toLowerCase().split(/\W+/)
+  let books = BOOKS.filter((b) => (!tag || b.tags.includes(tag)) && query.every((q) => words(b).includes(q)))
   const sort = params.get('sort')
   if (sort === 'newest') books = [...books].reverse()
   if (sort === 'length') books = [...books].sort((a, b) => a.words - b.words)
@@ -92,6 +96,8 @@ export interface Catalog {
   requests: URL[]
   /** Requests for a page of the catalog's list. */
   searches: () => URL[]
+  /** Requests for the whole list, fetched for searching. */
+  listForSearch: () => URL[]
   /** Requests for a book's own page. */
   bookPages: () => URL[]
   /** Requests for the EPUB. */
@@ -135,6 +141,7 @@ export async function mockCatalog(page: Page): Promise<Catalog> {
   return {
     requests,
     searches: () => requests.filter((u) => u.pathname === '/ebooks'),
+    listForSearch: () => requests.filter((u) => u.pathname === '/ebooks' && u.searchParams.get('per-page') === '48'),
     bookPages: () => requests.filter((u) => /^\/ebooks\/[^/]+\/[^/]+$/.test(u.pathname)),
     downloads: () => requests.filter((u) => u.pathname.endsWith('.epub')),
     failNext: (match) => void failing.push(match),

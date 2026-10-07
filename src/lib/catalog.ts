@@ -34,6 +34,8 @@ export interface CatalogPage {
   books: CatalogBook[]
   /** Whether there's a next page. */
   hasMore: boolean
+  /** The number of the last page, from the page links (1 if there are none). */
+  lastPage: number
 }
 
 /** A book's own page: everything shown before it's added. */
@@ -103,8 +105,12 @@ export interface CatalogQuery {
 /** Books per page of results: a screenful or two, so each page is light. */
 export const PER_PAGE = 24
 
-/** A book id: lower-case path segments, at least author and title. */
-const ID = /^[a-z0-9-]+(?:\/[a-z0-9-]+)+$/
+/**
+ * A book id: lower-case path segments, at least author and title. Several
+ * authors or translators are joined with underscores
+ * ("war-and-peace/louise-maude_aylmer-maude").
+ */
+const ID = /^[a-z0-9_-]+(?:\/[a-z0-9_-]+)+$/
 
 export function isBookId(id: string): boolean {
   return ID.test(id)
@@ -128,6 +134,16 @@ export function searchUrl({ query = '', subject, sort, page = 1 }: CatalogQuery)
   params.set('sort', sort ?? (q ? 'relevance' : 'popularity'))
   params.set('view', 'list')
   params.set('per-page', String(PER_PAGE))
+  if (page > 1) params.set('page', String(page))
+  return `${CATALOG_ORIGIN}/ebooks?${params}`
+}
+
+/** Books per page when fetching the whole list for searching: the most the site gives, so the fewest requests. */
+export const INDEX_PER_PAGE = 48
+
+/** A page of the whole catalog, most popular first, for the list searched on the device (see catalogIndex.ts). */
+export function indexUrl(page = 1): string {
+  const params = new URLSearchParams({ sort: 'popularity', view: 'list', 'per-page': String(INDEX_PER_PAGE) })
   if (page > 1) params.set('page', String(page))
   return `${CATALOG_ORIGIN}/ebooks?${params}`
 }
@@ -207,7 +223,8 @@ export function parseCatalogPage(html: string): CatalogPage {
       tags: tagsOf(item.querySelectorAll('.tags a')),
     })
   }
-  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]') }
+  const pages = [...doc.querySelectorAll('.pagination a[href]')].map((a) => Number(new URL(a.getAttribute('href')!, CATALOG_ORIGIN).searchParams.get('page')) || 1)
+  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]'), lastPage: Math.max(1, ...pages) }
 }
 
 export function parseDetails(html: string, id: string): CatalogDetails {

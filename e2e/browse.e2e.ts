@@ -28,17 +28,19 @@ test('browse the catalog: popular first, search, subjects, order, and more', asy
   // A subject and an order each search again from the first page.
   await page.getByRole('button', { name: 'Mystery' }).click()
   await expect(page.getByRole('button', { name: 'Mystery' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/])
+  await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/, /The Adventures of Sherlock Holmes/])
   await page.getByRole('button', { name: 'All', exact: true }).click()
   await page.getByRole('radio', { name: 'Shortest' }).click()
   await expect(list.getByRole('button').first()).toContainText('Book 1')
   expect(catalog.searches().at(-1)!.searchParams.get('sort')).toBe('length')
   expect(catalog.searches().at(-1)!.searchParams.has('page')).toBe(false)
 
-  // Searching, once typing pauses.
+  // Nothing fetched for searching until someone searches.
+  expect(catalog.listForSearch()).toHaveLength(0)
   await page.getByRole('searchbox', { name: 'Search free books' }).fill('austen')
   await expect(list.getByRole('button')).toHaveText([/Pride and Prejudice/, /Emma/])
-  expect(catalog.searches().at(-1)!.searchParams.get('query')).toBe('austen')
+  await expect.poll(() => catalog.searches().some((u) => u.searchParams.get('query') === 'austen')).toBe(true)
+  expect(catalog.listForSearch().length).toBeGreaterThan(0)
   await page.getByRole('searchbox', { name: 'Search free books' }).fill('nothing like it')
   await expect(page.getByText('No books match.')).toBeVisible()
 
@@ -50,6 +52,27 @@ test('browse the catalog: popular first, search, subjects, order, and more', asy
 
   await page.getByRole('button', { name: 'Back to your library' }).click()
   await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible()
+})
+
+test('searching: as you type, titles first, and slips forgiven', async ({ page }) => {
+  await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const box = page.getByRole('searchbox', { name: 'Search free books' })
+  const list = page.getByRole('list', { name: 'Books' })
+  // Still being typed: the site finds nothing for "sherl", the list on the device does.
+  await box.fill('sherl')
+  await expect(list.getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
+  // The title as typed comes first.
+  await box.fill('war and peace')
+  await expect(list.getByRole('button').first()).toContainText('War and Peace')
+  // A slip.
+  await box.fill('frankenstien')
+  await expect(list.getByRole('button').first()).toContainText('Frankenstein')
+  // By author, kept to a subject.
+  await page.getByRole('button', { name: 'Mystery' }).click()
+  await box.fill('doyle')
+  await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/, /The Adventures of Sherlock Holmes/])
 })
 
 test('only what’s looked at is kept: coming back to it fetches nothing', async ({ page }) => {
