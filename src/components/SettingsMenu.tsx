@@ -59,6 +59,7 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: 'Auto' },
   { value: 'light', label: 'Light' },
   { value: 'sepia', label: 'Sepia' },
+  { value: 'paper', label: 'Paper' },
   { value: 'dark', label: 'Dark' },
 ]
 
@@ -247,38 +248,41 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
               />
             </div>
 
-            <div className="setting">
-              <span className="setting-name">Focus color</span>
-              <div className="swatches" role="radiogroup" aria-label="Focus color">
-                {ACCENT_OPTIONS.map((a) => (
-                  <button
-                    key={a.value}
-                    type="button"
-                    role="radio"
-                    className="swatch"
-                    aria-checked={settings.accent === a.value}
-                    aria-label={a.label}
-                    title={a.label}
-                    style={{ '--swatch': a.color } as React.CSSProperties}
-                    onClick={() => set({ accent: a.value })}
-                  />
-                ))}
-                {/* Any colour: the system colour picker, behind a colour-wheel swatch. */}
-                <label
-                  className={`swatch swatch-custom${settings.accent === 'custom' ? ' is-checked' : ''}`}
-                  title="Custom color"
-                  style={settings.accent === 'custom' ? ({ '--swatch': settings.customColor } as React.CSSProperties) : undefined}
-                >
-                  <input
-                    type="color"
-                    aria-label="Custom color"
-                    value={settings.customColor}
-                    onClick={() => settings.accent !== 'custom' && set({ accent: 'custom' })}
-                    onChange={(e) => set({ accent: 'custom', customColor: e.target.value.toLowerCase() })}
-                  />
-                </label>
+            {/* Paper is ink only, like e-ink, so it has no focus colour to pick. */}
+            {settings.theme !== 'paper' && (
+              <div className="setting">
+                <span className="setting-name">Focus color</span>
+                <div className="swatches" role="radiogroup" aria-label="Focus color">
+                  {ACCENT_OPTIONS.map((a) => (
+                    <button
+                      key={a.value}
+                      type="button"
+                      role="radio"
+                      className="swatch"
+                      aria-checked={settings.accent === a.value}
+                      aria-label={a.label}
+                      title={a.label}
+                      style={{ '--swatch': a.color } as React.CSSProperties}
+                      onClick={() => set({ accent: a.value })}
+                    />
+                  ))}
+                  {/* Any colour: the system colour picker, behind a colour-wheel swatch. */}
+                  <label
+                    className={`swatch swatch-custom${settings.accent === 'custom' ? ' is-checked' : ''}`}
+                    title="Custom color"
+                    style={settings.accent === 'custom' ? ({ '--swatch': settings.customColor } as React.CSSProperties) : undefined}
+                  >
+                    <input
+                      type="color"
+                      aria-label="Custom color"
+                      value={settings.customColor}
+                      onClick={() => settings.accent !== 'custom' && set({ accent: 'custom' })}
+                      onChange={(e) => set({ accent: 'custom', customColor: e.target.value.toLowerCase() })}
+                    />
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
             <dl className="shortcuts">
               {SHORTCUTS.map(([key, action]) => (

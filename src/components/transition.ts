@@ -1,6 +1,8 @@
 import { flushSync } from 'react-dom'
 
-const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+/** Motion is off when the system asks, and in the Paper theme, where everything changes at once, like e-ink. */
+const reducedMotion = () =>
+  document.documentElement.dataset.theme === 'paper' || (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
 
 /**
  * Move between screens (library ↔ reader) with a short slide-and-fade, using

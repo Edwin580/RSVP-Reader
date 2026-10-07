@@ -20,7 +20,7 @@
         // PR previews keep their settings under a separate key (src/lib/preview.ts).
         var key = location.pathname.indexOf('/pr-preview/') >= 0 ? 'rsvp-settings-preview' : 'rsvp-settings'
         var theme = JSON.parse(localStorage.getItem(key) || '{}').theme
-        if (theme === 'light' || theme === 'sepia' || theme === 'dark') document.documentElement.dataset.theme = theme
+        if (theme === 'light' || theme === 'sepia' || theme === 'paper' || theme === 'dark') document.documentElement.dataset.theme = theme
       } catch (e) {}
     </script>
   </head>

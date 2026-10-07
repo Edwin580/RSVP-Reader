@@ -174,7 +174,7 @@ export interface Settings {
 }
 
 export type ReadingMode = 'word' | 'page'
-export type Theme = 'system' | 'light' | 'sepia' | 'dark'
+export type Theme = 'system' | 'light' | 'sepia' | 'paper' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
 export type PlayControl = 'tap' | 'hold' | 'guide'
@@ -182,7 +182,7 @@ export type GuideLayout = 'pages' | 'scroll'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
-export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
+export const THEMES: Theme[] = ['system', 'light', 'sepia', 'paper', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide']
