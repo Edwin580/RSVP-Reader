@@ -34,8 +34,6 @@ export interface CatalogPage {
   books: CatalogBook[]
   /** Whether there's a next page. */
   hasMore: boolean
-  /** The number of the last page, from the page links (1 if there are none). */
-  lastPage: number
 }
 
 /** A book's own page: everything shown before it's added. */
@@ -93,9 +91,17 @@ export const SORTS: { value: CatalogSort; label: string }[] = [
   { value: 'length', label: 'Shortest' },
 ]
 
-export type CatalogOrder = 'popularity' | 'newest'
-/** Books per catalog page fetched: the most the site gives. */
-export const PER_PAGE = 48
+export interface CatalogQuery {
+  query?: string
+  /** A subject slug ("science-fiction"), or none for all. */
+  subject?: string
+  sort?: CatalogSort | null
+  /** From 1. */
+  page?: number
+}
+
+/** Books per page of results: a screenful or two, so each page is light. */
+export const PER_PAGE = 24
 
 /** A book id: lower-case path segments, at least author and title. */
 const ID = /^[a-z0-9-]+(?:\/[a-z0-9-]+)+$/
@@ -105,13 +111,23 @@ export function isBookId(id: string): boolean {
 }
 
 /**
- * A page of the whole catalog, in the list view (which has word counts and
- * subjects). Searching and filtering happen on the device, over all of
- * them (see catalogIndex.ts): the site sends a subject filter on to a
- * /subjects/ page that other sites aren't allowed to read.
+ * A page of search results, in the list view (which has word counts and
+ * subjects). A subject goes in twice: given once, the site sends the
+ * request on to its /subjects/ page, which other sites aren't allowed to
+ * read (it has no CORS header); given twice, it answers here, filtered.
  */
-export function listUrl(order: CatalogOrder, page = 1): string {
-  const params = new URLSearchParams({ sort: order, view: 'list', 'per-page': String(PER_PAGE) })
+export function searchUrl({ query = '', subject, sort, page = 1 }: CatalogQuery): string {
+  const params = new URLSearchParams()
+  const q = query.trim()
+  if (q) params.set('query', q)
+  if (subject) {
+    params.append('tags[]', subject)
+    params.append('tags[]', subject)
+  }
+  // With words to match, the best matches first; otherwise the chosen order.
+  params.set('sort', sort ?? (q ? 'relevance' : 'popularity'))
+  params.set('view', 'list')
+  params.set('per-page', String(PER_PAGE))
   if (page > 1) params.set('page', String(page))
   return `${CATALOG_ORIGIN}/ebooks?${params}`
 }
@@ -191,8 +207,7 @@ export function parseCatalogPage(html: string): CatalogPage {
       tags: tagsOf(item.querySelectorAll('.tags a')),
     })
   }
-  const pages = [...doc.querySelectorAll('.pagination a[href]')].map((a) => Number(new URL(a.getAttribute('href')!, CATALOG_ORIGIN).searchParams.get('page')) || 1)
-  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]'), lastPage: Math.max(1, ...pages) }
+  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]') }
 }
 
 export function parseDetails(html: string, id: string): CatalogDetails {
@@ -304,7 +319,6 @@ export function textStart(book: { title: string; words: { length: number }; chap
 
 // ——— Fetching ———
 
-const pages = new Map<string, Promise<string>>()
 /** Wait before trying a page again after a dropped connection (ms). */
 const RETRY_MS = 600
 
@@ -324,19 +338,6 @@ export function fetchText(url: string, fetcher: typeof fetch = fetch): Promise<s
     .catch((e) => {
       throw e instanceof TypeError ? new Error(`Couldn’t reach ${CATALOG_NAME}. Check your connection.`) : e
     })
-}
-
-/** A catalog page's HTML, remembered for the session (a failed one isn't, so it can be tried again). */
-export function fetchPage(url: string, fetcher: typeof fetch = fetch): Promise<string> {
-  let page = pages.get(url)
-  if (!page) {
-    page = fetchText(url, fetcher).catch((e) => {
-      pages.delete(url)
-      throw e
-    })
-    pages.set(url, page)
-  }
-  return page
 }
 
 /** Download a book's EPUB, as a file ready to add like an uploaded one. */

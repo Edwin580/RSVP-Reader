@@ -7,33 +7,40 @@ import {
   downloadBook,
   downloadUrl,
   easeLabel,
-  fetchPage,
+  fetchText,
   isBookId,
   parseCatalogPage,
   parseContents,
   parseDetails,
   parseSection,
   previewStart,
-  listUrl,
+  searchUrl,
   textStart,
 } from '../catalog'
 
 /** Pages saved from standardebooks.org, cut down to their main content. */
 const fixture = (name: string) => readFileSync(join(process.cwd(), `src/lib/__tests__/fixtures/standard-ebooks/${name}.html`), 'utf8')
 
-describe('listUrl', () => {
-  it('asks for a page of the whole catalog, in the list view, 48 at a time', () => {
-    const url = new URL(listUrl('popularity'))
+describe('searchUrl', () => {
+  it('asks for one light page, in the list view, popular first', () => {
+    const url = new URL(searchUrl({}))
     expect(url.origin + url.pathname).toBe('https://standardebooks.org/ebooks')
     expect(url.searchParams.get('view')).toBe('list')
     expect(url.searchParams.get('sort')).toBe('popularity')
-    expect(url.searchParams.get('per-page')).toBe('48')
+    expect(url.searchParams.get('per-page')).toBe('24')
     expect(url.searchParams.has('page')).toBe(false)
-    expect(new URL(listUrl('newest', 3)).searchParams.get('page')).toBe('3')
   })
 
-  it('never filters by subject on the site, which sends that to a page the app can’t read', () => {
-    expect(listUrl('popularity', 2)).not.toMatch(/tags|subjects/)
+  it('sorts by relevance when searching, unless an order is picked', () => {
+    expect(new URL(searchUrl({ query: ' austen ' })).searchParams.get('query')).toBe('austen')
+    expect(new URL(searchUrl({ query: 'austen' })).searchParams.get('sort')).toBe('relevance')
+    expect(new URL(searchUrl({ query: 'austen', sort: 'newest' })).searchParams.get('sort')).toBe('newest')
+  })
+
+  it('gives a subject twice, so the site answers instead of sending it to a page the app can’t read', () => {
+    const url = new URL(searchUrl({ subject: 'adventure', page: 3 }))
+    expect(url.searchParams.getAll('tags[]')).toEqual(['adventure', 'adventure'])
+    expect(url.searchParams.get('page')).toBe('3')
   })
 })
 
@@ -49,17 +56,15 @@ describe('parseCatalogPage', () => {
     expect(northanger.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_northanger-abbey\/.+\.jpg$/)
   })
 
-  it('knows when there are more pages, and how many', () => {
-    const { books, hasMore, lastPage } = parseCatalogPage(fixture('search-all'))
+  it('knows when there are more pages', () => {
+    const { books, hasMore } = parseCatalogPage(fixture('search-all'))
     expect(books.length).toBe(12)
     expect(hasMore).toBe(true)
-    expect(lastPage).toBe(128) // 12 a page in this one
-    expect(parseCatalogPage(fixture('search-austen')).lastPage).toBe(1)
     expect(books[0]).toMatchObject({ id: 'jane-austen/pride-and-prejudice', title: 'Pride and Prejudice', words: 121970 })
   })
 
   it('finds nothing on a page with no results', () => {
-    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false, lastPage: 1 })
+    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false })
   })
 
   it('skips anything that isn’t a link to a book in the catalog', () => {
@@ -176,31 +181,22 @@ describe('textStart', () => {
 })
 
 describe('fetching', () => {
-  it('remembers pages, and refuses anything off the catalog', async () => {
-    const fetcher = vi.fn(async () => new Response('<p>hi</p>'))
-    const url = 'https://standardebooks.org/ebooks?test=remember'
-    expect(await fetchPage(url, fetcher)).toBe('<p>hi</p>')
-    expect(await fetchPage(url, fetcher)).toBe('<p>hi</p>')
-    expect(fetcher).toHaveBeenCalledTimes(1)
-    await expect(fetchPage('https://example.com/x', fetcher)).rejects.toThrow()
-  })
-
-  it('forgets a failed page, so it can be tried again', async () => {
-    const url = 'https://standardebooks.org/ebooks?test=retry'
-    const failing = vi.fn(async () => new Response('', { status: 503 }))
-    await expect(fetchPage(url, failing)).rejects.toThrow(/503/)
-    const working = vi.fn(async () => new Response('ok'))
-    expect(await fetchPage(url, working)).toBe('ok')
+  it('refuses anything off the catalog', async () => {
+    await expect(fetchText('https://example.com/x', vi.fn())).rejects.toThrow()
   })
 
   it('tries again once when the connection drops', async () => {
     const url = 'https://standardebooks.org/ebooks?test=dropped'
     const fetcher = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response('back'))
-    expect(await fetchPage(url, fetcher)).toBe('back')
+    expect(await fetchText(url, fetcher)).toBe('back')
     expect(fetcher).toHaveBeenCalledTimes(2)
     const down = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
-    await expect(fetchPage('https://standardebooks.org/ebooks?test=down', down)).rejects.toThrow(/Couldn’t reach Standard Ebooks/)
+    await expect(fetchText('https://standardebooks.org/ebooks?test=down', down)).rejects.toThrow(/Couldn’t reach Standard Ebooks/)
     expect(down).toHaveBeenCalledTimes(2)
+  })
+
+  it('says what the site answered when it isn’t a page', async () => {
+    await expect(fetchText('https://standardebooks.org/ebooks?x', vi.fn(async () => new Response('', { status: 503 })))).rejects.toThrow(/503/)
   })
 
   it('downloads the EPUB as a file, with progress', async () => {

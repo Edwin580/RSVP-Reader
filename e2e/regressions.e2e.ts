@@ -448,14 +448,13 @@ test('free books: picking a subject lists that subject’s books (#62)', async (
   // Reported on iPhone: tapping Adventure showed "Couldn’t reach Standard
   // Ebooks". The site sends a subject filter on to its /subjects/ page,
   // which other sites aren't allowed to read; the stand-in does the same.
-  // Subjects are now picked out on the device, from the whole catalog.
+  // A subject now goes in twice, which the site answers itself.
   const catalog = await mockCatalog(page)
   await page.goto('./')
   await openBrowse(page)
-  await page.getByRole('button', { name: 'Adventure' }).click()
+  await page.getByRole('button', { name: 'Adventure', exact: true }).click()
   const list = page.getByRole('list', { name: 'Books' })
   await expect(list.getByRole('button').first()).toContainText('Treasure Island')
   await expect(page.getByRole('alert')).toHaveCount(0)
-  await expect(page.getByText(/^\d+ of 60 books$/)).toBeVisible()
-  expect(catalog.requests.some((u) => u.searchParams.has('tags[]') || u.pathname.startsWith('/subjects/'))).toBe(false)
+  expect(catalog.requests.some((u) => u.pathname.startsWith('/subjects/'))).toBe(false)
 })

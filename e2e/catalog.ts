@@ -56,14 +56,21 @@ const BOOKS: { id: string; title: string; author: string; words: number; ease: n
   })),
 ]
 export const CATALOG_SIZE = BOOKS.length
-const PER_PAGE = 48
 
-/** A page of the list, in the site's own markup (see the saved pages in fixtures/). */
-function listPage(order: string | null, page: number) {
-  const books = order === 'newest' ? [...BOOKS].reverse() : BOOKS
-  const last = Math.ceil(books.length / PER_PAGE)
+/** A page of results, in the site's own markup (see the saved pages in fixtures/), searched and sorted roughly as the site does. */
+function listPage(params: URLSearchParams) {
+  const perPage = Number(params.get('per-page') ?? 12)
+  const page = Number(params.get('page') ?? 1)
+  const query = (params.get('query') ?? '').toLowerCase()
+  const tag = params.get('tags[]')
+  let books = BOOKS.filter((b) => (!tag || b.tags.includes(tag)) && (!query || `${b.title} ${b.author}`.toLowerCase().includes(query)))
+  const sort = params.get('sort')
+  if (sort === 'newest') books = [...books].reverse()
+  if (sort === 'length') books = [...books].sort((a, b) => a.words - b.words)
+  if (sort === 'reading-ease') books = [...books].sort((a, b) => b.ease - a.ease)
+  const last = Math.max(1, Math.ceil(books.length / perPage))
   const items = books
-    .slice((page - 1) * PER_PAGE, page * PER_PAGE)
+    .slice((page - 1) * perPage, page * perPage)
     .map(
       (b) => `<li typeof="schema:Book" about="/ebooks/${b.id}">
         <div class="thumbnail-container"><picture><source srcset="/images/covers/${b.id.replace('/', '_')}/1/cover@2x.jpg 2x, /images/covers/${b.id.replace('/', '_')}/1/cover.jpg 1x" type="image/jpeg"/><img src="/images/covers/${b.id.replace('/', '_')}/1/cover@2x.jpg" alt=""/></picture></div>
@@ -76,6 +83,7 @@ function listPage(order: string | null, page: number) {
     .join('')
   const links = Array.from({ length: last }, (_, k) => `<li><a href="/ebooks?page=${k + 1}&amp;view=list">${k + 1}</a></li>`).join('')
   const next = page < last ? `<a href="/ebooks?page=${page + 1}&amp;view=list" rel="next">Next</a>` : '<a aria-disabled="true">Next</a>'
+  if (!items) return `<!DOCTYPE html><html><body><main><p class="no-results">No ebooks matched your filters.</p></main></body></html>`
   return `<!DOCTYPE html><html><body><main><ol class="ebooks-list list">${items}</ol><nav class="pagination"><ol>${links}</ol>${next}</nav></main></body></html>`
 }
 
@@ -112,9 +120,9 @@ export async function mockCatalog(page: Page): Promise<Catalog> {
       // which other sites aren't allowed to read (no CORS header).
       const tags = url.searchParams.getAll('tags[]')
       if (tags.length === 1) return route.fulfill({ status: 302, headers: { ...headers, location: `/subjects/${tags[0]}` } })
-      return route.fulfill({ headers, contentType: 'text/html; charset=utf-8', body: listPage(url.searchParams.get('sort'), Number(url.searchParams.get('page') ?? 1)) })
+      return route.fulfill({ headers, contentType: 'text/html; charset=utf-8', body: listPage(url.searchParams) })
     }
-    if (path.startsWith('/subjects/')) return route.fulfill({ contentType: 'text/html; charset=utf-8', body: listPage(null, 1) })
+    if (path.startsWith('/subjects/')) return route.fulfill({ contentType: 'text/html; charset=utf-8', body: listPage(new URLSearchParams()) })
     if (path === '/ebooks/jane-austen/pride-and-prejudice') return html('book-pride-and-prejudice')
     if (path === '/ebooks/jane-austen/pride-and-prejudice/text') return html('toc-pride-and-prejudice')
     if (path.startsWith('/ebooks/jane-austen/pride-and-prejudice/text/')) return html('chapter-1-pride-and-prejudice')

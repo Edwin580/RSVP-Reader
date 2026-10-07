@@ -1450,8 +1450,6 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .browse-status { margin: 1.5rem 0; text-align: center; }
 .browse-status p { margin-bottom: 0.25rem; }
 .browse-more { display: block; margin: 1rem auto 0; }
-.browse-status .bar { max-width: 14rem; margin: 0.5rem auto 0; }
-.browse-count { margin-top: 0.75rem; text-align: center; font-size: 0.85rem; }
 .browse-credit { margin-top: 2.5rem; font-size: 0.8rem; line-height: 1.5; text-wrap: pretty; }
 .browse-credit a { color: inherit; text-underline-offset: 2px; }
 

@@ -9,7 +9,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 ## Features
 
 - **File upload**: drag and drop or pick a file. Supports `.epub`, `.pdf` (text-based, not scanned), `.txt` and `.md`. All parsing happens in the browser, and splitting a book into words runs in a background Web Worker so the page stays responsive while a long book loads.
-- **Free books**: *Find a free book* in the library browses about 1,500 public-domain classics from [Standard Ebooks](https://standardebooks.org), a volunteer project that edits and typesets them carefully. Search by title, author or subject, filter by subject and sort by popularity, newest, easiest or shortest. Each book shows its description, length, reading time at your speed and how hard it is to read, and *Read a preview* opens its first chapter (past the title page) a section at a time. Nothing is downloaded until you tap *Add to library* and confirm; the EPUB is then added like any book you upload, and opens at its first chapter. The app reads Standard Ebooks' public pages directly (their site allows it), with no server of its own. The whole catalog is kept on the device (about 32 pages, a few hundred KB, fetched once and refreshed weekly in the background), so search, subjects and sorting answer as you type and work offline; a book's page is fetched as soon as you touch it, and the book pages and preview sections you've seen are kept too.
+- **Free books**: *Find a free book* in the library browses about 1,500 public-domain classics from [Standard Ebooks](https://standardebooks.org), a volunteer project that edits and typesets them carefully. Search by title, author or subject, filter by subject and sort by popularity, newest, easiest or shortest. Each book shows its description, length, reading time at your speed and how hard it is to read, and *Read a preview* opens its first chapter (past the title page) a section at a time. Nothing is downloaded until you tap *Add to library* and confirm; the EPUB is then added like any book you upload, and opens at its first chapter. The app reads Standard Ebooks' public pages directly (their site allows it), with no server of its own. It's kept light: only what you look at is fetched (24 books at a time), and only what you've looked at is kept on the device, as small parsed entries (pages of results for a day, book pages and preview sections for 30 days, at most 150 in all), so going back to something, or opening it again later, is instant.
 - **Demo for first-time visitors**: while the library is empty, a "Try the demo" card opens a short sample (tips plus the opening of *Alice's Adventures in Wonderland*, public domain) to try both reading modes, chapters and search. The sample is never saved and the card disappears once you add a book.
 - **Two reading modes**, switched in the Aa menu or with `M`:
   - **Word**: RSVP, one word at a time in a fixed spot.
@@ -87,8 +87,7 @@ src/
     backup.ts          backup file format and merging a restore into the library
     bookmarks.ts       adding and removing bookmarks (saved per sentence)
     catalog.ts         free books from Standard Ebooks: reading its catalog pages, previews, downloads
-    catalogIndex.ts    searching, filtering and sorting the whole catalog on the device
-    catalogStore.ts    fetching and keeping the catalog index, book pages and previews (IndexedDB)
+    catalogStore.ts    keeps what's been looked at in the catalog (results, book pages, previews) in IndexedDB
     covers.ts          finding EPUB cover images and making cover thumbnails
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
