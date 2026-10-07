@@ -51,7 +51,9 @@ than it, with their content scrolling inside.
 ## Phones
 
 **6. Nothing scrolls sideways.** No screen, and no open pop-up, is wider than
-the phone, down to 320px (the smallest iPhone SE).
+the phone, down to 320px (the smallest iPhone SE). A row meant to be swiped
+sideways on its own, like the subjects when browsing free books, is the
+exception: the row scrolls, not the page.
 *Checked by:* the browser tests, on every screen and pop-up at 320px and 390px.
 
 **7. Everything you can tap is at least 44 × 44px on a touch screen** (Apple's

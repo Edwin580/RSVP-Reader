@@ -23,6 +23,8 @@ interface Props {
   /** Offer the built-in sample (only while the library is empty). */
   showDemo: boolean
   onDemo: () => void
+  /** Find a free book to add. */
+  onBrowse: () => void
   onUpload: (file: File) => void
   onOpen: (id: string) => void
   onDelete: (id: string) => void
@@ -55,6 +57,7 @@ export function Library({
   storageKept,
   showDemo,
   onDemo,
+  onBrowse,
   onUpload,
   onOpen,
   onDelete,
@@ -149,6 +152,11 @@ export function Library({
           {FORMATS}
           <span className="on-mouse"> · or drop a file here</span>
         </span>
+      </button>
+      <button type="button" className="dropzone browse-entry" onClick={onBrowse} disabled={!!busy}>
+        <Icon name="search" size={24} />
+        <span className="dropzone-title">Find a free book</span>
+        <span className="muted">Classics from Standard Ebooks, with a preview</span>
       </button>
       <input
         ref={input}

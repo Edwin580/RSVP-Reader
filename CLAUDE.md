@@ -1,14 +1,19 @@
 # Chapter
 
-Chapter (formerly RSVP Reader) is a speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown) and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main` (via the `gh-pages` branch), and every pull request gets a preview at `/pr-preview/pr-<number>/` with its own separate storage.
+Chapter (formerly RSVP Reader) is a speed-reading web app: upload a book (EPUB, PDF, TXT, Markdown), or add a free one from Standard Ebooks, and read it one word at a time (word mode) or as pages with a pacer that follows along (page mode). Everything runs in the browser; books and progress are stored locally in IndexedDB. Deployed to GitHub Pages on every push to `main` (via the `gh-pages` branch), and every pull request gets a preview at `/pr-preview/pr-<number>/` with its own separate storage.
 
 ## Stack and layout
 
-Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for where things live. The main pieces:
+Vite + React + TypeScript, Vitest, oxlint. See the README's "Project layout" for where things live.
+
+Keep it lean: before writing a helper, look for one that already does the job and reuse it (extend it if needed) rather than writing a second version. No duplicate logic, no code that isn't needed yet.
+
+The main pieces:
 
 - `src/lib/` — pure logic (parsing, timing, pagination, search, storage). Keep it framework-free and unit-tested.
 - `src/components/` — UI. `Reader` owns playback; `PageView` and `WordDisplay` are the two reading modes.
 - `src/hooks/useRsvp.ts` — the playback clock shared by both modes.
+- `src/lib/catalog.ts` and `src/components/Browse.tsx` — free books from Standard Ebooks, read from its public pages in the browser. The parsers only follow links to `/ebooks/<author>/<title>` (the pages carry a trap link that bans whoever follows it). Keep it light: fetch only what's shown, and keep only what's been looked at (`catalogStore.ts`). A subject filter goes in the address twice (`searchUrl`): given once, the site sends it to a `/subjects/` page the app isn't allowed to read. The site's search only matches whole, exactly spelled words, so searching uses a compact list of every title and author, fetched on the first search and kept a week (`catalogIndex.ts`), with the site's results for description matches after. It reads words with the in-book search's own `tokenize`, `stem` and `editDistance` (`search.ts`); only the ranking is its own. Browser tests use the stand-in in `e2e/catalog.ts` and never touch the real site.
 
 ## Commands
 

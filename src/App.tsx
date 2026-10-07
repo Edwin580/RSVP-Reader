@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Browse } from './components/Browse'
 import { Library } from './components/Library'
 import { Reader } from './components/Reader'
 import { Toast, type ToastMessage } from './components/Toast'
 import { navigate } from './components/transition'
 import { applyAppearance } from './lib/appearance'
 import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
+import { textStart } from './lib/catalog'
 import { parseFile } from './lib/parsers'
 import { sentenceStart } from './lib/rsvp'
 import { atEnd, readToEnd } from './lib/shelf'
@@ -29,6 +31,8 @@ export default function App() {
   const [progress, setProgress] = useState<Record<string, Progress | undefined>>({})
   const [stats, setStats] = useState(EMPTY_STATS)
   const [open, setOpen] = useState<OpenBook | null>(null)
+  // Browsing free books to add.
+  const [browsing, setBrowsing] = useState(false)
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -57,7 +61,7 @@ export default function App() {
     navigator.storage?.persisted?.().then(setStorageKept, () => {})
   }, [])
 
-  const openBook = useCallback(async (book: Book) => {
+  const openBook = useCallback(async (book: Book, also?: () => void) => {
     const saved = await storage.loadProgress(book.id)
     setBookmarks(await storage.loadBookmarks(book.id))
     // Resume from the start of the sentence so there's context to pick up from,
@@ -65,30 +69,47 @@ export default function App() {
     const finished = readToEnd({ wordCount: book.words.length }, saved)
     const startIndex = !saved ? 0 : finished ? saved.index : sentenceStart(book.words, saved.index)
     lastIndex.current = startIndex
-    navigate('forward', () => setOpen({ book, startIndex, lastReadAt: saved?.updatedAt }))
+    navigate('forward', () => {
+      also?.()
+      setOpen({ book, startIndex, lastReadAt: saved?.updatedAt })
+    })
   }, [])
 
-  const handleUpload = async (file: File) => {
+  /**
+   * Read a book file, add it to the library and open it. A book from the
+   * catalog opens at its first chapter, past the title page and imprint.
+   */
+  const addBook = async (file: File, fromCatalog = false) => {
     setError(null)
     setBusy(`Reading ${file.name}…`)
     try {
       const book = await parseFile(file, (f) => setBusy(`Reading ${file.name}… ${Math.round(f * 100)}%`))
       await storage.saveBook(book, file.name)
+      if (fromCatalog && !(await storage.loadProgress(book.id))) {
+        const start = textStart(book)
+        if (start > 0) await storage.saveProgress(book.id, start)
+      }
       // Now there's something worth keeping, ask the browser not to clear it.
       storage.requestPersistence().then(setStorageKept, () => {})
       await refreshLibrary()
-      await openBook(book)
-    } catch (e) {
-      setError(`Couldn’t open “${file.name}”. ${message(e)}`)
+      await openBook(book, () => setBrowsing(false))
     } finally {
       setBusy(null)
+    }
+  }
+
+  const handleUpload = async (file: File) => {
+    try {
+      await addBook(file)
+    } catch (e) {
+      setError(`Couldn’t open “${file.name}”. ${message(e)}`)
     }
   }
 
   const handleOpen = async (id: string) => {
     setError(null)
     const book = await storage.loadBook(id)
-    if (book) await openBook(book)
+    if (book) await openBook(book, () => setBrowsing(false))
     else setError('That book is no longer stored. Please upload it again.')
   }
 
@@ -225,6 +246,18 @@ export default function App() {
     )
   }
 
+  if (browsing) {
+    return (
+      <Browse
+        books={books}
+        wpm={settings.wpm}
+        onBack={() => navigate('back', () => setBrowsing(false))}
+        onAdd={(file) => addBook(file, true)}
+        onOpen={handleOpen}
+      />
+    )
+  }
+
   return (
     <>
       <Library
@@ -238,6 +271,7 @@ export default function App() {
         storageKept={storageKept}
         showDemo={libraryLoaded && books.length === 0 && !busy}
         onDemo={handleDemo}
+        onBrowse={() => navigate('forward', () => setBrowsing(true))}
         onUpload={handleUpload}
         onOpen={handleOpen}
         onDelete={handleDelete}

@@ -1,0 +1,191 @@
+import { expect, test } from '@playwright/test'
+import { mockCatalog, openBrowse } from './catalog.ts'
+
+/*
+ * Finding a free book: browse and search the catalog, read about a book and
+ * a preview of it, and add it, which downloads it only once confirmed.
+ * Standard Ebooks is stood in for by saved pages (see catalog.ts).
+ */
+
+test('browse the catalog: popular first, search, subjects, order, and more', async ({ page }) => {
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const list = page.getByRole('list', { name: 'Books' })
+  // One light page to start with, and nothing else fetched.
+  await expect(list.getByRole('listitem')).toHaveCount(24)
+  await expect(list.getByRole('button').first()).toContainText('Pride and Prejudice')
+  await expect(list.getByRole('button').first()).toContainText('Jane Austen')
+  await expect(list.getByRole('button').first()).toContainText('121,970 words')
+  expect(catalog.searches()).toHaveLength(1)
+  expect(catalog.searches()[0].searchParams.get('sort')).toBe('popularity')
+
+  // More, added below the books already there.
+  await page.getByRole('button', { name: 'Show more' }).click()
+  await expect(list.getByRole('listitem')).toHaveCount(48)
+  expect(catalog.searches().at(-1)!.searchParams.get('page')).toBe('2')
+
+  // A subject and an order each search again from the first page.
+  await page.getByRole('button', { name: 'Mystery' }).click()
+  await expect(page.getByRole('button', { name: 'Mystery' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/, /The Adventures of Sherlock Holmes/])
+  await page.getByRole('button', { name: 'All', exact: true }).click()
+  await page.getByRole('radio', { name: 'Shortest' }).click()
+  await expect(list.getByRole('button').first()).toContainText('Book 1')
+  expect(catalog.searches().at(-1)!.searchParams.get('sort')).toBe('length')
+  expect(catalog.searches().at(-1)!.searchParams.has('page')).toBe(false)
+
+  // Nothing fetched for searching until someone searches.
+  expect(catalog.listForSearch()).toHaveLength(0)
+  await page.getByRole('searchbox', { name: 'Search free books' }).fill('austen')
+  await expect(list.getByRole('button')).toHaveText([/Pride and Prejudice/, /Emma/])
+  await expect.poll(() => catalog.searches().some((u) => u.searchParams.get('query') === 'austen')).toBe(true)
+  expect(catalog.listForSearch().length).toBeGreaterThan(0)
+  await page.getByRole('searchbox', { name: 'Search free books' }).fill('nothing like it')
+  await expect(page.getByText('No books match.')).toBeVisible()
+
+  // Back to a search already made: from what's kept, not fetched again.
+  const before = catalog.searches().length
+  await page.getByRole('searchbox', { name: 'Search free books' }).fill('austen')
+  await expect(list.getByRole('button')).toHaveText([/Pride and Prejudice/, /Emma/])
+  expect(catalog.searches()).toHaveLength(before)
+
+  await page.getByRole('button', { name: 'Back to your library' }).click()
+  await expect(page.getByRole('heading', { name: 'Library' })).toBeVisible()
+})
+
+test('searching: as you type, titles first, and slips forgiven', async ({ page }) => {
+  await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const box = page.getByRole('searchbox', { name: 'Search free books' })
+  const list = page.getByRole('list', { name: 'Books' })
+  // Still being typed: the site finds nothing for "sherl", the list on the device does.
+  await box.fill('sherl')
+  await expect(list.getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
+  // The title as typed comes first.
+  await box.fill('war and peace')
+  await expect(list.getByRole('button').first()).toContainText('War and Peace')
+  // A slip.
+  await box.fill('frankenstien')
+  await expect(list.getByRole('button').first()).toContainText('Frankenstein')
+  // By author, kept to a subject.
+  await page.getByRole('button', { name: 'Mystery' }).click()
+  await box.fill('doyle')
+  await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/, /The Adventures of Sherlock Holmes/])
+})
+
+test('only what’s looked at is kept: coming back to it fetches nothing', async ({ page }) => {
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+  await expect(page.getByText(/A Regency-era novel of manners/)).toBeVisible()
+  // Nothing fetched ahead: the preview's contents wait until the preview is opened.
+  expect(catalog.requests.some((u) => u.pathname.endsWith('/text'))).toBe(false)
+  await page.getByRole('button', { name: 'Read a preview' }).click()
+  await expect(page.getByText(/^It is a truth universally acknowledged/)).toBeVisible()
+  // Only the one section shown.
+  expect(catalog.requests.filter((u) => u.pathname.includes('/text/'))).toHaveLength(1)
+
+  // Opened again later: what was seen comes from the device.
+  await page.reload()
+  const seen = catalog.requests.length
+  await openBrowse(page)
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+  await expect(page.getByText(/A Regency-era novel of manners/)).toBeVisible()
+  await page.getByRole('button', { name: 'Read a preview' }).click()
+  await expect(page.getByText(/^It is a truth universally acknowledged/)).toBeVisible()
+  expect(catalog.requests.slice(seen).filter((u) => !/\.(jpe?g|png|avif)$/.test(u.pathname))).toEqual([])
+})
+
+test('a book: what it’s about, how long it takes, and a preview from the first chapter', async ({ page }) => {
+  await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+  await expect(page.getByRole('heading', { name: 'Pride and Prejudice' })).toBeVisible()
+  await expect(page.getByText(/A Regency-era novel of manners/)).toBeVisible()
+  await expect(page.getByText(/may today be one of Jane Austen’s most enduring novels/)).toBeVisible()
+  await expect(page.getByText(/121,970 words · about 6h 47m at 300 wpm · Average to read/)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Read a preview' }).click()
+  // The title page and imprint are skipped.
+  await expect(page.getByText('Preview · Chapter I', { exact: true })).toBeVisible()
+  await expect(page.getByText(/^It is a truth universally acknowledged/)).toBeVisible()
+  await page.getByRole('button', { name: 'Next' }).click()
+  await expect(page.getByText('Preview · Chapter II', { exact: true })).toBeVisible()
+
+  // Back to the book, then to the list.
+  await page.getByRole('button', { name: 'Pride and Prejudice' }).click()
+  await expect(page.getByRole('button', { name: 'Read a preview' })).toBeVisible()
+  await page.getByRole('button', { name: 'Free books' }).click()
+  await expect(page.getByRole('list', { name: 'Books' })).toBeVisible()
+})
+
+test('a book is downloaded only once confirmed, then opens at its first chapter', async ({ page }) => {
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+
+  // Asked first; cancelling downloads nothing.
+  await page.getByRole('button', { name: 'Add to library' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Add Pride and Prejudice' })
+  await expect(sheet).toContainText('Add “Pride and Prejudice” to your library?')
+  await sheet.getByRole('button', { name: 'Cancel' }).click()
+  await expect(sheet).toBeHidden()
+  await page.getByRole('button', { name: 'Add to library' }).click()
+  await page.keyboard.press('Escape')
+  await expect(sheet).toBeHidden()
+  // Escape closed only the sheet, not the book.
+  await expect(page.getByRole('button', { name: 'Read a preview' })).toBeVisible()
+  expect(catalog.downloads()).toHaveLength(0)
+
+  await page.getByRole('button', { name: 'Add to library' }).click()
+  await sheet.getByRole('button', { name: 'Download and add' }).click()
+  await expect(page.locator('.reader')).toBeVisible()
+  expect(catalog.downloads()).toHaveLength(1)
+  expect(catalog.downloads()[0].searchParams.get('source')).toBe('download')
+  // Past the title page and imprint, at the heading of chapter I.
+  await expect(page.locator('.word')).toHaveText('I')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.locator('.word')).toHaveText('It')
+
+  // In the library now, and shown so when browsing.
+  await page.locator('.nav-button').click()
+  await expect(page.locator('.shelf-title')).toHaveText(['Pride and Prejudice'])
+  await openBrowse(page)
+  await expect(page.getByRole('button', { name: /Pride and Prejudice/ })).toContainText('In your library')
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+  await page.getByRole('button', { name: 'Open from your library' }).click()
+  await expect(page.locator('.reader')).toBeVisible()
+  expect(catalog.downloads()).toHaveLength(1)
+})
+
+test('when the catalog can’t be reached, it says so and tries again', async ({ page }) => {
+  const catalog = await mockCatalog(page)
+  // Twice: one dropped connection is retried on its own.
+  catalog.failNext(/\/ebooks\?/)
+  catalog.failNext(/\/ebooks\?/)
+  await page.goto('./')
+  await page.getByRole('button', { name: /Find a free book/ }).click()
+  await expect(page.getByRole('alert')).toContainText('Couldn’t reach Standard Ebooks')
+  await page.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.getByRole('list', { name: 'Books' }).getByRole('listitem')).toHaveCount(24)
+})
+
+test('a failed download can be tried again from the same sheet', async ({ page }) => {
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  await page.getByRole('button', { name: /Pride and Prejudice/ }).click()
+  catalog.failNext(/\.epub/)
+  catalog.failNext(/\.epub/)
+  await page.getByRole('button', { name: 'Add to library' }).click()
+  const sheet = page.getByRole('dialog', { name: 'Add Pride and Prejudice' })
+  await sheet.getByRole('button', { name: 'Download and add' }).click()
+  await expect(sheet.getByRole('alert')).toContainText('Couldn’t reach Standard Ebooks')
+  await sheet.getByRole('button', { name: 'Try again' }).click()
+  await expect(page.locator('.reader')).toBeVisible()
+})
