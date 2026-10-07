@@ -1,4 +1,5 @@
 import { CATALOG_ORIGIN, SUBJECTS, type CatalogBook, type CatalogSort } from './catalog'
+import { editDistance, stem, tokenize } from './search'
 
 /**
  * Searching the catalog's titles and authors on the device. The site's own
@@ -6,7 +7,9 @@ import { CATALOG_ORIGIN, SUBJECTS, type CatalogBook, type CatalogSort } from './
  * find nothing) and ranks words in descriptions alongside titles, so once
  * someone searches, the app fetches a compact list of every book (see
  * catalogStore.ts) and searches that: as you type, forgiving a slip, titles
- * first. Everything here is pure.
+ * first. Words are read the same way as when searching a book (search.ts):
+ * case, accents and punctuation ignored, word forms joined, slips forgiven.
+ * Everything here is pure.
  */
 
 export interface IndexedBook extends CatalogBook {
@@ -14,17 +17,15 @@ export interface IndexedBook extends CatalogBook {
   popular: number
 }
 
-/** Lower case, accents and punctuation gone: "Émile Zola’s" → "emile zola s". */
-export function normalize(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/\p{M}/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim()
+/** A title, author or list of subjects as searched: its words, and the forms they stand for. */
+interface Field {
+  words: string[]
+  stems: string[]
 }
-
-const words = (text: string) => normalize(text).split(' ').filter(Boolean)
+const field = (text: string): Field => {
+  const words = tokenize(text)
+  return { words, stems: words.map(stem) }
+}
 
 /** Ways people ask for a subject, as the catalog names it. */
 const SUBJECT_WORDS: Record<string, string> = {
@@ -37,7 +38,6 @@ const SUBJECT_WORDS: Record<string, string> = {
   children: 'childrens',
   childrens: 'childrens',
   'non fiction': 'nonfiction',
-  mysteries: 'mystery',
   detective: 'mystery',
   poems: 'poetry',
   plays: 'drama',
@@ -46,73 +46,52 @@ const SUBJECT_WORDS: Record<string, string> = {
 
 /** The words searched for, with common ways of naming a subject turned into the catalog's own. */
 export function searchTerms(query: string): string[] {
-  let text = ` ${normalize(query)} `
+  let text = ` ${tokenize(query).join(' ')} `
   for (const [said, meant] of Object.entries(SUBJECT_WORDS)) text = text.replace(` ${said} `, ` ${meant} `)
   return text.split(' ').filter(Boolean)
 }
 
-/** Whether two words are one typing slip apart (a letter added, missing, wrong, or two swapped). */
-export function oneSlip(a: string, b: string): boolean {
-  if (Math.abs(a.length - b.length) > 1) return false
-  if (a.length === b.length) {
-    const diff = [...a].flatMap((ch, k) => (ch === b[k] ? [] : [k]))
-    if (diff.length === 2 && diff[1] === diff[0] + 1 && a[diff[0]] === b[diff[1]] && a[diff[1]] === b[diff[0]]) return true
-  }
-  let i = 0
-  let j = 0
-  let slips = 0
-  while (i < a.length && j < b.length) {
-    if (a[i] === b[j]) {
-      i++
-      j++
-      continue
-    }
-    if (++slips > 1) return false
-    if (a.length > b.length) i++
-    else if (b.length > a.length) j++
-    else {
-      i++
-      j++
-    }
-  }
-  return slips + (a.length - i) + (b.length - j) <= 1
-}
-
 interface Searchable {
   book: IndexedBook
-  title: string[]
-  author: string[]
-  subjects: string[]
+  title: Field
+  author: Field
+  subjects: Field
 }
+
+const fields = (book: CatalogBook) => ({ title: field(book.title), author: field(book.author), subjects: field([...book.subjects, ...book.tags].join(' ')) })
 
 const cache = new WeakMap<readonly IndexedBook[], Searchable[]>()
 function searchable(books: readonly IndexedBook[]): Searchable[] {
   let list = cache.get(books)
   if (!list) {
-    list = books.map((book) => ({ book, title: words(book.title), author: words(book.author), subjects: [...words(book.subjects.join(' ')), ...book.tags] }))
+    list = books.map((book) => ({ book, ...fields(book) }))
     cache.set(books, list)
   }
   return list
 }
 
 /**
- * How well one word searched for matches a list of words: 4 exactly, 2 as
- * the start of one (still being typed), 1 one slip away (only when allowed,
- * and from five letters on, so short words don't match everything), 0 not at all.
+ * How well one word searched for matches a field: 4 exactly, 3 as another
+ * form of it (mysteries, mystery), 2 as the start of one (still being typed),
+ * 1 one slip away (only when allowed, and from five letters on, so short
+ * words don't match everything), 0 not at all.
  */
-function wordMatch(term: string, list: string[], slips: boolean): number {
+function wordMatch(term: string, { words, stems }: Field, slips: boolean): number {
+  const form = stem(term)
   let best = 0
-  for (const w of list) {
+  for (let k = 0; k < words.length; k++) {
+    const w = words[k]
     if (w === term) return 4
-    if (w.startsWith(term)) best = Math.max(best, 2)
-    else if (slips && best < 1 && term.length >= 5 && oneSlip(term, w)) best = 1
+    if (stems[k] === form) best = 3
+    else if (w.startsWith(term)) best = Math.max(best, 2)
+    else if (slips && best < 1 && term.length >= 5 && editDistance(term, w, 1) <= 1) best = 1
   }
   return best
 }
 
 /** Whether the words are in the title (or author) as typed: whole words, the last perhaps still being typed. */
-function asTyped(list: string[], terms: string[]): 'whole' | 'typing' | null {
-  const text = ` ${list.join(' ')} `
+function asTyped({ words }: Field, terms: string[]): 'whole' | 'typing' | null {
+  const text = ` ${words.join(' ')} `
   if (text.includes(` ${terms.join(' ')} `)) return 'whole'
   return terms.at(-1)!.length >= 3 && text.includes(` ${terms.join(' ')}`) ? 'typing' : null
 }
@@ -124,7 +103,7 @@ function asTyped(list: string[], terms: string[]): 'whole' | 'typing' | null {
  */
 export function score(book: Searchable | CatalogBook, terms: string[], slips = false): number {
   if (terms.length === 0) return 0
-  const entry = 'book' in book ? book : { title: words(book.title), author: words(book.author), subjects: [...words(book.subjects.join(' ')), ...book.tags] }
+  const entry = 'book' in book ? book : fields(book)
   let total = 0
   for (const term of terms) {
     const best = Math.max(wordMatch(term, entry.title, slips) * 3, wordMatch(term, entry.author, slips) * 2, wordMatch(term, entry.subjects, slips))

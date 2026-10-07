@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalize, oneSlip, packIndex, rerank, searchIndex, searchTerms, unpackIndex, type IndexedBook } from '../catalogIndex'
+import { packIndex, rerank, searchIndex, searchTerms, unpackIndex, type IndexedBook } from '../catalogIndex'
 
 const book = (id: string, title: string, author: string, tags: string[] = ['fiction'], extra: Partial<IndexedBook> = {}): IndexedBook => ({
   id,
@@ -55,11 +55,20 @@ describe('searchIndex', () => {
   it('ignores case, accents and punctuation', () => {
     expect(find('EMILE zola')).toEqual(['Germinal'])
     expect(find('pride & prejudice!')).toEqual(['Pride and Prejudice'])
+    expect(find('zola’s')).toEqual(['Germinal'])
+  })
+
+  it('joins forms of a word, as searching a book does', () => {
+    expect(find('mysteries')).toEqual(['The Adventures of Sherlock Holmes'])
+    expect(find('adventure')).toEqual(['The Adventures of Sherlock Holmes'])
   })
 
   it('finds a typing slip, apart from the matches', () => {
     expect(searchIndex(BOOKS, { query: 'dostoyevsky' })).toEqual({ matches: [], close: [BOOKS[5]] })
     expect(titles(searchIndex(BOOKS, { query: 'frankenstien' }).close)).toEqual(['Frankenstein'])
+    expect(titles(searchIndex(BOOKS, { query: 'austin' }).close)).toEqual(['Pride and Prejudice', 'Emma'])
+    // More than one slip is a different word.
+    expect(searchIndex(BOOKS, { query: 'dostoyevski' }).close).toEqual([])
     // Not for short words, which would match everything.
     expect(searchIndex(BOOKS, { query: 'emna' }).close).toEqual([])
   })
@@ -89,17 +98,6 @@ describe('rerank', () => {
   })
 })
 
-describe('oneSlip', () => {
-  it('allows one letter added, missing, wrong, or two swapped', () => {
-    expect(oneSlip('dostoyevsky', 'dostoevsky')).toBe(true)
-    expect(oneSlip('frankenstien', 'frankenstein')).toBe(true)
-    expect(oneSlip('austin', 'austen')).toBe(true)
-    expect(oneSlip('austen', 'austen')).toBe(true)
-    expect(oneSlip('dickens', 'dikcnes')).toBe(false)
-    expect(oneSlip('verne', 'vernes12')).toBe(false)
-  })
-})
-
 describe('the list as kept', () => {
   it('keeps only what searching needs, and finds each cover from the address', () => {
     const rows = packIndex(BOOKS)
@@ -109,11 +107,5 @@ describe('the list as kept', () => {
     expect(back[2].cover).toBe('https://standardebooks.org/ebooks/leo-tolstoy/war-and-peace/louise-maude_aylmer-maude/downloads/cover-thumbnail.jpg')
     expect(back[6].subjects).toEqual(['Fiction', 'Horror', 'Science fiction'])
     expect(JSON.stringify(rows).length / rows.length).toBeLessThan(120)
-  })
-})
-
-describe('normalize', () => {
-  it('keeps letters and numbers only, lower case and without accents', () => {
-    expect(normalize('Émile Zola’s “Germinal” (1885)')).toBe('emile zola s germinal 1885')
   })
 })
