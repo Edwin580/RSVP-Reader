@@ -38,11 +38,54 @@ async function epub(): Promise<Buffer> {
   return zip.generateAsync({ type: 'nodebuffer' })
 }
 
+/** The stand-in catalog: 60 books, 48 to a page as on the site, most popular first. */
+const BOOKS: { id: string; title: string; author: string; words: number; ease: number; tags: string[] }[] = [
+  { id: 'jane-austen/pride-and-prejudice', title: 'Pride and Prejudice', author: 'Jane Austen', words: 121970, ease: 60.95, tags: ['fiction'] },
+  { id: 'mary-shelley/frankenstein', title: 'Frankenstein', author: 'Mary Shelley', words: 77898, ease: 56.29, tags: ['fiction', 'horror', 'science-fiction'] },
+  { id: 'robert-louis-stevenson/treasure-island', title: 'Treasure Island', author: 'Robert Louis Stevenson', words: 67000, ease: 80.1, tags: ['adventure', 'fiction'] },
+  { id: 'arthur-conan-doyle/the-hound-of-the-baskervilles', title: 'The Hound of the Baskervilles', author: 'Arthur Conan Doyle', words: 59000, ease: 75.4, tags: ['fiction', 'mystery'] },
+  { id: 'jane-austen/emma', title: 'Emma', author: 'Jane Austen', words: 160000, ease: 63.1, tags: ['fiction'] },
+  { id: 'jules-verne/twenty-thousand-leagues-under-the-seas', title: 'Twenty Thousand Leagues Under the Seas', author: 'Jules Verne', words: 140000, ease: 70.2, tags: ['adventure', 'fiction', 'science-fiction'] },
+  ...Array.from({ length: 54 }, (_, k) => ({
+    id: `author-${k}/book-${k}`,
+    title: `Book ${k + 1}`,
+    author: `Author ${k + 1}`,
+    words: 10000 + k * 1000,
+    ease: 50 + (k % 30),
+    tags: ['fiction', ...(k % 3 === 0 ? ['adventure'] : []), ...(k % 5 === 0 ? ['poetry'] : [])],
+  })),
+]
+export const CATALOG_SIZE = BOOKS.length
+const PER_PAGE = 48
+
+/** A page of the list, in the site's own markup (see the saved pages in fixtures/). */
+function listPage(order: string | null, page: number) {
+  const books = order === 'newest' ? [...BOOKS].reverse() : BOOKS
+  const last = Math.ceil(books.length / PER_PAGE)
+  const items = books
+    .slice((page - 1) * PER_PAGE, page * PER_PAGE)
+    .map(
+      (b) => `<li typeof="schema:Book" about="/ebooks/${b.id}">
+        <div class="thumbnail-container"><picture><source srcset="/images/covers/${b.id.replace('/', '_')}/1/cover@2x.jpg 2x, /images/covers/${b.id.replace('/', '_')}/1/cover.jpg 1x" type="image/jpeg"/><img src="/images/covers/${b.id.replace('/', '_')}/1/cover@2x.jpg" alt=""/></picture></div>
+        <p><a href="/ebooks/${b.id}" property="schema:url"><span property="schema:name">${b.title}</span></a></p>
+        <div><p class="author"><a href="/ebooks/${b.id.split('/')[0]}">${b.author}</a></p></div>
+        <div class="details"><p>${b.words.toLocaleString('en-US')} words • ${b.ease} reading ease</p>
+        <ul class="tags">${b.tags.map((t) => `<li><a href="/subjects/${t}">${t}</a></li>`).join('')}</ul></div>
+      </li>`,
+    )
+    .join('')
+  const links = Array.from({ length: last }, (_, k) => `<li><a href="/ebooks?page=${k + 1}&amp;view=list">${k + 1}</a></li>`).join('')
+  const next = page < last ? `<a href="/ebooks?page=${page + 1}&amp;view=list" rel="next">Next</a>` : '<a aria-disabled="true">Next</a>'
+  return `<!DOCTYPE html><html><body><main><ol class="ebooks-list list">${items}</ol><nav class="pagination"><ol>${links}</ol>${next}</nav></main></body></html>`
+}
+
 export interface Catalog {
   /** Every request to the catalog, in order. */
   requests: URL[]
   /** Requests for a page of the catalog's list. */
   searches: () => URL[]
+  /** Requests for a book's own page. */
+  bookPages: () => URL[]
   /** Requests for the EPUB. */
   downloads: () => URL[]
   /** Make the next request for a page whose address matches fail, as a dropped connection would. */
@@ -65,12 +108,13 @@ export async function mockCatalog(page: Page): Promise<Catalog> {
     const html = (name: string) => route.fulfill({ headers, contentType: 'text/html; charset=utf-8', body: fixture(name) })
     const path = url.pathname
     if (path === '/ebooks') {
-      const query = url.searchParams.get('query') ?? ''
-      if (/nothing/.test(query)) return html('search-empty')
-      if (/austen/.test(query)) return html('search-austen')
-      // A second page: some of the same books, and some new ones.
-      return html(url.searchParams.get('page') === '2' ? 'search-austen' : 'search-all')
+      // As the site does: one subject is sent on to its /subjects/ page,
+      // which other sites aren't allowed to read (no CORS header).
+      const tags = url.searchParams.getAll('tags[]')
+      if (tags.length === 1) return route.fulfill({ status: 302, headers: { ...headers, location: `/subjects/${tags[0]}` } })
+      return route.fulfill({ headers, contentType: 'text/html; charset=utf-8', body: listPage(url.searchParams.get('sort'), Number(url.searchParams.get('page') ?? 1)) })
     }
+    if (path.startsWith('/subjects/')) return route.fulfill({ contentType: 'text/html; charset=utf-8', body: listPage(null, 1) })
     if (path === '/ebooks/jane-austen/pride-and-prejudice') return html('book-pride-and-prejudice')
     if (path === '/ebooks/jane-austen/pride-and-prejudice/text') return html('toc-pride-and-prejudice')
     if (path.startsWith('/ebooks/jane-austen/pride-and-prejudice/text/')) return html('chapter-1-pride-and-prejudice')
@@ -83,6 +127,7 @@ export async function mockCatalog(page: Page): Promise<Catalog> {
   return {
     requests,
     searches: () => requests.filter((u) => u.pathname === '/ebooks'),
+    bookPages: () => requests.filter((u) => /^\/ebooks\/[^/]+\/[^/]+$/.test(u.pathname)),
     downloads: () => requests.filter((u) => u.pathname.endsWith('.epub')),
     failNext: (match) => void failing.push(match),
   }

@@ -14,33 +14,26 @@ import {
   parseDetails,
   parseSection,
   previewStart,
-  searchUrl,
+  listUrl,
   textStart,
 } from '../catalog'
 
 /** Pages saved from standardebooks.org, cut down to their main content. */
 const fixture = (name: string) => readFileSync(join(process.cwd(), `src/lib/__tests__/fixtures/standard-ebooks/${name}.html`), 'utf8')
 
-describe('searchUrl', () => {
-  it('asks for the list view, popular first, 24 a page', () => {
-    const url = new URL(searchUrl({}))
+describe('listUrl', () => {
+  it('asks for a page of the whole catalog, in the list view, 48 at a time', () => {
+    const url = new URL(listUrl('popularity'))
     expect(url.origin + url.pathname).toBe('https://standardebooks.org/ebooks')
     expect(url.searchParams.get('view')).toBe('list')
     expect(url.searchParams.get('sort')).toBe('popularity')
-    expect(url.searchParams.get('per-page')).toBe('24')
+    expect(url.searchParams.get('per-page')).toBe('48')
     expect(url.searchParams.has('page')).toBe(false)
+    expect(new URL(listUrl('newest', 3)).searchParams.get('page')).toBe('3')
   })
 
-  it('sorts by relevance when searching, unless an order is picked', () => {
-    expect(new URL(searchUrl({ query: ' austen ' })).searchParams.get('query')).toBe('austen')
-    expect(new URL(searchUrl({ query: 'austen' })).searchParams.get('sort')).toBe('relevance')
-    expect(new URL(searchUrl({ query: 'austen', sort: 'newest' })).searchParams.get('sort')).toBe('newest')
-  })
-
-  it('filters by subject and pages on', () => {
-    const url = new URL(searchUrl({ subject: 'mystery', page: 3 }))
-    expect(url.searchParams.getAll('tags[]')).toEqual(['mystery'])
-    expect(url.searchParams.get('page')).toBe('3')
+  it('never filters by subject on the site, which sends that to a page the app can’t read', () => {
+    expect(listUrl('popularity', 2)).not.toMatch(/tags|subjects/)
   })
 })
 
@@ -52,18 +45,21 @@ describe('parseCatalogPage', () => {
     const northanger = books.find((b) => b.id === 'jane-austen/northanger-abbey')!
     expect(northanger).toMatchObject({ title: 'Northanger Abbey', author: 'Jane Austen', words: 77464, readingEase: 66.88 })
     expect(northanger.subjects).toContain('Fiction')
+    expect(northanger.tags).toContain('fiction')
     expect(northanger.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_northanger-abbey\/.+\.jpg$/)
   })
 
-  it('knows when there are more pages', () => {
-    const { books, hasMore } = parseCatalogPage(fixture('search-all'))
+  it('knows when there are more pages, and how many', () => {
+    const { books, hasMore, lastPage } = parseCatalogPage(fixture('search-all'))
     expect(books.length).toBe(12)
     expect(hasMore).toBe(true)
+    expect(lastPage).toBe(128) // 12 a page in this one
+    expect(parseCatalogPage(fixture('search-austen')).lastPage).toBe(1)
     expect(books[0]).toMatchObject({ id: 'jane-austen/pride-and-prejudice', title: 'Pride and Prejudice', words: 121970 })
   })
 
   it('finds nothing on a page with no results', () => {
-    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false })
+    expect(parseCatalogPage(fixture('search-empty'))).toEqual({ books: [], hasMore: false, lastPage: 1 })
   })
 
   it('skips anything that isn’t a link to a book in the catalog', () => {
@@ -82,6 +78,7 @@ describe('parseDetails', () => {
   it('reads the title, author, length and reading ease', () => {
     expect(book).toMatchObject({ title: 'Pride and Prejudice', author: 'Jane Austen', words: 121970, readingEase: 60.95 })
     expect(book.subjects).toEqual(['Fiction'])
+    expect(book.tags).toEqual(['fiction'])
   })
 
   it('reads the one-line summary and the description, as paragraphs of plain text', () => {

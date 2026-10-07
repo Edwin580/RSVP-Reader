@@ -26,12 +26,16 @@ export interface CatalogBook {
   /** Flesch reading ease: higher is easier. */
   readingEase?: number
   subjects: string[]
+  /** The subjects as the catalog names them in addresses ("science-fiction"), for filtering. */
+  tags: string[]
 }
 
 export interface CatalogPage {
   books: CatalogBook[]
   /** Whether there's a next page. */
   hasMore: boolean
+  /** The number of the last page, from the page links (1 if there are none). */
+  lastPage: number
 }
 
 /** A book's own page: everything shown before it's added. */
@@ -89,15 +93,9 @@ export const SORTS: { value: CatalogSort; label: string }[] = [
   { value: 'length', label: 'Shortest' },
 ]
 
-export interface CatalogQuery {
-  query?: string
-  subject?: string
-  sort?: CatalogSort
-  /** From 1. */
-  page?: number
-}
-
-export const PER_PAGE = 24
+export type CatalogOrder = 'popularity' | 'newest'
+/** Books per catalog page fetched: the most the site gives. */
+export const PER_PAGE = 48
 
 /** A book id: lower-case path segments, at least author and title. */
 const ID = /^[a-z0-9-]+(?:\/[a-z0-9-]+)+$/
@@ -106,16 +104,14 @@ export function isBookId(id: string): boolean {
   return ID.test(id)
 }
 
-/** The catalog page for a search (the list view, which has word counts and subjects). */
-export function searchUrl({ query = '', subject, sort, page = 1 }: CatalogQuery): string {
-  const params = new URLSearchParams()
-  const q = query.trim()
-  if (q) params.set('query', q)
-  if (subject) params.append('tags[]', subject)
-  // With words to match, the best matches first; otherwise the chosen order.
-  params.set('sort', q && !sort ? 'relevance' : (sort ?? 'popularity'))
-  params.set('view', 'list')
-  params.set('per-page', String(PER_PAGE))
+/**
+ * A page of the whole catalog, in the list view (which has word counts and
+ * subjects). Searching and filtering happen on the device, over all of
+ * them (see catalogIndex.ts): the site sends a subject filter on to a
+ * /subjects/ page that other sites aren't allowed to read.
+ */
+export function listUrl(order: CatalogOrder, page = 1): string {
+  const params = new URLSearchParams({ sort: order, view: 'list', 'per-page': String(PER_PAGE) })
   if (page > 1) params.set('page', String(page))
   return `${CATALOG_ORIGIN}/ebooks?${params}`
 }
@@ -149,6 +145,11 @@ function catalogAddress(href: string | null | undefined, base = CATALOG_ORIGIN):
   } catch {
     return
   }
+}
+
+/** Subject slugs from links like /subjects/science-fiction. */
+function tagsOf(links: Iterable<Element>): string[] {
+  return [...links].map((a) => a.getAttribute('href')?.match(/\/subjects\/([a-z0-9-]+)/)?.[1]).filter((t): t is string => !!t)
 }
 
 const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html')
@@ -187,9 +188,11 @@ export function parseCatalogPage(html: string): CatalogPage {
       cover: coverOf(item),
       ...wordsAndEase(details),
       subjects: [...item.querySelectorAll('.tags a')].map(text).filter(Boolean),
+      tags: tagsOf(item.querySelectorAll('.tags a')),
     })
   }
-  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]') }
+  const pages = [...doc.querySelectorAll('.pagination a[href]')].map((a) => Number(new URL(a.getAttribute('href')!, CATALOG_ORIGIN).searchParams.get('page')) || 1)
+  return { books, hasMore: !!doc.querySelector('.pagination a[rel="next"]'), lastPage: Math.max(1, ...pages) }
 }
 
 export function parseDetails(html: string, id: string): CatalogDetails {
@@ -220,6 +223,7 @@ export function parseDetails(html: string, id: string): CatalogDetails {
     ...(words && { words }),
     ...(ease && { readingEase: Number(ease[1]) }),
     subjects: [...article.querySelectorAll('#reading-ease .tags a')].map(text).filter(Boolean),
+    tags: tagsOf(article.querySelectorAll('#reading-ease .tags a')),
     ...(summary && { summary }),
     description,
     ...(translator && { translator }),
@@ -304,26 +308,32 @@ const pages = new Map<string, Promise<string>>()
 /** Wait before trying a page again after a dropped connection (ms). */
 const RETRY_MS = 600
 
-/** A catalog page's HTML, remembered for the session. */
-export function fetchPage(url: string, fetcher: typeof fetch = fetch): Promise<string> {
+/** A catalog page's HTML. A dropped connection is tried once more, after a moment, before giving up. */
+export function fetchText(url: string, fetcher: typeof fetch = fetch): Promise<string> {
   if (!url.startsWith(`${CATALOG_ORIGIN}/`)) return Promise.reject(new Error('Not a catalog page.'))
+  const get = () => fetcher(url, { credentials: 'omit' })
+  return get()
+    .catch((e) => {
+      if (!(e instanceof TypeError)) throw e
+      return new Promise<void>((done) => setTimeout(done, RETRY_MS)).then(get)
+    })
+    .then((response) => {
+      if (!response.ok) throw new Error(`${CATALOG_NAME} answered ${response.status}.`)
+      return response.text()
+    })
+    .catch((e) => {
+      throw e instanceof TypeError ? new Error(`Couldn’t reach ${CATALOG_NAME}. Check your connection.`) : e
+    })
+}
+
+/** A catalog page's HTML, remembered for the session (a failed one isn't, so it can be tried again). */
+export function fetchPage(url: string, fetcher: typeof fetch = fetch): Promise<string> {
   let page = pages.get(url)
   if (!page) {
-    // A dropped connection is tried once more, after a moment, before giving up.
-    const get = () => fetcher(url, { credentials: 'omit' })
-    page = get()
-      .catch((e) => {
-        if (!(e instanceof TypeError)) throw e
-        return new Promise<void>((done) => setTimeout(done, RETRY_MS)).then(get)
-      })
-      .then((response) => {
-        if (!response.ok) throw new Error(`${CATALOG_NAME} answered ${response.status}.`)
-        return response.text()
-      })
-      .catch((e) => {
-        pages.delete(url)
-        throw e instanceof TypeError ? new Error(`Couldn’t reach ${CATALOG_NAME}. Check your connection.`) : e
-      })
+    page = fetchText(url, fetcher).catch((e) => {
+      pages.delete(url)
+      throw e
+    })
     pages.set(url, page)
   }
   return page

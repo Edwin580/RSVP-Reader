@@ -1,25 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import {
   CATALOG_NAME,
   SORTS,
   SUBJECTS,
-  bookUrl,
   downloadBook,
   easeLabel,
-  fetchPage,
-  parseCatalogPage,
-  parseContents,
-  parseDetails,
-  parseSection,
   previewStart,
-  searchUrl,
   type CatalogBook,
   type CatalogDetails,
   type CatalogSort,
   type ContentsEntry,
-  type PreviewSection,
 } from '../lib/catalog'
+import { searchIndex } from '../lib/catalogIndex'
+import { ensureIndex, ensureNewest, indexState, loadContents, loadDetails, loadSection, prefetchBook, retryIndex, subscribe } from '../lib/catalogStore'
 import { formatMinutes } from '../lib/rsvp'
 import type { BookMeta } from '../lib/types'
 import { Icon } from './Icon'
@@ -47,8 +41,8 @@ interface Search {
 let lastSearch: Search = { query: '', subject: '', sort: null }
 let lastScroll = 0
 
-/** Typing pauses this long (ms) before searching. */
-const TYPING_MS = 350
+/** Books listed at first, and added each time more are asked for. */
+const LIST_STEP = 30
 
 const readingTime = (words: number | undefined, wpm: number) => (words ? formatMinutes(words / wpm) : undefined)
 const inLibrary = (books: BookMeta[], title: string) => books.find((b) => b.title.trim().toLowerCase() === title.trim().toLowerCase())
@@ -108,82 +102,66 @@ export function Browse({ books, wpm, onBack, onAdd, onOpen }: Props) {
   )
 }
 
-/** Load a catalog page and parse it, keeping only the latest request's answer. */
-function useCatalog<T>(url: string | null, parse: (html: string) => T) {
-  const [state, setState] = useState<{ url: string | null; data?: T; error?: string }>({ url: null })
+/** Load something (kept on the device, see catalogStore), keeping only the latest request's answer. */
+function useLoad<T>(key: string | null, load: () => Promise<T>) {
+  const [state, setState] = useState<{ key: string | null; data?: T; error?: string }>({ key: null })
   const [attempt, setAttempt] = useState(0)
-  const parser = useRef(parse)
+  const loader = useRef(load)
   useEffect(() => {
-    parser.current = parse
+    loader.current = load
   })
   useEffect(() => {
-    if (!url) return
+    if (!key) return
     let current = true
-    fetchPage(url).then(
-      (html) => {
-        if (!current) return
-        try {
-          setState({ url, data: parser.current(html) })
-        } catch (e) {
-          setState({ url, error: message(e) })
-        }
-      },
-      (e) => current && setState({ url, error: message(e) }),
+    loader.current().then(
+      (data) => current && setState({ key, data }),
+      (e) => current && setState({ key, error: message(e) }),
     )
     return () => {
       current = false
     }
-  }, [url, attempt])
-  const fresh = state.url === url
+  }, [key, attempt])
+  const fresh = state.key === key
   return {
     data: fresh ? state.data : undefined,
     error: fresh ? state.error : undefined,
-    loading: !!url && !fresh,
+    loading: !!key && !fresh,
     retry: () => {
-      setState({ url: null })
+      setState({ key: null })
       setAttempt((n) => n + 1)
     },
   }
 }
 
+/**
+ * The catalog, searched, filtered and sorted on the device as you type
+ * (see catalogIndex.ts). The first visit fetches it, listing books as they
+ * arrive; after that it opens at once, offline too, and refreshes weekly.
+ */
 function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: number; onBack: () => void; onPick: (entry: CatalogBook) => void }) {
   const [search, setSearch] = useState<Search>(lastSearch)
-  const [typed, setTyped] = useState(search.query)
-  // Pages loaded so far for this search; more are added on request.
-  const [pages, setPages] = useState(1)
-  const [results, setResults] = useState<{ key: string; books: CatalogBook[]; hasMore: boolean } | null>(null)
-
+  const [limit, setLimit] = useState(LIST_STEP)
+  const index = useSyncExternalStore(subscribe, indexState)
+  useEffect(() => {
+    ensureIndex()
+  }, [])
   useEffect(() => {
     lastSearch = search
+    if (search.sort === 'newest') ensureNewest()
   }, [search])
-  // Search as you type, once typing pauses.
-  useEffect(() => {
-    if (typed === search.query) return
-    const timer = window.setTimeout(() => update({ query: typed }), TYPING_MS)
-    return () => window.clearTimeout(timer)
-  })
   const update = (change: Partial<Search>) => {
     setSearch((s) => ({ ...s, ...change }))
-    setPages(1)
+    setLimit(LIST_STEP)
   }
-
-  const key = `${search.query.trim()}|${search.subject}|${search.sort ?? ''}`
-  const url = searchUrl({ query: search.query, subject: search.subject || undefined, sort: search.sort ?? undefined, page: pages })
-  const page = useCatalog(url, parseCatalogPage)
-  // Each page adds to the list; a new search starts it again.
-  useEffect(() => {
-    if (!page.data) return
-    const data = page.data
-    setResults((r) => {
-      const before = r && r.key === key && pages > 1 ? r.books : []
-      const seen = new Set(before.map((b) => b.id))
-      return { key, books: [...before, ...data.books.filter((b) => !seen.has(b.id))], hasMore: data.hasMore }
-    })
-    // Only when a page arrives.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page.data])
-  const shown = results?.key === key ? results : null
+  // Typing stays quick on a long list: the results follow a moment behind.
+  const query = useDeferredValue(search.query)
+  const found = useMemo(
+    () => searchIndex(index.books, { query, subject: search.subject || undefined, sort: search.sort }),
+    [index.books, query, search.subject, search.sort],
+  )
+  const shown = found.slice(0, limit)
   const searching = !!search.query.trim()
+  const building = index.status === 'building' || index.status === 'loading'
 
   return (
     <>
@@ -202,7 +180,6 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
         role="search"
         onSubmit={(e) => {
           e.preventDefault()
-          update({ query: typed })
           ;(document.activeElement as HTMLElement)?.blur()
         }}
       >
@@ -211,9 +188,9 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
           type="search"
           placeholder="Title, author or subject"
           aria-label="Search free books"
-          value={typed}
+          value={search.query}
           enterKeyHint="search"
-          onChange={(e) => setTyped(e.target.value)}
+          onChange={(e) => update({ query: e.target.value })}
         />
       </form>
 
@@ -245,14 +222,22 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
         ))}
       </div>
 
-      {shown && shown.books.length > 0 && (
+      {shown.length > 0 && (
         <ul className="browse-list" aria-label="Books">
-          {shown.books.map((b) => {
+          {shown.map((b) => {
             const owned = inLibrary(books, b.title)
             const time = readingTime(b.words, wpm)
             return (
               <li key={b.id}>
-                <button type="button" className="browse-item" onClick={() => onPick(b)}>
+                <button
+                  type="button"
+                  className="browse-item"
+                  onClick={() => onPick(b)}
+                  // Its page is fetched as soon as it's touched, so it opens complete.
+                  onPointerDown={() => prefetchBook(b.id)}
+                  onPointerEnter={(e) => e.pointerType === 'mouse' && prefetchBook(b.id)}
+                  onFocus={() => prefetchBook(b.id)}
+                >
                   <CatalogCover book={b} />
                   <span className="browse-item-text">
                     <span className="browse-title">{b.title}</span>
@@ -269,22 +254,46 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
         </ul>
       )}
 
-      {page.loading && <p className="browse-status muted" role="status">Loading books…</p>}
-      {page.error && (
+      {building && (
+        <div className="browse-status muted" role="status">
+          <p>{index.books.length ? `Getting the catalog… ${index.books.length.toLocaleString()} books so far` : 'Getting the catalog…'}</p>
+          {index.total > 0 && (
+            <span className="bar" aria-hidden="true">
+              <span style={{ width: `${Math.round((index.loaded / index.total) * 100)}%` }} />
+            </span>
+          )}
+        </div>
+      )}
+      {search.sort === 'newest' && index.newest === 'building' && (
+        <p className="browse-status muted" role="status">
+          Sorting by newest…
+        </p>
+      )}
+      {index.status === 'error' && (
         <div className="browse-status" role="alert">
-          <p>{page.error}</p>
-          <button type="button" className="text-button" onClick={page.retry}>
+          <p>
+            {index.error}
+            {index.books.length > 0 && ' Only part of the catalog is listed.'}
+          </p>
+          <button type="button" className="text-button" onClick={() => retryIndex()}>
             Try again
           </button>
         </div>
       )}
-      {shown && shown.books.length === 0 && !page.loading && !page.error && (
+      {!building && index.status !== 'error' && found.length === 0 && (
         <p className="browse-status muted">No books match. Try other words, or another subject.</p>
       )}
-      {shown?.hasMore && !page.loading && !page.error && (
-        <button type="button" className="text-button browse-more" onClick={() => setPages((n) => n + 1)}>
+      {found.length > shown.length && (
+        <button type="button" className="text-button browse-more" onClick={() => setLimit((n) => n + LIST_STEP)}>
           Show more
         </button>
+      )}
+      {index.status === 'ready' && found.length > 0 && (
+        <p className="browse-count muted">
+          {found.length === index.books.length
+            ? `${index.books.length.toLocaleString()} books`
+            : `${found.length.toLocaleString()} of ${index.books.length.toLocaleString()} books`}
+        </p>
       )}
 
       <Credit />
@@ -342,8 +351,12 @@ function BookPage({
   onAdd: (file: File) => Promise<void>
   onOpen: (id: string) => void
 }) {
-  const page = useCatalog(bookUrl(entry.id), (html) => parseDetails(html, entry.id))
+  const page = useLoad(`book:${entry.id}`, () => loadDetails(entry.id))
   const details = page.data
+  // The preview's contents too, so it opens at once.
+  useEffect(() => {
+    if (details?.contents) loadContents(details).catch(() => {})
+  }, [details])
   // Shown straight away from the list, filled in once the book's page arrives.
   const book: CatalogBook & Partial<CatalogDetails> = { ...entry, ...details, cover: entry.cover ?? details?.cover }
   const time = readingTime(book.words, wpm)
@@ -527,13 +540,17 @@ function Preview({
   onAdd: (file: File) => Promise<void>
   onOpen: (id: string) => void
 }) {
-  const details = useCatalog(bookUrl(entry.id), (html) => parseDetails(html, entry.id))
-  const contentsUrl = details.data?.contents ?? null
-  const contents = useCatalog(contentsUrl, (html) => parseContents(html, contentsUrl!))
+  const details = useLoad(`book:${entry.id}`, () => loadDetails(entry.id))
+  const contents = useLoad(details.data ? `contents:${entry.id}` : null, () => loadContents(details.data!))
   const [at, setAt] = useState<number | null>(null)
   const entries: ContentsEntry[] = contents.data ?? []
   const k = at ?? (entries.length ? previewStart(entries) : 0)
-  const section = useCatalog<PreviewSection>(entries[k]?.href ?? null, parseSection)
+  const section = useLoad(entries[k] ? `section:${entries[k].href}` : null, () => loadSection(entries[k].href))
+  // The next section too, so Next turns the page at once.
+  const following = entries[k + 1]?.href
+  useEffect(() => {
+    if (section.data && following) loadSection(following).catch(() => {})
+  }, [section.data, following])
   const error = details.error ?? contents.error ?? section.error
   const go = (next: number) => {
     setAt(next)
