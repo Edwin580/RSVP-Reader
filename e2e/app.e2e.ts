@@ -1159,3 +1159,71 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
 })
+
+/** Records what Focus asks of the browser: screen wake locks held, and full screen. */
+const watchFocus = (page: Page) =>
+  page.addInitScript(`
+    window.focusLog = []
+    Object.defineProperty(navigator, 'wakeLock', {
+      value: {
+        request: async () => {
+          window.focusLog.push('lock')
+          return { release: async () => window.focusLog.push('release') }
+        },
+      },
+    })
+    Element.prototype.requestFullscreen = async function () { window.focusLog.push('fullscreen') }
+  `)
+const focusLog = (page: Page) => page.evaluate('window.focusLog') as Promise<string[]>
+
+test('focus keeps the screen on and fills it while a book is open, and is remembered', async ({ page }) => {
+  await watchFocus(page)
+  await page.goto('./')
+  await upload(page)
+  expect(await focusLog(page)).toEqual([])
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radiogroup', { name: 'Focus' }).getByRole('radio', { name: 'On' }).click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock'])
+  await expect(page.getByText('The screen stays on and the book fills it')).toBeVisible()
+  // Only iPhone and iPad can run Shortcuts.
+  await expect(page.getByRole('radiogroup', { name: 'Do Not Disturb' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // Back in the library, the screen may sleep again.
+  await page.locator('.nav-button').click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock', 'release'])
+  // Still on for the next book.
+  await page.locator('.shelf-title', { hasText: 'story' }).click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock', 'release', 'fullscreen', 'lock'])
+})
+
+test('on iPhone, focus runs the Do Not Disturb shortcuts as it starts and ends', async ({ page: first, context }) => {
+  await context.addInitScript(`Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' })`)
+  // The Shortcuts app can't open here, but the browser tells what a page asked to open.
+  const opened: string[] = []
+  const settings = async (page: Page) => {
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('Page.enable')
+    cdp.on('Page.frameRequestedNavigation', ({ url }) => url.startsWith('shortcuts:') && opened.push(decodeURIComponent(url)))
+    await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+    return { focus: page.getByRole('radiogroup', { name: 'Focus' }), dnd: page.getByRole('radiogroup', { name: 'Do Not Disturb' }) }
+  }
+  await first.goto('./')
+  await upload(first)
+  let { focus, dnd } = await settings(first)
+  await focus.getByRole('radio', { name: 'On' }).click()
+  await expect(first.getByText(/make once in the Shortcuts app: “Reading Focus On” and “Reading Focus Off”/)).toBeVisible()
+  // Nothing runs until asked for.
+  expect(opened).toEqual([])
+  await dnd.getByRole('radio', { name: 'On' }).click()
+  await expect.poll(() => opened).toEqual(['shortcuts://run-shortcut?name=Reading Focus On'])
+
+  // Later, in a new tab: a headless browser stops taking taps in one that tried to open an app it doesn't have.
+  const page = await context.newPage()
+  await page.goto('./')
+  await page.locator('.shelf-title', { hasText: 'story' }).click()
+  ;({ focus, dnd } = await settings(page))
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect.poll(() => opened).toEqual(['shortcuts://run-shortcut?name=Reading Focus On', 'shortcuts://run-shortcut?name=Reading Focus Off'])
+  await expect(dnd).toHaveCount(0)
+})
