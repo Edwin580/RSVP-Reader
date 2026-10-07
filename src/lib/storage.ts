@@ -171,6 +171,10 @@ export interface Settings {
   playControl: PlayControl
   /** Guide: the text as pages you turn, or one continuous column that scrolls along. */
   guideLayout: GuideLayout
+  /** Focus: while a book is open, the screen stays on and the book fills it. */
+  focus: boolean
+  /** iPhone and iPad: Focus also runs the person's Shortcuts that turn Do Not Disturb on and off. */
+  focusShortcut: boolean
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -203,6 +207,8 @@ export const DEFAULT_SETTINGS: Settings = {
   lineFocus: 'off',
   playControl: 'tap',
   guideLayout: 'pages',
+  focus: false,
+  focusShortcut: false,
 }
 
 /** A plain '#rrggbb' colour, the only kind the colour picker gives and the page accepts. */
@@ -229,6 +235,8 @@ export function loadSettings(): Settings {
       lineFocus: oneOf(LINE_FOCUSES, saved.lineFocus, DEFAULT_SETTINGS.lineFocus),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
       guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
+      focus: saved.focus === true,
+      focusShortcut: saved.focusShortcut === true,
     }
   } catch {
     return DEFAULT_SETTINGS
