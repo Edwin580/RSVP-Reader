@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { expect, test, type Page } from '@playwright/test'
 import { STORY, upload } from './helpers.ts'
 
@@ -1239,3 +1240,26 @@ for (const layout of ['pages', 'scroll'] as const) {
     await expect(guideLine).toHaveCount(0)
   })
 }
+
+test('Download to device saves the book as an EPUB that reads back the same', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download EPUB' }).click()])
+  expect(download.suggestedFilename()).toBe('story.epub')
+  const epub = await download.path()
+
+  // Added back, it's the same book: same chapters, same text.
+  await page.keyboard.press('Escape')
+  await page.locator('.nav-button').click()
+  const buffer = await readFile(epub!)
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'story.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  await expect(page.locator('.chapter-select option')).toHaveText(['Chapter 1', 'Chapter 2'])
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field. Alice followed it to a hole under the hedge.')
+})

@@ -7,6 +7,8 @@ import type { Accent, GuideLayout, GuideMark, LineFocus, PageGuide, PlayControl,
 interface Props {
   settings: Settings
   onSettings: (settings: Settings) => void
+  /** Save this book as an EPUB, for an e-reader. */
+  onDownload?: () => void
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
   onClose: () => void
@@ -148,7 +150,7 @@ function Choice<T extends string>({
  * (and the options that go with it), text size and theme. Everything else
  * waits behind "More settings".
  */
-export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
+export function SettingsMenu({ settings, onSettings, onDownload, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
   const sheet = useRef<HTMLDivElement>(null)
   useSheetDrag(sheet, onClose)
@@ -311,6 +313,16 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
                 </label>
               </div>
             </div>
+
+            {onDownload && (
+              <div className="setting setting-stack">
+                <span className="setting-name">Download to device</span>
+                <button type="button" className="bookmark-here" onClick={onDownload}>
+                  Download EPUB
+                </button>
+                <span className="hint">This book as an EPUB, for an e-reader such as an Xteink: send it over Wi‑Fi or copy it to the SD card</span>
+              </div>
+            )}
 
             <dl className="shortcuts">
               {SHORTCUTS.map(([key, action]) => (

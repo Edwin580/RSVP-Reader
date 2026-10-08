@@ -5,6 +5,7 @@ import { Reader } from './components/Reader'
 import { Toast, type ToastMessage } from './components/Toast'
 import { navigate } from './components/transition'
 import { applyAppearance } from './lib/appearance'
+import { saveFile } from './lib/saveFile'
 import { backupFileName, createBackup, mergeBackup, parseBackup, restoreSummary } from './lib/backup'
 import { textStart } from './lib/catalog'
 import { parseFile } from './lib/parsers'
@@ -130,21 +131,7 @@ export default function App() {
       const name = backupFileName(new Date())
       const file = new File([JSON.stringify(backup)], name, { type: 'application/json' })
       // Phones: the share sheet saves to Files or iCloud, or AirDrops to another device.
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: 'Library backup' })
-        } catch (e) {
-          if (e instanceof DOMException && e.name === 'AbortError') return // closed the share sheet
-          throw e
-        }
-      } else {
-        const url = URL.createObjectURL(file)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = name
-        link.click()
-        setTimeout(() => URL.revokeObjectURL(url), 10000)
-      }
+      if (!(await saveFile(file, 'Library backup'))) return
       const now = Date.now()
       storage.saveLastBackup(now)
       setLastBackup(now)
