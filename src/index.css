@@ -313,7 +313,7 @@ h1, h2, p { margin: 0; }
 .stats-legend .stats-cell:first-child { margin-left: 3px; }
 .stats-legend .stats-cell:last-child { margin-right: 3px; }
 
-.stats-figures { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem 1rem; margin: 0; }
+.stats-figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem 1rem; margin: 0; }
 .stats-figures dt { font-size: 0.75rem; color: var(--text-2); }
 .stats-figures dd { margin: 0; font-family: var(--serif); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 420px) {

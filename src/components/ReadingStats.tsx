@@ -118,6 +118,10 @@ export function ReadingStats({ stats }: { stats: Stats }) {
               <dd>{summary.streak ? `${summary.streak} ${summary.streak === 1 ? 'day' : 'days'}` : '—'}</dd>
             </div>
             <div>
+              <dt>Time read</dt>
+              <dd>{minutes(summary.totalMs)}</dd>
+            </div>
+            <div>
               <dt>Words read</dt>
               <dd>{summary.totalWords.toLocaleString()}</dd>
             </div>

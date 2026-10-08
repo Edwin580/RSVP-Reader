@@ -40,6 +40,8 @@ interface Props {
    * the first, it turns back). A tap on a line moves the focus there.
    */
   guide?: boolean
+  /** Free reading: a tap turns the page, back on the left third and on everywhere else, like an e-reader. */
+  turnOnTap?: boolean
 }
 
 export interface PageNav {
@@ -93,6 +95,7 @@ export function PageView({
   onPage,
   navRef,
   guide = false,
+  turnOnTap = false,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
@@ -299,15 +302,17 @@ export function PageView({
     window.addEventListener('pointercancel', end)
   }
 
+  const previousPage = () => {
+    if (page.start === 0) return onSeek(0)
+    for (const [s, e] of known.current) if (e === page.start - 1) return onSeek(s)
+    onSeek(pageAnchor(words, paragraphEnds, page.start - 1))
+  }
+
   useLayoutEffect(() => {
     if (!navRef) return
     navRef.current = {
       next: nextPage,
-      previous: () => {
-        if (page.start === 0) return onSeek(0)
-        for (const [s, e] of known.current) if (e === page.start - 1) return onSeek(s)
-        onSeek(pageAnchor(words, paragraphEnds, page.start - 1))
-      },
+      previous: previousPage,
       nextLine: () => moveLine(1),
       previousLine: () => moveLine(-1),
       press: guide ? press : undefined,
@@ -504,6 +509,10 @@ export function PageView({
         // Text was just selected (a long press or a drag), or a tap is
         // dismissing a selection: that's not a tap on the page.
         if (selectionClick.current) return
+        if (turnOnTap) {
+          const { left, width } = e.currentTarget.getBoundingClientRect()
+          return e.clientX - left < width / 3 ? previousPage() : nextPage()
+        }
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')
         if (!target) return guide ? undefined : onToggle()
         const i = Number(target.dataset.i)

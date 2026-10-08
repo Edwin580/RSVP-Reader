@@ -38,6 +38,8 @@ export interface StatsSummary {
   weekWpm: number | null
   /** Consecutive days with at least a minute of reading, up to today (or yesterday, if today hasn't started yet). */
   streak: number
+  /** All time. */
+  totalMs: number
   totalWords: number
 }
 
@@ -55,14 +57,19 @@ export function summarize(stats: ReadingStats, today: Date): StatsSummary {
   const counts = (offset: number) => (day(offset)?.ms ?? 0) >= STREAK_MIN_MS
   let streak = 0
   for (let i = counts(0) ? 0 : 1; counts(i); i++) streak++
+  let totalMs = 0
   let totalWords = 0
-  for (const d of Object.values(stats.days)) totalWords += d.words
+  for (const d of Object.values(stats.days)) {
+    totalMs += d.ms
+    totalWords += d.words
+  }
   return {
     todayMs: day(0)?.ms ?? 0,
     weekMs,
     weekWords,
     weekWpm: weekMs >= STREAK_MIN_MS ? Math.round(weekWords / (weekMs / 60000)) : null,
     streak,
+    totalMs,
     totalWords,
   }
 }

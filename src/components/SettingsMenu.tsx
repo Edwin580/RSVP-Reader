@@ -35,7 +35,15 @@ const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
     label: 'Guide',
     hint: 'Your own pace: hold anywhere and drag to move the focus line by line, or tap a line',
   },
+  {
+    value: 'free',
+    label: 'Free',
+    hint: 'Just the page, no timer: turn pages yourself with a swipe, a tap on either side, or the arrow keys',
+  },
 ]
+
+/** Play controls that set their own pace on a page, so only page mode offers them. */
+const PAGE_ONLY: PlayControl[] = ['guide', 'free']
 
 const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
   { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
@@ -54,6 +62,8 @@ const FOCUS_OPTIONS: { value: LineFocus; label: string }[] = [
   { value: 'one', label: '1 line' },
   { value: 'three', label: '3 lines' },
 ]
+/** The guide is a line focus, so it always keeps at least one line clear. */
+const GUIDE_FOCUS_OPTIONS = FOCUS_OPTIONS.filter((f) => f.value !== 'off')
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: 'Auto' },
@@ -128,8 +138,9 @@ function Choice<T extends string>({
 }
 
 /**
- * The Aa menu. Up front, only what people change while reading: mode, text
- * size and theme. Everything else waits behind "More settings".
+ * The Aa menu. Up front, what people change while reading: mode, how to read
+ * (and the options that go with it), text size and theme. Everything else
+ * waits behind "More settings".
  */
 export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
@@ -142,10 +153,15 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
   }, [onClose])
 
   const set = (change: Partial<Settings>) => onSettings({ ...settings, ...change })
-  // The guide moves the focus on a page, so it's only offered in page mode
-  // (in word mode it plays with a tap).
-  const playOptions = settings.mode === 'page' ? PLAY_OPTIONS : PLAY_OPTIONS.filter((p) => p.value !== 'guide')
-  const playControl = settings.mode === 'word' && settings.playControl === 'guide' ? 'tap' : settings.playControl
+  // The guide and free reading set their own pace on a page, so they're only
+  // offered in page mode (in word mode they play with a tap, as the reader does).
+  const playOptions = settings.mode === 'page' ? PLAY_OPTIONS : PLAY_OPTIONS.filter((p) => !PAGE_ONLY.includes(p.value))
+  const playControl = settings.mode === 'word' && PAGE_ONLY.includes(settings.playControl) ? 'tap' : settings.playControl
+  // Only what applies to how you read: the pacer moves with the timer (tap or
+  // hold), the guide is a line focus of its own, and free reading has neither.
+  const timed = playControl === 'tap' || playControl === 'hold'
+  const focusOptions = playControl === 'guide' ? GUIDE_FOCUS_OPTIONS : FOCUS_OPTIONS
+  const lineFocus = playControl === 'guide' && settings.lineFocus === 'off' ? 'one' : settings.lineFocus
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const toggleMore = () => {
@@ -173,22 +189,36 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           <Choice label="Reading mode" options={MODES} value={settings.mode} onChange={(mode) => set({ mode })} />
         </div>
 
-        {settings.mode === 'page' && (
+        <div className="setting setting-stack">
+          <span className="setting-name">Play with</span>
+          <Choice label="Play with" options={playOptions} value={playControl} onChange={(playControl) => set({ playControl })} />
+          <span className="hint">{playOptions.find((p) => p.value === playControl)?.hint}</span>
+        </div>
+
+        {settings.mode === 'page' && timed && (
           <div className="setting setting-stack">
-            <span className="setting-name">Guide</span>
-            <Choice label="Guide" options={GUIDE_OPTIONS} value={settings.pageGuide} onChange={(pageGuide) => set({ pageGuide })} />
+            <span className="setting-name">Pacer</span>
+            <Choice label="Pacer" options={GUIDE_OPTIONS} value={settings.pageGuide} onChange={(pageGuide) => set({ pageGuide })} />
           </div>
         )}
 
-        {settings.mode === 'page' && (
+        {settings.mode === 'page' && playControl !== 'free' && (
           <div className="setting setting-stack">
             <span className="setting-name">Line focus</span>
-            <Choice label="Line focus" options={FOCUS_OPTIONS} value={settings.lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
+            <Choice label="Line focus" options={focusOptions} value={lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
             <span className="hint">
-              {settings.lineFocus === 'off'
+              {lineFocus === 'off'
                 ? 'Black out the lines around the one you’re reading'
                 : 'The rest of the page shows faintly when you pause'}
             </span>
+          </div>
+        )}
+
+        {playControl === 'guide' && (
+          <div className="setting setting-stack">
+            <span className="setting-name">Layout</span>
+            <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
+            <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
           </div>
         )}
 
@@ -217,20 +247,6 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
 
         {more && (
           <div className="more-settings">
-            <div className="setting setting-stack">
-              <span className="setting-name">Play with</span>
-              <Choice label="Play with" options={playOptions} value={playControl} onChange={(playControl) => set({ playControl })} />
-              <span className="hint">{playOptions.find((p) => p.value === playControl)?.hint}</span>
-            </div>
-
-            {playControl === 'guide' && (
-              <div className="setting setting-stack">
-                <span className="setting-name">Layout</span>
-                <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
-                <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
-              </div>
-            )}
-
             <div className="setting setting-stack">
               <span className="setting-name">Word timing</span>
               <Choice label="Word timing" options={TIMINGS} value={settings.wordTiming} onChange={(wordTiming) => set({ wordTiming })} />

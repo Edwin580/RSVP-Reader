@@ -54,6 +54,8 @@ const PANEL_CLOSE_MS = 200
 /** Jumps further than this offer a "back" button, shown for JUMP_BACK_MS. */
 const JUMP_BACK_MIN_WORDS = 50
 const JUMP_BACK_MS = 8000
+/** Free reading: a page turn moves on at most this far (a whole page of small text on a big screen). */
+const FREE_MOST_WORDS = 2000
 
 export function Reader({
   book,
@@ -73,6 +75,10 @@ export function Reader({
   const holdToRead = settings.playControl === 'hold'
   // Guide (page mode): no timer; the line focus follows the finger.
   const guided = mode === 'page' && settings.playControl === 'guide'
+  // Free (page mode): no timer and no marker; you turn the pages yourself.
+  const free = mode === 'page' && settings.playControl === 'free'
+  // Either way you set the pace, so nothing plays.
+  const selfPaced = guided || free
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -240,7 +246,7 @@ export function Reader({
   // button, Space, starting a session or continuing from a card. Those wait
   // for a hold instead, so reading only ever runs while something is held.
   const begin = () => {
-    if (!holdToRead && !guided) play()
+    if (!holdToRead && !selfPaced) play()
   }
   const holdHandlers = {
     ignore: ignorePress,
@@ -317,6 +323,7 @@ export function Reader({
   const [jumpedFrom, setJumpedFrom] = useState<number | null>(null)
   const jumpTo = (i: number) => {
     if (Math.abs(i - index) > JUMP_BACK_MIN_WORDS) setJumpedFrom(index)
+    jumped.current = true
     seek(i)
   }
   useEffect(() => {
@@ -391,19 +398,26 @@ export function Reader({
   }, [index])
 
   useReadingTime(playing, index, wpm, onReadingTime)
-  // Guide: moving on line by line is reading too, for the stats (and it
-  // takes a finished book back to the Reading shelf, as playing does).
+  // Guide and free reading: moving on line by line, or page by page, is
+  // reading too, for the stats (and it takes a finished book back to the
+  // Reading shelf, as playing does). Jumps (chapters, search, the progress
+  // bar) aren't.
   const guideFrom = useRef<{ index: number; at: number } | null>(null)
+  const jumped = useRef(false)
   useEffect(() => {
-    if (!guided) return
+    if (!selfPaced) {
+      guideFrom.current = null
+      return
+    }
     const from = guideFrom.current
     const now = performance.now()
     guideFrom.current = { index, at: now }
-    const read = from && guideReading(from.index, index, now - from.at)
+    const read = from && !jumped.current && guideReading(from.index, index, now - from.at, free ? FREE_MOST_WORDS : undefined)
+    jumped.current = false
     if (!read) return
     onReadingTime(read.ms, read.words)
     onPlay?.()
-  }, [guided, index, onReadingTime, onPlay])
+  }, [selfPaced, free, index, onReadingTime, onPlay])
   useEffect(() => {
     if (playing) onPlay?.()
   }, [playing, onPlay])
@@ -427,14 +441,17 @@ export function Reader({
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
         if (guided) pageNav.current?.nextLine?.()
+        else if (free) pageNav.current?.next()
         else if (!holdToRead) toggle()
         else if (!e.repeat) startHold()
         break
       case 'ArrowLeft':
-        seek(e.shiftKey || e.ctrlKey || e.metaKey ? previousSentence(words, index) : index - 1)
+        if (free) pageNav.current?.previous()
+        else seek(e.shiftKey || e.ctrlKey || e.metaKey ? previousSentence(words, index) : index - 1)
         break
       case 'ArrowRight':
-        seek(e.shiftKey || e.ctrlKey || e.metaKey ? nextSentence(words, index) : index + 1)
+        if (free) pageNav.current?.next()
+        else seek(e.shiftKey || e.ctrlKey || e.metaKey ? nextSentence(words, index) : index + 1)
         break
       // The guide has no speed: up and down move the focus a line instead.
       case 'ArrowUp':
@@ -559,7 +576,7 @@ export function Reader({
       holdToRead={holdToRead}
       onContinue={() => {
         setRecapDismissed(true)
-        if (!guided) play()
+        begin()
       }}
       onDismiss={() => setRecapDismissed(true)}
     />
@@ -645,8 +662,9 @@ export function Reader({
               e.preventDefault()
             }
           }}
-          // The guide is the line focus alone: no highlight or line sweeping along.
-          className={`stage stage-page${guided || settings.pageGuide === 'pacer' || settings.pageGuide === 'none' ? ' no-highlight' : ''}${guided || settings.pageGuide === 'highlight' || settings.pageGuide === 'none' ? ' no-pacer' : ''}`}
+          // The guide is the line focus alone, and free reading is the page as
+          // it is: no highlight or line sweeping along.
+          className={`stage stage-page${selfPaced || settings.pageGuide === 'pacer' || settings.pageGuide === 'none' ? ' no-highlight' : ''}${selfPaced || settings.pageGuide === 'highlight' || settings.pageGuide === 'none' ? ' no-pacer' : ''}`}
         >
           {guided && settings.guideLayout === 'scroll' ? (
             <ScrollView
@@ -673,12 +691,14 @@ export function Reader({
               font={font}
               pace={60000 / wpm}
               durationOf={(i) => plannedMs(i, index)}
-              // The guide always focuses at least the line under the finger.
-              focusLines={settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' || guided ? 1 : 0}
+              // The guide always focuses at least the line under the finger;
+              // free reading has no line to focus.
+              focusLines={free ? 0 : settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' || guided ? 1 : 0}
               onSeek={seek}
               onSelectWord={selectWord}
               onToggle={holdToRead || guided ? noop : toggle}
               guide={guided}
+              turnOnTap={free}
               onPage={onPage}
               navRef={pageNav}
             />
@@ -792,51 +812,63 @@ export function Reader({
             )}
           </div>
 
-          <div className="transport">
-            <button type="button" className="icon-button" title="Previous sentence (Shift+←)" aria-label="Previous sentence" onClick={() => seek(previousSentence(words, index))}>
-              <Icon name="sentenceBack" />
-            </button>
-            <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
-              <Icon name="back" />
-            </button>
-            {guided ? (
-              // The guide has no timer: the main button moves the focus on a line.
-              <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
-                <Icon name="chevronDown" size={24} />
+          {free ? (
+            // Free reading has no timer or words to step through: just the pages.
+            <div className="transport">
+              <button type="button" className="icon-button" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
+                <Icon name="back" />
               </button>
-            ) : holdToRead ? (
-              // Hold to read: no play button until you hold. A wide pad to rest
-              // a thumb on, labelled in words (an icon alone is ambiguous), that
-              // fills the moment it's pressed; then the controls fade away.
-              <button
-                type="button"
-                className={`hold-pad${holding && playing ? ' is-pressed' : ''}`}
-                title="Or hold Space"
-                onPointerDown={(e) => {
-                  if (e.button !== 0) return
-                  e.currentTarget.setPointerCapture(e.pointerId)
-                  startHold()
-                }}
-                onPointerUp={endHold}
-                onPointerCancel={endHold}
-                onContextMenu={(e) => e.preventDefault()}
-              >
-                Hold to read
+              <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Next page" title="Next page (→ or Space)">
+                <Icon name="forward" size={24} />
               </button>
-            ) : (
-              <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
-                <Icon name={playing ? 'pause' : 'play'} size={22} />
+            </div>
+          ) : (
+            <div className="transport">
+              <button type="button" className="icon-button" title="Previous sentence (Shift+←)" aria-label="Previous sentence" onClick={() => seek(previousSentence(words, index))}>
+                <Icon name="sentenceBack" />
               </button>
-            )}
-            <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
-              <Icon name="forward" />
-            </button>
-            <button type="button" className="icon-button" title="Next sentence (Shift+→)" aria-label="Next sentence" onClick={() => seek(nextSentence(words, index))}>
-              <Icon name="sentenceForward" />
-            </button>
-          </div>
+              <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
+                <Icon name="back" />
+              </button>
+              {guided ? (
+                // The guide has no timer: the main button moves the focus on a line.
+                <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
+                  <Icon name="chevronDown" size={24} />
+                </button>
+              ) : holdToRead ? (
+                // Hold to read: no play button until you hold. A wide pad to rest
+                // a thumb on, labelled in words (an icon alone is ambiguous), that
+                // fills the moment it's pressed; then the controls fade away.
+                <button
+                  type="button"
+                  className={`hold-pad${holding && playing ? ' is-pressed' : ''}`}
+                  title="Or hold Space"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                    startHold()
+                  }}
+                  onPointerUp={endHold}
+                  onPointerCancel={endHold}
+                  onContextMenu={(e) => e.preventDefault()}
+                >
+                  Hold to read
+                </button>
+              ) : (
+                <button type="button" className="play-button" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play / pause (Space)">
+                  <Icon name={playing ? 'pause' : 'play'} size={22} />
+                </button>
+              )}
+              <button type="button" className="icon-button" title="Forward one word (→)" aria-label="Forward one word" onClick={() => seek(index + 1)}>
+                <Icon name="forward" />
+              </button>
+              <button type="button" className="icon-button" title="Next sentence (Shift+→)" aria-label="Next sentence" onClick={() => seek(nextSentence(words, index))}>
+                <Icon name="sentenceForward" />
+              </button>
+            </div>
+          )}
 
-          <div className="speed" role="group" aria-label="Reading speed" hidden={guided}>
+          <div className="speed" role="group" aria-label="Reading speed" hidden={selfPaced}>
             <button type="button" className="icon-button" onClick={() => setWpm(wpm - WPM_STEP)} aria-label="Slower" title="Slower (↓)">
               −
             </button>

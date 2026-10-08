@@ -76,18 +76,28 @@ export function draggedLine(from: number, dy: number, spacing: number): number {
 
 /** Below this pace (words a minute) a stretch counts as time away, not reading. */
 const SLOWEST_WPM = 60
-/** Moves further than this are jumps, not reading. */
-const MOST_WORDS = 200
+/** Above this pace a move is skimming or flicking through, not reading. */
+const FASTEST_WPM = 1500
+/** Guide moves further than this are jumps, not reading. */
+export const GUIDE_MOST_WORDS = 200
 
 /**
- * Reading stats for the guide: moving on from word `from` to `to` after
- * `elapsed` ms counts as reading the words in between, for no longer than
- * reading them at a slow pace would take (so time spent away doesn't count).
- * Going back, or jumping far, counts as nothing.
+ * Reading stats when you set the pace (the guide, or turning pages
+ * yourself): moving on from word `from` to `to` after `elapsed` ms counts as
+ * reading the words in between, for no longer than reading them at a slow
+ * pace would take (so time spent away doesn't count). Going back, jumping
+ * further than `most` words, or moving on faster than anyone reads (flicking
+ * through pages) counts as nothing.
  */
-export function guideReading(from: number, to: number, elapsed: number): { ms: number; words: number } | null {
+export function guideReading(
+  from: number,
+  to: number,
+  elapsed: number,
+  most = GUIDE_MOST_WORDS,
+): { ms: number; words: number } | null {
   const words = to - from
-  if (words <= 0 || words > MOST_WORDS || elapsed <= 0) return null
+  if (words <= 0 || words > most || elapsed <= 0) return null
+  if (words / (elapsed / 60000) > FASTEST_WPM) return null
   return { words, ms: Math.min(elapsed, (words * 60000) / SLOWEST_WPM) }
 }
 

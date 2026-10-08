@@ -77,12 +77,12 @@ test('unsupported files show a clear error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Chapter reads EPUB, PDF, TXT and Markdown files')
 })
 
-test('page mode guide can be none, for reading the page as it is', async ({ page }) => {
+test('page mode pacer can be none, for reading the page as it is', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  await page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'None' }).click()
+  await page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'None' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
   await expect(page.locator('.page-marker')).toBeHidden()
@@ -128,12 +128,12 @@ test('line focus blacks out the other lines while reading and shows them faintly
   await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
 })
 
-test('page mode guide: highlight, line or both', async ({ page }) => {
+test('page mode pacer: highlight, line or both', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  const guide = page.getByRole('radiogroup', { name: 'Guide' })
+  const guide = page.getByRole('radiogroup', { name: 'Pacer' })
   await expect(guide.getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 
   await guide.getByRole('radio', { name: 'Line' }).click()
@@ -679,7 +679,7 @@ test('old settings with both page guides off come back with both on', async ({ p
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  await expect(page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 })
 
 test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
@@ -1158,4 +1158,42 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await page.getByRole('radio', { name: 'Pages' }).click()
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
+})
+
+test('Free: just the page, turned with a tap on either side, Space or the arrow keys, and counted as reading', async ({ page }) => {
+  await page.clock.install()
+  await page.goto('./')
+  await upload(page, 'long.txt', LONG_STORY)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.getByRole('radio', { name: 'Free' }).click()
+  // No timer, so nothing that goes with one: no pacer, line focus or speed.
+  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toHaveCount(0)
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Reading speed' })).toBeHidden()
+  await expect(page.locator('.page-marker')).toBeHidden()
+  await expect(page.locator('.page-pacer')).toBeHidden()
+
+  const firstWord = () => page.evaluate(`Number(document.querySelector('.page > .page-text [data-i]').dataset.i)`) as Promise<number>
+  const view = (await page.locator('.page').boundingBox())!
+  // A tap on the right turns on, on the left turns back.
+  await page.clock.runFor(60_000)
+  await page.mouse.click(view.x + view.width * 0.8, view.y + view.height / 2)
+  await expect.poll(firstWord).toBeGreaterThan(0)
+  const second = await firstWord()
+  await page.mouse.click(view.x + view.width * 0.1, view.y + view.height / 2)
+  await expect.poll(firstWord).toBe(0)
+  await page.keyboard.press('Space')
+  await expect.poll(firstWord).toBe(second)
+  await page.keyboard.press('ArrowLeft')
+  await expect.poll(firstWord).toBe(0)
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(firstWord).toBe(second)
+
+  // The minute spent on the first page counts as reading it.
+  await page.locator('.nav-button').click()
+  await expect(page.locator('.stats-toggle')).toHaveText(/1 min today/)
 })

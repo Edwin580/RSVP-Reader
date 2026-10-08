@@ -20,6 +20,7 @@ describe('reading stats', () => {
     expect(sum.weekMs).toBe(30 * MIN)
     expect(sum.weekWords).toBe(8000)
     expect(sum.weekWpm).toBe(267)
+    expect(sum.totalMs).toBe(90 * MIN)
     expect(sum.totalWords).toBe(8000 + 99999)
   })
 

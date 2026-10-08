@@ -166,7 +166,9 @@ export interface Settings {
   /**
    * 'tap' starts and stops reading with a tap; 'hold' reads only while you
    * hold the text. 'guide' (page mode) has no timer: hold anywhere and drag
-   * to move the line focus line by line, or tap a line.
+   * to move the line focus line by line, or tap a line. 'free' (page mode)
+   * has no timer and no marker: you read the page as it is and turn pages
+   * yourself, like an e-reader.
    */
   playControl: PlayControl
   /** Guide: the text as pages you turn, or one continuous column that scrolls along. */
@@ -177,7 +179,7 @@ export type ReadingMode = 'word' | 'page'
 export type Theme = 'system' | 'light' | 'sepia' | 'dark'
 export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
-export type PlayControl = 'tap' | 'hold' | 'guide'
+export type PlayControl = 'tap' | 'hold' | 'guide' | 'free'
 export type GuideLayout = 'pages' | 'scroll'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
@@ -185,7 +187,7 @@ export type LineFocus = 'off' | 'one' | 'three'
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
-export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide']
+export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide', 'free']
 export const GUIDE_LAYOUTS: GuideLayout[] = ['pages', 'scroll']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
