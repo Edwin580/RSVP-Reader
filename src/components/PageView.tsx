@@ -1,5 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
+import { useGuideLine } from '../hooks/useGuideLine'
+import { DOUBLE_TAP_MS, hasSelection, SELECT_HOLD_MS, wordAtPoint } from '../hooks/usePressGestures'
 import { draggedLine, groupLines, lineAt, lineOf, lineSpacing, type Line } from '../lib/guide'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
@@ -40,6 +41,10 @@ interface Props {
    * the first, it turns back). A tap on a line moves the focus there.
    */
   guide?: boolean
+  /** Guide: a line under the line in focus, moving with it. */
+  line?: boolean
+  /** Free reading: a tap turns the page, back on the left third and on everywhere else, like an e-reader. */
+  turnOnTap?: boolean
 }
 
 export interface PageNav {
@@ -93,12 +98,16 @@ export function PageView({
   onPage,
   navRef,
   guide = false,
+  line = false,
+  turnOnTap = false,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
   const ghost = useRef<HTMLDivElement>(null)
   const marker = useRef<HTMLDivElement>(null)
   const pacer = useRef<HTMLDivElement>(null)
+  const guideLine = useRef<HTMLDivElement>(null)
+  useGuideLine(text, guideLine, index)
   const ghostTimer = useRef<number | undefined>(undefined)
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
   const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
@@ -285,29 +294,50 @@ export function PageView({
     const move = (m: PointerEvent) => {
       if (m.pointerId === id) latest.current.follow(m.clientX, m.clientY)
     }
-    const end = (u: PointerEvent) => {
-      if (u.pointerId !== id) return
-      const tapped = drag.current && !drag.current.moved
+    const stop = () => {
+      window.clearTimeout(held)
       drag.current = null
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
+    }
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== id) return
+      const tapped = drag.current && !drag.current.moved
+      stop()
       if (tapped && u.type === 'pointerup') latest.current.tapAt(u.clientY)
     }
+    // The text is selectable (for Look Up): on a touch screen the system's
+    // own long press selects a word, and a drag never selects text. A mouse
+    // drag would, so with a mouse the press doesn't select text; holding it
+    // still on a word selects the word instead.
+    const { clientX, clientY } = e
+    const mouse = e.pointerType === 'mouse'
+    if (mouse) e.preventDefault()
+    const held = mouse
+      ? window.setTimeout(() => {
+          const i = drag.current && !drag.current.moved ? wordAtPoint(clientX, clientY) : null
+          if (i === null || !onSelectWord) return
+          stop()
+          onSelectWord(i)
+        }, SELECT_HOLD_MS)
+      : undefined
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', end)
+  }
+
+  const previousPage = () => {
+    if (page.start === 0) return onSeek(0)
+    for (const [s, e] of known.current) if (e === page.start - 1) return onSeek(s)
+    onSeek(pageAnchor(words, paragraphEnds, page.start - 1))
   }
 
   useLayoutEffect(() => {
     if (!navRef) return
     navRef.current = {
       next: nextPage,
-      previous: () => {
-        if (page.start === 0) return onSeek(0)
-        for (const [s, e] of known.current) if (e === page.start - 1) return onSeek(s)
-        onSeek(pageAnchor(words, paragraphEnds, page.start - 1))
-      },
+      previous: previousPage,
       nextLine: () => moveLine(1),
       previousLine: () => moveLine(-1),
       press: guide ? press : undefined,
@@ -504,6 +534,10 @@ export function PageView({
         // Text was just selected (a long press or a drag), or a tap is
         // dismissing a selection: that's not a tap on the page.
         if (selectionClick.current) return
+        if (turnOnTap) {
+          const { left, width } = e.currentTarget.getBoundingClientRect()
+          return e.clientX - left < width / 3 ? previousPage() : nextPage()
+        }
         const target = (e.target as HTMLElement).closest<HTMLElement>('[data-i]')
         if (!target) return guide ? undefined : onToggle()
         const i = Number(target.dataset.i)
@@ -534,6 +568,7 @@ export function PageView({
         ref={text}
       >
         {content}
+        {line && !measuring && <div className="guide-line" ref={guideLine} aria-hidden="true" />}
       </div>
     </div>
   )

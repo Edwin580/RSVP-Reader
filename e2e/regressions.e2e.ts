@@ -471,3 +471,112 @@ test('free books: a word still being typed finds the book (#62)', async ({ page 
   await expect(page.getByRole('list', { name: 'Books' }).getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
   await expect(page.getByText('No books match.')).toHaveCount(0)
 })
+
+test('Guide: the settings show the line focus it uses, and no pacer it ignores (#66)', async ({ page }) => {
+  // Reported: "I tried to turn off line focus and just switch to guide mode
+  // hoping it would be normal but that defaults to line." The guide always
+  // focuses a line and never shows the pacer, yet the menu offered line
+  // focus Off and the pacer choices. Reading the page as it is is now Free.
+  await page.goto('./')
+  await upload(page)
+  await openSettings(page)
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.getByRole('radio', { name: 'Guide' }).click()
+  const focus = page.getByRole('radiogroup', { name: 'Line focus' })
+  await expect(focus.getByRole('radio', { name: 'Off' })).toHaveCount(0)
+  await expect(focus.getByRole('radio', { name: '1 line' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await page.getByRole('radio', { name: 'Free' }).click()
+  await expect(focus).toHaveCount(0)
+})
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide (${layout}): a long press on a word selects it, for Look Up (#66)`, async ({ page }, testInfo) => {
+    // Reported: "For some reason look up doesn't work in guide mode", and
+    // again after a first fix that selected the word from script, which an
+    // iPhone doesn't offer Look Up for. The guide's text wasn't selectable,
+    // since a press drags the focus; now it is, as with Tap to play, and a
+    // mouse (which would select while dragging) selects on a still hold.
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', Array.from({ length: 40 }, (_, i) => `Sentence ${i} has a heron in it.`).join(' '))
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const word = page.locator('.page > .page-text [data-i]').filter({ hasText: /^heron$/ }).nth(2)
+    const box = (await word.boundingBox())!
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    // On a touch screen it's the system's own long press (iPhones only offer
+    // Look Up for a selection it makes, not one made by the page), which the
+    // test browser can't do: the words must be selectable text, as with Tap.
+    await expect(page.locator('.reader')).toHaveClass(/can-select/)
+    expect(await page.evaluate(`getComputedStyle(document.querySelector('.page > .page-text [data-i]')).userSelect`)).toBe('text')
+    if (testInfo.project.name === 'phone') return
+    // With a mouse, a still hold selects the word...
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.down()
+    await page.waitForTimeout(800)
+    await page.mouse.up()
+    await expect.poll(() => page.evaluate('String(getSelection())')).toBe('heron')
+    // ...and dragging moves the focus without selecting text.
+    await page.evaluate('getSelection().removeAllRanges()')
+    const slider = page.getByRole('slider')
+    const before = await slider.getAttribute('aria-valuenow')
+    await page.mouse.move(at.x, at.y - 60)
+    await page.mouse.down()
+    await page.mouse.move(at.x, at.y + 60, { steps: 6 })
+    await page.mouse.up()
+    await expect(slider).not.toHaveAttribute('aria-valuenow', before!)
+    expect(await page.evaluate('String(getSelection())')).toBe('')
+  })
+}
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide (${layout}): double-tap a word, then hold it, and it stays selected for Look Up (#66)`, async ({ page }, testInfo) => {
+    // Reported, after two fixes: "The sequence to look up is double tap then
+    // a slight hold after. It currently doesn't work." The double tap
+    // selected the word, but the hold cleared the selection and dragged the
+    // focus, so the system's menu never opened on it. The guide now leaves a
+    // press on the selection alone, as Hold to read does.
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', Array.from({ length: 40 }, (_, i) => `Sentence ${i} has a heron in it.`).join(' '))
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const word = page.locator('.page > .page-text [data-i]').filter({ hasText: /^heron$/ }).nth(2)
+    const box = (await word.boundingBox())!
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const phone = testInfo.project.name === 'phone'
+    const selected = () => page.evaluate('String(getSelection())')
+    const slider = page.getByRole('slider')
+
+    if (phone) {
+      await page.touchscreen.tap(at.x, at.y)
+      await page.touchscreen.tap(at.x, at.y)
+    } else await page.mouse.dblclick(at.x, at.y)
+    await expect.poll(selected).toBe('heron')
+    const there = await slider.getAttribute('aria-valuenow')
+
+    // The hold, on a touch screen (with a mouse, Look Up is a right-click,
+    // and pressing on a selection clears it, as on any page).
+    if (phone) {
+      const cdp = await page.context().newCDPSession(page)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] })
+      await page.waitForTimeout(150)
+      expect(await selected()).toBe('heron')
+      await page.waitForTimeout(500)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await page.waitForTimeout(200)
+      expect(await selected()).toBe('heron')
+      await expect(slider).toHaveAttribute('aria-valuenow', there!)
+    }
+
+    // A tap elsewhere dismisses it, and the guide carries on from there.
+    const lines = page.locator('.page > .page-text [data-i]').filter({ hasText: /^Sentence$/ })
+    const other = (await lines.nth(6).boundingBox())!
+    if (phone) await page.touchscreen.tap(other.x + 4, other.y + other.height / 2)
+    else await page.mouse.click(other.x + 4, other.y + other.height / 2)
+    await expect.poll(selected).toBe('')
+  })
+}

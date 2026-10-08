@@ -77,12 +77,12 @@ test('unsupported files show a clear error', async ({ page }) => {
   await expect(page.getByRole('alert')).toContainText('Chapter reads EPUB, PDF, TXT and Markdown files')
 })
 
-test('page mode guide can be none, for reading the page as it is', async ({ page }) => {
+test('page mode pacer can be none, for reading the page as it is', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  await page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'None' }).click()
+  await page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'None' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
   await expect(page.locator('.page-marker')).toBeHidden()
@@ -128,12 +128,12 @@ test('line focus blacks out the other lines while reading and shows them faintly
   await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
 })
 
-test('page mode guide: highlight, line or both', async ({ page }) => {
+test('page mode pacer: highlight, line or both', async ({ page }) => {
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  const guide = page.getByRole('radiogroup', { name: 'Guide' })
+  const guide = page.getByRole('radiogroup', { name: 'Pacer' })
   await expect(guide.getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 
   await guide.getByRole('radio', { name: 'Line' }).click()
@@ -679,7 +679,7 @@ test('old settings with both page guides off come back with both on', async ({ p
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  await expect(page.getByRole('radiogroup', { name: 'Guide' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 })
 
 test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
@@ -1159,3 +1159,83 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
 })
+
+test('Free: just the page, turned with a tap on either side, Space or the arrow keys, and counted as reading', async ({ page }) => {
+  await page.clock.install()
+  await page.goto('./')
+  await upload(page, 'long.txt', LONG_STORY)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.getByRole('radio', { name: 'Free' }).click()
+  // No timer, so nothing that goes with one: no pacer, line focus or speed.
+  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toHaveCount(0)
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('group', { name: 'Reading speed' })).toBeHidden()
+  await expect(page.locator('.page-marker')).toBeHidden()
+  await expect(page.locator('.page-pacer')).toBeHidden()
+
+  const firstWord = () => page.evaluate(`Number(document.querySelector('.page > .page-text [data-i]').dataset.i)`) as Promise<number>
+  const view = (await page.locator('.page').boundingBox())!
+  // A tap on the right turns on, on the left turns back.
+  await page.clock.runFor(60_000)
+  await page.mouse.click(view.x + view.width * 0.8, view.y + view.height / 2)
+  await expect.poll(firstWord).toBeGreaterThan(0)
+  const second = await firstWord()
+  await page.mouse.click(view.x + view.width * 0.1, view.y + view.height / 2)
+  await expect.poll(firstWord).toBe(0)
+  await page.keyboard.press('Space')
+  await expect.poll(firstWord).toBe(second)
+  await page.keyboard.press('ArrowLeft')
+  await expect.poll(firstWord).toBe(0)
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(firstWord).toBe(second)
+
+  // The minute spent on the first page counts as reading it.
+  await page.locator('.nav-button').click()
+  await expect(page.locator('.stats-toggle')).toHaveText(/1 min today/)
+})
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide › Show › Line (${layout}): a line under the line you're on moves with it, with nothing blacked out`, async ({ page }) => {
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', guideMark: 'line', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', LONG_STORY)
+    await settled(page)
+    const guideLine = page.locator('.page > .page-text .guide-line')
+    await expect(guideLine).toBeVisible()
+    await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+    // Under the words of the line in focus: its top at their bottom, as wide as the line.
+    const under = () =>
+      page.evaluate(`(() => {
+        const line = document.querySelector('.page > .page-text .guide-line').getBoundingClientRect()
+        const slider = document.querySelector('[role=slider]')
+        const i = slider.getAttribute('aria-valuenow')
+        const word = document.querySelector('.page > .page-text [data-i="' + i + '"]').getBoundingClientRect()
+        const onLine = [...document.querySelectorAll('.page > .page-text [data-i]')].map((s) => s.getBoundingClientRect()).filter((r) => Math.abs(r.top - word.top) < 1)
+        const left = Math.min(...onLine.map((r) => r.left))
+        const right = Math.max(...onLine.map((r) => r.right))
+        return Math.abs(line.top - (word.bottom - 2)) < 2 && Math.abs(line.left - left) < 2 && Math.abs(line.right - right) < 2
+      })()`)
+    await expect.poll(under).toBe(true)
+    const startTop = (await guideLine.boundingBox())!.y
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowDown')
+    await expect.poll(under).toBe(true)
+    await expect.poll(async () => (await guideLine.boundingBox())!.y).not.toBe(startTop)
+
+    // Both: the line, and the rest blacked out.
+    await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Both' }).click()
+    await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toBeVisible()
+    await expect(page.locator('.page-text .is-dim').first()).toBeAttached()
+    await expect(guideLine).toBeVisible()
+    // Focus: no line.
+    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Focus' }).click()
+    await expect(guideLine).toHaveCount(0)
+  })
+}

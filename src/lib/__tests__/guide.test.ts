@@ -57,6 +57,10 @@ describe('guide', () => {
     expect(guideReading(100, 110, 600000)).toEqual({ words: 10, ms: 10000 })
     expect(guideReading(110, 100, 3000)).toBeNull()
     expect(guideReading(100, 5000, 3000)).toBeNull()
+    // Flicking through: 300 words in two seconds is faster than anyone reads.
+    expect(guideReading(0, 300, 2000, 2000)).toBeNull()
+    // Turning a page yourself: a whole page counts, read at your own speed.
+    expect(guideReading(0, 300, 60000, 2000)).toEqual({ words: 300, ms: 60000 })
   })
 
   it('lays out whole paragraphs around the reading position', () => {

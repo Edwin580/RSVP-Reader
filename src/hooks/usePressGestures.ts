@@ -37,6 +37,19 @@ export function hasSelection(): boolean {
   return !!selection && !selection.isCollapsed
 }
 
+/**
+ * Guide, with a mouse: a press held this long (ms) without moving selects
+ * the word, like a long press on a touch screen. Longer than a glance's
+ * hold, since a guide press often rests a moment before it drags.
+ */
+export const SELECT_HOLD_MS = 550
+
+/** The word on the page at a point on screen (not the old page sliding away), or null. */
+export function wordAtPoint(x: number, y: number): number | null {
+  const word = document.elementFromPoint(x, y)?.closest<HTMLElement>('.page > .page-text [data-i]')
+  return word ? Number(word.dataset.i) : null
+}
+
 /** Two taps this close in time (ms) and distance (px) make a double tap. */
 export const DOUBLE_TAP_MS = 320
 const DOUBLE_TAP_DISTANCE = 30
