@@ -38,9 +38,9 @@ export function hasSelection(): boolean {
 }
 
 /**
- * Guide: a press held this long (ms) without moving selects the word, like
- * the system's own long press. Longer than a glance's hold, since a guide
- * press often rests a moment before it drags.
+ * Guide, with a mouse: a press held this long (ms) without moving selects
+ * the word, like a long press on a touch screen. Longer than a glance's
+ * hold, since a guide press often rests a moment before it drags.
  */
 export const SELECT_HOLD_MS = 550
 

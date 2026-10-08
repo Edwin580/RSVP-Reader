@@ -492,9 +492,11 @@ test('Guide: the settings show the line focus it uses, and no pacer it ignores (
 
 for (const layout of ['pages', 'scroll'] as const) {
   test(`Guide (${layout}): a long press on a word selects it, for Look Up (#66)`, async ({ page }, testInfo) => {
-    // Reported: "For some reason look up doesn't work in guide mode." A press
-    // in the guide drags the focus, so a long press never selected anything,
-    // and the system's Look Up had nothing to look up.
+    // Reported: "For some reason look up doesn't work in guide mode", and
+    // again after a first fix that selected the word from script, which an
+    // iPhone doesn't offer Look Up for. The guide's text wasn't selectable,
+    // since a press drags the focus; now it is, as with Tap to play, and a
+    // mouse (which would select while dragging) selects on a still hold.
     await page.addInitScript(
       `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', v: 2 }))`,
     )
@@ -504,18 +506,27 @@ for (const layout of ['pages', 'scroll'] as const) {
     const word = page.locator('.page > .page-text [data-i]').filter({ hasText: /^heron$/ }).nth(2)
     const box = (await word.boundingBox())!
     const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-    if (testInfo.project.name === 'phone') {
-      const cdp = await page.context().newCDPSession(page)
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] })
-      await page.waitForTimeout(800)
-      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-    } else {
-      await page.mouse.move(at.x, at.y)
-      await page.mouse.down()
-      await page.waitForTimeout(800)
-      await page.mouse.up()
-    }
-    await expect.poll(() => page.evaluate('String(getSelection())')).toBe('heron')
+    // On a touch screen it's the system's own long press (iPhones only offer
+    // Look Up for a selection it makes, not one made by the page), which the
+    // test browser can't do: the words must be selectable text, as with Tap.
     await expect(page.locator('.reader')).toHaveClass(/can-select/)
+    expect(await page.evaluate(`getComputedStyle(document.querySelector('.page > .page-text [data-i]')).userSelect`)).toBe('text')
+    if (testInfo.project.name === 'phone') return
+    // With a mouse, a still hold selects the word...
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.down()
+    await page.waitForTimeout(800)
+    await page.mouse.up()
+    await expect.poll(() => page.evaluate('String(getSelection())')).toBe('heron')
+    // ...and dragging moves the focus without selecting text.
+    await page.evaluate('getSelection().removeAllRanges()')
+    const slider = page.getByRole('slider')
+    const before = await slider.getAttribute('aria-valuenow')
+    await page.mouse.move(at.x, at.y - 60)
+    await page.mouse.down()
+    await page.mouse.move(at.x, at.y + 60, { steps: 6 })
+    await page.mouse.up()
+    await expect(slider).not.toHaveAttribute('aria-valuenow', before!)
+    expect(await page.evaluate('String(getSelection())')).toBe('')
   })
 }

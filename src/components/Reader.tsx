@@ -174,10 +174,12 @@ export function Reader({
     return !!word && hasSelection() && !!window.getSelection()?.containsNode(word, true)
   }
   // Words in the paused text and on the page can be selected, for the
-  // system's Look Up. With Tap to play, a long press selects like anywhere
-  // else; with Hold to read a long press reads, so a double-tap selects.
+  // system's Look Up. With Tap to play (and in the guide, which never
+  // plays), a long press selects like anywhere else; it has to be the
+  // system's own long press, since iPhones only offer Look Up for those.
+  // With Hold to read a long press reads, so a double-tap selects.
   const [selecting, setSelecting] = useState(false)
-  const canSelect = !playing && ((!holdToRead && !guided) || selecting)
+  const canSelect = !playing && (!holdToRead || selecting)
   const selectable = (target: Element) => canSelect && !!target.closest('.context [data-i], .page-text')
   const selectAt = useRef<number | null>(null)
   const selectWord = (i: number) => {

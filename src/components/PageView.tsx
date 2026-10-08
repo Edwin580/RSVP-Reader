@@ -307,16 +307,21 @@ export function PageView({
       stop()
       if (tapped && u.type === 'pointerup') latest.current.tapAt(u.clientY)
     }
-    // A long press on a word without moving selects it, for Look Up, as
-    // anywhere else in the app (the guide never makes the text selectable
-    // on its own, since a press drags the focus).
+    // The text is selectable (for Look Up): on a touch screen the system's
+    // own long press selects a word, and a drag never selects text. A mouse
+    // drag would, so with a mouse the press doesn't select text; holding it
+    // still on a word selects the word instead.
     const { clientX, clientY } = e
-    const held = window.setTimeout(() => {
-      const i = drag.current && !drag.current.moved ? wordAtPoint(clientX, clientY) : null
-      if (i === null || !onSelectWord) return
-      stop()
-      onSelectWord(i)
-    }, SELECT_HOLD_MS)
+    const mouse = e.pointerType === 'mouse'
+    if (mouse) e.preventDefault()
+    const held = mouse
+      ? window.setTimeout(() => {
+          const i = drag.current && !drag.current.moved ? wordAtPoint(clientX, clientY) : null
+          if (i === null || !onSelectWord) return
+          stop()
+          onSelectWord(i)
+        }, SELECT_HOLD_MS)
+      : undefined
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', end)
