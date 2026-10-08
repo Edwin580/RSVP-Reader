@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useGuideLine } from '../hooks/useGuideLine'
-import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
+import { DOUBLE_TAP_MS, hasSelection, SELECT_HOLD_MS, wordAtPoint } from '../hooks/usePressGestures'
 import { draggedLine, focusRange, groupLines, lineAt, lineOf, lineSpacing, windowAround, type Line } from '../lib/guide'
 import { paragraphsBetween } from '../lib/pages'
 import type { PageNav } from './PageView'
@@ -239,15 +239,29 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
     const move = (m: PointerEvent) => {
       if (m.pointerId === id) latest.current.follow(m.clientX, m.clientY)
     }
-    const end = (u: PointerEvent) => {
-      if (u.pointerId !== id) return
-      const tapped = hold.current && !hold.current.moved
+    const stop = () => {
+      window.clearTimeout(held)
       hold.current = null
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', end)
       window.removeEventListener('pointercancel', end)
+    }
+    const end = (u: PointerEvent) => {
+      if (u.pointerId !== id) return
+      const tapped = hold.current && !hold.current.moved
+      stop()
       if (tapped && u.type === 'pointerup') latest.current.tapAt(u.clientY)
     }
+    // A long press on a word without moving selects it, for Look Up, as
+    // anywhere else in the app (the guide never makes the text selectable
+    // on its own, since a press drags the focus).
+    const { clientX, clientY } = e
+    const held = window.setTimeout(() => {
+      const i = hold.current && !hold.current.moved ? wordAtPoint(clientX, clientY) : null
+      if (i === null || !onSelectWord) return
+      stop()
+      onSelectWord(i)
+    }, SELECT_HOLD_MS)
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
     window.addEventListener('pointercancel', end)

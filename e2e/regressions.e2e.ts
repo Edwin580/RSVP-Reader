@@ -489,3 +489,33 @@ test('Guide: the settings show the line focus it uses, and no pacer it ignores (
   await page.getByRole('radio', { name: 'Free' }).click()
   await expect(focus).toHaveCount(0)
 })
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide (${layout}): a long press on a word selects it, for Look Up (#66)`, async ({ page }, testInfo) => {
+    // Reported: "For some reason look up doesn't work in guide mode." A press
+    // in the guide drags the focus, so a long press never selected anything,
+    // and the system's Look Up had nothing to look up.
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', Array.from({ length: 40 }, (_, i) => `Sentence ${i} has a heron in it.`).join(' '))
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const word = page.locator('.page > .page-text [data-i]').filter({ hasText: /^heron$/ }).nth(2)
+    const box = (await word.boundingBox())!
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    if (testInfo.project.name === 'phone') {
+      const cdp = await page.context().newCDPSession(page)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] })
+      await page.waitForTimeout(800)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    } else {
+      await page.mouse.move(at.x, at.y)
+      await page.mouse.down()
+      await page.waitForTimeout(800)
+      await page.mouse.up()
+    }
+    await expect.poll(() => page.evaluate('String(getSelection())')).toBe('heron')
+    await expect(page.locator('.reader')).toHaveClass(/can-select/)
+  })
+}
