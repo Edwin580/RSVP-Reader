@@ -472,7 +472,7 @@ test('free books: a word still being typed finds the book (#62)', async ({ page 
   await expect(page.getByText('No books match.')).toHaveCount(0)
 })
 
-test('Guide: the settings show the line focus it uses, and no pacer it ignores (#PR)', async ({ page }) => {
+test('Guide: the settings show the line focus it uses, and no pacer it ignores (#66)', async ({ page }) => {
   // Reported: "I tried to turn off line focus and just switch to guide mode
   // hoping it would be normal but that defaults to line." The guide always
   // focuses a line and never shows the pacer, yet the menu offered line
