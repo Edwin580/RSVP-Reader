@@ -37,6 +37,9 @@ export interface Progress {
 
 /** A saved spot in a book: the start of the sentence that was showing. */
 export interface Bookmark {
+  /** First word: the start of a sentence, or of a highlight. */
   index: number
   createdAt: number
+  /** A highlight: the last word of the text picked out. Plain bookmarks have none. */
+  end?: number
 }

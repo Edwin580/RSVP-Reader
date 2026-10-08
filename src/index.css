@@ -789,6 +789,10 @@ h1, h2, p { margin: 0; }
 .context { width: 100%; max-width: 36rem; margin: 0 auto; min-height: 0; }
 .context p { color: var(--text-2); font-family: var(--reading-font); font-size: 1.05rem; line-height: 1.65; overflow-wrap: anywhere; animation: fade-in 0.3s ease; }
 .context .current { color: var(--text); text-decoration: underline 2px var(--accent); text-underline-offset: 0.25em; }
+/* Saved highlights: a soft wash of the focus colour behind the words. */
+.page-text .is-highlighted,
+.context .is-highlighted { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.search-snippet.is-highlight { border-left: 2px solid var(--accent); padding-left: 0.6rem; }
 /* Paused, the text can be selected, so the system's Look Up, Copy and
    Translate work on it (a long press on phones). Never while reading. */
 .can-select .context p,
