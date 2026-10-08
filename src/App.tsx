@@ -86,6 +86,8 @@ export default function App() {
     try {
       const book = await parseFile(file, (f) => setBusy(`Reading ${file.name}… ${Math.round(f * 100)}%`))
       await storage.saveBook(book, file.name)
+      // Kept to download to an e-reader as it came, author, cover and all.
+      if (/\.epub$/i.test(file.name)) await storage.saveOriginal(book.id, await file.arrayBuffer()).catch(() => {})
       if (fromCatalog && !(await storage.loadProgress(book.id))) {
         const start = textStart(book)
         if (start > 0) await storage.saveProgress(book.id, start)
@@ -96,6 +98,24 @@ export default function App() {
       await openBook(book, () => setBrowsing(false))
     } finally {
       setBusy(null)
+    }
+  }
+
+  /**
+   * The book as an EPUB for an e-reader: the file it was added from, if it
+   * was an EPUB (author, cover and formatting as published); otherwise one
+   * built from its text, with its cover.
+   */
+  const handleDownload = async (book: Book) => {
+    try {
+      const { buildEpub, epubFileName } = await import('./lib/exportEpub')
+      const meta = books.find((b) => b.id === book.id)
+      const original = await storage.loadOriginal(book.id)
+      const name = original && meta ? meta.fileName : epubFileName(book.title)
+      const data = original ?? (await buildEpub({ ...book, cover: meta?.cover }))
+      await saveFile(new File([data], name, { type: 'application/epub+zip' }), book.title)
+    } catch (e) {
+      showToast(`Couldn’t save the EPUB. ${message(e)}`, 'error')
     }
   }
 
@@ -225,6 +245,7 @@ export default function App() {
         onBookmarks={handleBookmarks}
         onReadingTime={handleReadingTime}
         onPlay={handlePlay}
+        onDownload={open.demo ? undefined : () => handleDownload(open.book)}
         onClose={() => {
           navigate('back', () => setOpen(null))
           handleClose().catch(() => {})

@@ -7,7 +7,8 @@ import type { Book } from './types'
  * from the parsed text, since the original file isn't kept: a section per
  * chapter, paragraphs as they were, headings as headings. Carries both
  * tables of contents, EPUB 3's and EPUB 2's, as small e-readers often read
- * only the older one.
+ * only the older one. The book's cover (a data URL), if it has one, goes in
+ * as the cover image and a first page.
  */
 export async function buildEpub(book: Book, now = new Date()): Promise<ArrayBuffer> {
   const zip = new JSZip()
@@ -24,6 +25,12 @@ export async function buildEpub(book: Book, now = new Date()): Promise<ArrayBuff
   const id = `urn:chapter:${book.id}`
   const title = escapeXml(book.title)
   sections.forEach((s, k) => zip.file(`OEBPS/${sectionFile(k)}`, page(s.title, s.html)))
+  const cover = book.cover ? dataUrl(book.cover) : null
+  const coverFile = cover && `cover.${cover.type === 'image/png' ? 'png' : 'jpg'}`
+  if (cover && coverFile) {
+    zip.file(`OEBPS/${coverFile}`, cover.data, { base64: true })
+    zip.file('OEBPS/cover.xhtml', page(book.title, `<div><img src="${coverFile}" alt="${title}" style="max-width: 100%"/></div>`))
+  }
   zip.file(
     'OEBPS/nav.xhtml',
     page(
@@ -55,14 +62,18 @@ export async function buildEpub(book: Book, now = new Date()): Promise<ArrayBuff
     <dc:identifier id="uid">${id}</dc:identifier>
     <dc:title>${title}</dc:title>
     <dc:language>en</dc:language>
-    <meta property="dcterms:modified">${now.toISOString().replace(/\.\d+Z$/, 'Z')}</meta>
+    <meta property="dcterms:modified">${now.toISOString().replace(/\.\d+Z$/, 'Z')}</meta>${cover ? '\n    <meta name="cover" content="cover-image"/>' : ''}
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
-    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>${
+      cover
+        ? `\n    <item id="cover-image" href="${coverFile}" media-type="${cover.type}" properties="cover-image"/>\n    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>`
+        : ''
+    }
 ${sections.map((_, k) => `    <item id="s${k}" href="${sectionFile(k)}" media-type="application/xhtml+xml"/>`).join('\n')}
   </manifest>
-  <spine toc="ncx">
+  <spine toc="ncx">${cover ? '\n    <itemref idref="cover"/>' : ''}
 ${sections.map((_, k) => `    <itemref idref="s${k}"/>`).join('\n')}
   </spine>
 </package>`,
@@ -95,6 +106,12 @@ export function epubFileName(title: string): string {
 }
 
 const sectionFile = (k: number) => `section${k + 1}.xhtml`
+
+/** An image data URL's type and base64 data, or null for anything else. */
+function dataUrl(url: string): { type: string; data: string } | null {
+  const match = url.match(/^data:(image\/(?:jpeg|png));base64,(.+)$/)
+  return match ? { type: match[1], data: match[2] } : null
+}
 
 const page = (title: string, body: string) => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>

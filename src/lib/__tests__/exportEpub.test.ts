@@ -44,6 +44,19 @@ describe('EPUB export', () => {
     expect(names).toEqual(expect.arrayContaining(['OEBPS/nav.xhtml', 'OEBPS/toc.ncx', 'OEBPS/section1.xhtml', 'OEBPS/section2.xhtml']))
   })
 
+  it('includes the cover, when there is one, as the cover image and first page', async () => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const zip = await JSZip.loadAsync(await buildEpub({ ...book, cover: `data:image/png;base64,${png}` }))
+    expect(await zip.file('OEBPS/cover.png')!.async('base64')).toBe(png)
+    const opf = await zip.file('OEBPS/content.opf')!.async('string')
+    expect(opf).toContain('<meta name="cover" content="cover-image"/>')
+    expect(opf).toContain('properties="cover-image"')
+    expect(opf).toMatch(/<spine toc="ncx">\s*<itemref idref="cover"\/>/)
+    // Without one, none of that.
+    const plain = await JSZip.loadAsync(await buildEpub(book))
+    expect(plain.file('OEBPS/cover.xhtml')).toBeNull()
+  })
+
   it('names the file after the title', () => {
     expect(epubFileName('War: and/or Peace?')).toBe('War and or Peace.epub')
     expect(epubFileName('???')).toBe('book.epub')

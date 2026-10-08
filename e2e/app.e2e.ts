@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises'
+import JSZip from 'jszip'
 import { expect, test, type Page } from '@playwright/test'
 import { STORY, upload } from './helpers.ts'
 
@@ -1262,4 +1263,28 @@ test('Download to device saves the book as an EPUB that reads back the same', as
   await page.getByRole('radio', { name: 'Page', exact: true }).click()
   await page.keyboard.press('Escape')
   await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field. Alice followed it to a hole under the hedge.')
+})
+
+test('Download to device gives back an added EPUB as it came, author and all', async ({ page }) => {
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Pier</dc:title><dc:creator>Ann Author</dc:creator></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>',
+  )
+  zip.file('c1.xhtml', '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>One</h1><p>The pier ran out to sea.</p></body></html>')
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'ann-author_the-pier.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download EPUB' }).click()])
+  expect(download.suggestedFilename()).toBe('ann-author_the-pier.epub')
+  expect((await readFile((await download.path())!)).equals(buffer)).toBe(true)
 })

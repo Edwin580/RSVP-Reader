@@ -19,7 +19,6 @@ import { ScrollView } from './ScrollView'
 import { SearchPanel } from './SearchPanel'
 import { SessionMenu } from './SessionMenu'
 import { SettingsMenu } from './SettingsMenu'
-import { saveFile } from '../lib/saveFile'
 import { reducedMotion } from './transition'
 import { WordDisplay } from './WordDisplay'
 
@@ -37,6 +36,8 @@ interface Props {
   onReadingTime: (ms: number, words: number) => void
   /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
   onPlay?: () => void
+  /** Save the book as an EPUB for an e-reader (Aa › More settings). */
+  onDownload?: () => void
   onClose: () => void
 }
 
@@ -69,6 +70,7 @@ export function Reader({
   onBookmarks,
   onReadingTime,
   onPlay,
+  onDownload,
   onClose,
 }: Props) {
   const { words, chapters } = book
@@ -434,14 +436,6 @@ export function Reader({
   }, [playing, onPlay])
   useEffect(() => () => onProgress(current.current), [onProgress])
 
-  // The book as an EPUB, for an e-reader (built on demand, so JSZip loads only then).
-  const download = async () => {
-    const { buildEpub, epubFileName } = await import('../lib/exportEpub')
-    const name = epubFileName(book.title)
-    const file = new File([await buildEpub(book)], name, { type: 'application/epub+zip' })
-    await saveFile(file, book.title).catch(() => {})
-  }
-
   const setWpm = (next: number) => onSettings({ ...settings, wpm: Math.max(MIN_WPM, Math.min(MAX_WPM, next)) })
 
   // Keep the key handler reading the latest state without re-binding every word.
@@ -658,7 +652,7 @@ export function Reader({
             Aa
           </button>
           {panel === 'settings' && (
-            <SettingsMenu settings={settings} onSettings={onSettings} onDownload={download} closing={closing} onClose={closePanel} />
+            <SettingsMenu settings={settings} onSettings={onSettings} onDownload={onDownload} closing={closing} onClose={closePanel} />
           )}
         </div>
       </header>
