@@ -1159,3 +1159,42 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
 })
+
+test('selected text can be saved as a highlight, shown on the page and listed with bookmarks', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Save highlight' })).toHaveCount(0)
+
+  // Select "rabbit ran across", from inside the first word to inside the last.
+  await page.evaluate(`(() => {
+    const word = (w) => [...document.querySelectorAll('.page > .page-text [data-i]')].find((s) => s.textContent === w).firstChild
+    const range = document.createRange()
+    range.setStart(word('rabbit'), 2)
+    range.setEnd(word('across'), 3)
+    getSelection().removeAllRanges()
+    getSelection().addRange(range)
+  })()`)
+  await page.getByRole('button', { name: 'Save highlight' }).click()
+  await expect(page.getByRole('status')).toHaveText('Saved to bookmarks')
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveText(['rabbit', 'ran', 'across'])
+
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  const item = page.locator('.bookmark-item')
+  await expect(item).toHaveCount(1)
+  await expect(item.locator('.search-snippet')).toHaveText('rabbit ran across')
+  await expect(item).toContainText('Highlight')
+  // It's kept with the book, apart from the sentence bookmark.
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  await page.getByRole('button', { name: 'Bookmark this spot' }).click()
+  await expect(item).toHaveCount(2)
+  await page.getByRole('button', { name: 'Remove highlight' }).click()
+  await expect(item).toHaveCount(1)
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveCount(0)
+})

@@ -6,7 +6,7 @@ import { guideReading } from '../lib/guide'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
-import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
+import { addHighlight, isBookmarked, isHighlighted, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import type { Settings } from '../lib/storage'
@@ -196,8 +196,13 @@ export function Reader({
     window.getSelection()?.removeAllRanges()
     window.getSelection()?.addRange(range)
   })
+  // The words picked out by the selection, offered as a highlight to save.
+  const [picked, setPicked] = useState<{ start: number; end: number } | null>(null)
   useEffect(() => {
-    const update = () => setSelecting(hasSelection())
+    const update = () => {
+      setSelecting(hasSelection())
+      setPicked(selectedWords())
+    }
     document.addEventListener('selectionchange', update)
     return () => document.removeEventListener('selectionchange', update)
   }, [])
@@ -331,6 +336,19 @@ export function Reader({
   const idle = useIdle(playing && !panel, IDLE_MS)
   const marked = isBookmarked(bookmarks, words, index)
   const toggleMark = () => onBookmarks(toggleBookmark(bookmarks, words, index))
+  const [saved, setSaved] = useState(false)
+  const saveHighlight = () => {
+    if (!picked) return
+    onBookmarks(addHighlight(bookmarks, picked.start, picked.end))
+    window.getSelection()?.removeAllRanges()
+    setSaved(true)
+  }
+  useEffect(() => {
+    if (!saved) return
+    const timer = window.setTimeout(() => setSaved(false), SAVED_MS)
+    return () => window.clearTimeout(timer)
+  }, [saved])
+  const highlighted = useCallback((i: number) => isHighlighted(bookmarks, i), [bookmarks])
 
   const closePanel = useCallback(() => {
     window.clearTimeout(closeTimer.current)
@@ -679,6 +697,7 @@ export function Reader({
               onSelectWord={selectWord}
               onToggle={holdToRead || guided ? noop : toggle}
               guide={guided}
+              highlighted={highlighted}
               onPage={onPage}
               navRef={pageNav}
             />
@@ -711,7 +730,11 @@ export function Reader({
                     {k > 0 && headingWords.has(i) && !headingWords.has(i - 1) && <br />}
                     <span
                       data-i={i}
-                      className={[i === index && 'current', headingWords.has(i) && 'is-heading'].filter(Boolean).join(' ') || undefined}
+                      className={
+                        [i === index && 'current', headingWords.has(i) && 'is-heading', highlighted(i) && 'is-highlighted']
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
                     >
                       {w}{' '}
                     </span>
@@ -725,7 +748,29 @@ export function Reader({
       )}
 
       <footer className="reader-bottom chrome">
-        {jumpedFrom !== null && (
+        {picked && !playing ? (
+          // Saved on the press, before a tap elsewhere (or the press itself,
+          // on some phones) clears the selection; a click from the keyboard
+          // has no press.
+          <button
+            type="button"
+            className="jump-back"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              saveHighlight()
+            }}
+            onClick={(e) => e.detail === 0 && saveHighlight()}
+          >
+            <Icon name="bookmark" size={16} />
+            <span>Save highlight</span>
+          </button>
+        ) : saved ? (
+          <p className="jump-back" role="status">
+            <Icon name="bookmarkFilled" size={16} />
+            <span>Saved to bookmarks</span>
+          </p>
+        ) : null}
+        {jumpedFrom !== null && !picked && !saved && (
           <button
             type="button"
             className="jump-back"
@@ -864,7 +909,7 @@ export function Reader({
             jumpTo(i)
             closePanel()
           }}
-          onRemove={(i) => onBookmarks(bookmarks.filter((b) => b.index !== i))}
+          onRemove={(removed) => onBookmarks(bookmarks.filter((b) => b !== removed))}
           onClose={closePanel}
         />
       )}
@@ -965,6 +1010,33 @@ function Glance({ words, index, headings }: { words: string[]; index: number; he
 }
 
 const noop = () => {}
+
+/** How long "Saved to bookmarks" shows after saving a highlight. */
+const SAVED_MS = 2000
+
+/**
+ * The words the selection covers, in the paused text or on the page (not
+ * the old page sliding away), or null with none. A word counts once any of
+ * its letters are selected.
+ */
+function selectedWords(): { start: number; end: number } | null {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  let start = Infinity
+  let end = -1
+  for (const span of document.querySelectorAll<HTMLElement>('.page > .page-text [data-i], .context [data-i]')) {
+    const text = span.firstChild
+    if (!text || !range.intersectsNode(text)) continue
+    // Touching only its edge (the selection ends just before it, or starts just after) isn't selecting it.
+    if (range.endContainer === text && range.endOffset === 0) continue
+    if (range.startContainer === text && range.startOffset >= (text.textContent?.trimEnd().length ?? 0)) continue
+    const i = Number(span.dataset.i)
+    start = Math.min(start, i)
+    end = Math.max(end, i)
+  }
+  return end >= 0 ? { start, end } : null
+}
 
 /** Report reading while playing: every 30s, on pause, and when the reader closes. */
 const STATS_FLUSH_MS = 30_000

@@ -40,6 +40,8 @@ interface Props {
    * the first, it turns back). A tap on a line moves the focus there.
    */
   guide?: boolean
+  /** Whether word i is in a saved highlight, shown underlined in the focus colour. */
+  highlighted?: (i: number) => boolean
 }
 
 export interface PageNav {
@@ -93,6 +95,7 @@ export function PageView({
   onPage,
   navRef,
   guide = false,
+  highlighted = never,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
@@ -328,13 +331,17 @@ export function PageView({
           <Tag key={para[0]} className={Tag === 'h2' ? 'page-heading' : undefined}>
             {para.map((i) => (
               <Fragment key={i}>
-                <span data-i={i}>{words[i]}</span>{' '}
+                <span data-i={i} className={highlighted(i) ? 'is-highlighted' : undefined}>
+                  {words[i]}
+                </span>
+                {/* The space inside a highlight is highlighted too, so it reads as one stroke. */}
+                {highlighted(i) && highlighted(i + 1) ? <span className="is-highlighted"> </span> : ' '}
               </Fragment>
             ))}
           </Tag>
         )
       }),
-    [ends, headingStarts, page.start, last, words],
+    [ends, headingStarts, page.start, last, words, highlighted],
   )
 
   // Move the highlight and the line along with the reading. Both cover the
@@ -543,6 +550,8 @@ export function PageView({
 function chapterLimit(chapterStarts: number[], start: number, length: number): number {
   return Math.min(nextChapterStart(chapterStarts, start, length) - 1, length - 1)
 }
+
+const never = () => false
 
 function clearGhost(g: HTMLElement) {
   g.replaceChildren()
