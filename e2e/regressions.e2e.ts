@@ -580,3 +580,27 @@ for (const layout of ['pages', 'scroll'] as const) {
     await expect.poll(selected).toBe('')
   })
 }
+
+test('the share sheet gets just the file, so Save to Files saves one file (#67)', async ({ page }) => {
+  // Reported: "Why does it save two files? The epub and a text file with
+  // just the name." The share also carried a title, which an iPhone's Save
+  // to Files saves as a text file of its own. A stand-in share sheet records
+  // what it's given.
+  await page.addInitScript(`
+    window.__shared = []
+    navigator.canShare = () => true
+    navigator.share = (data) => { window.__shared.push(Object.keys(data).sort().join(',')); return Promise.resolve() }
+  `)
+  await page.goto('./')
+  await upload(page)
+  await openSettings(page)
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  await page.getByRole('button', { name: 'Download EPUB' }).click()
+  await expect.poll(() => page.evaluate('window.__shared')).toEqual(['files'])
+  // A backup too.
+  await page.keyboard.press('Escape')
+  await page.locator('.nav-button').click()
+  await page.getByRole('button', { name: /^Back up/ }).click()
+  await expect.poll(() => page.evaluate('window.__shared')).toEqual(['files', 'files'])
+})

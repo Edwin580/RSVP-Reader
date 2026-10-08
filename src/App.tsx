@@ -113,7 +113,7 @@ export default function App() {
       const original = await storage.loadOriginal(book.id)
       const name = original && meta ? meta.fileName : epubFileName(book.title)
       const data = original ?? (await buildEpub({ ...book, cover: meta?.cover }))
-      await saveFile(new File([data], name, { type: 'application/epub+zip' }), book.title)
+      await saveFile(new File([data], name, { type: 'application/epub+zip' }))
     } catch (e) {
       showToast(`Couldn’t save the EPUB. ${message(e)}`, 'error')
     }
@@ -151,7 +151,7 @@ export default function App() {
       const name = backupFileName(new Date())
       const file = new File([JSON.stringify(backup)], name, { type: 'application/json' })
       // Phones: the share sheet saves to Files or iCloud, or AirDrops to another device.
-      if (!(await saveFile(file, 'Library backup'))) return
+      if (!(await saveFile(file))) return
       const now = Date.now()
       storage.saveLastBackup(now)
       setLastBackup(now)
