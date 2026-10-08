@@ -36,6 +36,8 @@ interface Props {
   onReadingTime: (ms: number, words: number) => void
   /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
   onPlay?: () => void
+  /** Save the book as an EPUB for an e-reader (Aa › More settings). */
+  onDownload?: () => void
   onClose: () => void
 }
 
@@ -68,6 +70,7 @@ export function Reader({
   onBookmarks,
   onReadingTime,
   onPlay,
+  onDownload,
   onClose,
 }: Props) {
   const { words, chapters } = book
@@ -649,7 +652,7 @@ export function Reader({
             Aa
           </button>
           {panel === 'settings' && (
-            <SettingsMenu settings={settings} onSettings={onSettings} closing={closing} onClose={closePanel} />
+            <SettingsMenu settings={settings} onSettings={onSettings} onDownload={onDownload} closing={closing} onClose={closePanel} />
           )}
         </div>
       </header>
