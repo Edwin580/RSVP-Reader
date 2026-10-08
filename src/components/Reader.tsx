@@ -320,6 +320,10 @@ export function Reader({
         if (!target?.closest('[data-i]')) seek(pressFrom.current)
       },
     }),
+    // The guide leaves a press on the selected word alone, as Hold to read
+    // does, so the selection stays and the system's menu (Look Up) opens on
+    // it; the guide's own press skips it too (ignorePress).
+    ...(guided && { ignore: ignorePress }),
     allowMenu: selectable,
     onSwipe: (direction) => (direction === 'left' ? pageNav.current?.next() : pageNav.current?.previous()),
   })

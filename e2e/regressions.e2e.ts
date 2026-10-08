@@ -530,3 +530,53 @@ for (const layout of ['pages', 'scroll'] as const) {
     expect(await page.evaluate('String(getSelection())')).toBe('')
   })
 }
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide (${layout}): double-tap a word, then hold it, and it stays selected for Look Up (#66)`, async ({ page }, testInfo) => {
+    // Reported, after two fixes: "The sequence to look up is double tap then
+    // a slight hold after. It currently doesn't work." The double tap
+    // selected the word, but the hold cleared the selection and dragged the
+    // focus, so the system's menu never opened on it. The guide now leaves a
+    // press on the selection alone, as Hold to read does.
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', Array.from({ length: 40 }, (_, i) => `Sentence ${i} has a heron in it.`).join(' '))
+    await page.waitForFunction(`document.getAnimations().every((a) => a.playState !== 'running')`)
+    const word = page.locator('.page > .page-text [data-i]').filter({ hasText: /^heron$/ }).nth(2)
+    const box = (await word.boundingBox())!
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const phone = testInfo.project.name === 'phone'
+    const selected = () => page.evaluate('String(getSelection())')
+    const slider = page.getByRole('slider')
+
+    if (phone) {
+      await page.touchscreen.tap(at.x, at.y)
+      await page.touchscreen.tap(at.x, at.y)
+    } else await page.mouse.dblclick(at.x, at.y)
+    await expect.poll(selected).toBe('heron')
+    const there = await slider.getAttribute('aria-valuenow')
+
+    // The hold, on a touch screen (with a mouse, Look Up is a right-click,
+    // and pressing on a selection clears it, as on any page).
+    if (phone) {
+      const cdp = await page.context().newCDPSession(page)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at] })
+      await page.waitForTimeout(150)
+      expect(await selected()).toBe('heron')
+      await page.waitForTimeout(500)
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+      await page.waitForTimeout(200)
+      expect(await selected()).toBe('heron')
+      await expect(slider).toHaveAttribute('aria-valuenow', there!)
+    }
+
+    // A tap elsewhere dismisses it, and the guide carries on from there.
+    const lines = page.locator('.page > .page-text [data-i]').filter({ hasText: /^Sentence$/ })
+    const other = (await lines.nth(6).boundingBox())!
+    if (phone) await page.touchscreen.tap(other.x + 4, other.y + other.height / 2)
+    else await page.mouse.click(other.x + 4, other.y + other.height / 2)
+    await expect.poll(selected).toBe('')
+  })
+}
