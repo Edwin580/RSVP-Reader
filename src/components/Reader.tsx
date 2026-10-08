@@ -79,6 +79,10 @@ export function Reader({
   const free = mode === 'page' && settings.playControl === 'free'
   // Either way you set the pace, so nothing plays.
   const selfPaced = guided || free
+  // The guide shows the line you're on with a line under it, the rest
+  // blacked out (always at least that line), or both.
+  const guideLine = guided && settings.guideMark !== 'focus'
+  const guideFocus = settings.guideMark === 'line' ? 0 : settings.lineFocus === 'three' ? 3 : 1
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -674,7 +678,8 @@ export function Reader({
               index={index}
               scale={textScale}
               font={font}
-              focusLines={settings.lineFocus === 'three' ? 3 : 1}
+              focusLines={guideFocus}
+              line={guideLine}
               onSeek={seek}
               onSelectWord={selectWord}
               navRef={pageNav}
@@ -693,11 +698,12 @@ export function Reader({
               durationOf={(i) => plannedMs(i, index)}
               // The guide always focuses at least the line under the finger;
               // free reading has no line to focus.
-              focusLines={free ? 0 : settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' || guided ? 1 : 0}
+              focusLines={guided ? guideFocus : free ? 0 : settings.lineFocus === 'three' ? 3 : settings.lineFocus === 'one' ? 1 : 0}
               onSeek={seek}
               onSelectWord={selectWord}
               onToggle={holdToRead || guided ? noop : toggle}
               guide={guided}
+              line={guideLine}
               turnOnTap={free}
               onPage={onPage}
               navRef={pageNav}

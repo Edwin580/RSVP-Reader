@@ -173,6 +173,8 @@ export interface Settings {
   playControl: PlayControl
   /** Guide: the text as pages you turn, or one continuous column that scrolls along. */
   guideLayout: GuideLayout
+  /** Guide: how the line you're on is shown: the rest blacked out ('focus'), a line under it ('line'), or both. */
+  guideMark: GuideMark
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -181,6 +183,7 @@ export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
 export type PlayControl = 'tap' | 'hold' | 'guide' | 'free'
 export type GuideLayout = 'pages' | 'scroll'
+export type GuideMark = 'focus' | 'line' | 'both'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
@@ -189,6 +192,7 @@ export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide', 'free']
 export const GUIDE_LAYOUTS: GuideLayout[] = ['pages', 'scroll']
+export const GUIDE_MARKS: GuideMark[] = ['focus', 'line', 'both']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
 
@@ -205,6 +209,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lineFocus: 'off',
   playControl: 'tap',
   guideLayout: 'pages',
+  guideMark: 'focus',
 }
 
 /** A plain '#rrggbb' colour, the only kind the colour picker gives and the page accepts. */
@@ -231,6 +236,7 @@ export function loadSettings(): Settings {
       lineFocus: oneOf(LINE_FOCUSES, saved.lineFocus, DEFAULT_SETTINGS.lineFocus),
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
       guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
+      guideMark: oneOf(GUIDE_MARKS, saved.guideMark, DEFAULT_SETTINGS.guideMark),
     }
   } catch {
     return DEFAULT_SETTINGS

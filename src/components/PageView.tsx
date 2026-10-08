@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useGuideLine } from '../hooks/useGuideLine'
 import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
 import { draggedLine, groupLines, lineAt, lineOf, lineSpacing, type Line } from '../lib/guide'
 import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
@@ -40,6 +41,8 @@ interface Props {
    * the first, it turns back). A tap on a line moves the focus there.
    */
   guide?: boolean
+  /** Guide: a line under the line in focus, moving with it. */
+  line?: boolean
   /** Free reading: a tap turns the page, back on the left third and on everywhere else, like an e-reader. */
   turnOnTap?: boolean
 }
@@ -95,6 +98,7 @@ export function PageView({
   onPage,
   navRef,
   guide = false,
+  line = false,
   turnOnTap = false,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
@@ -102,6 +106,8 @@ export function PageView({
   const ghost = useRef<HTMLDivElement>(null)
   const marker = useRef<HTMLDivElement>(null)
   const pacer = useRef<HTMLDivElement>(null)
+  const guideLine = useRef<HTMLDivElement>(null)
+  useGuideLine(text, guideLine, index)
   const ghostTimer = useRef<number | undefined>(undefined)
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
   const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
@@ -543,6 +549,7 @@ export function PageView({
         ref={text}
       >
         {content}
+        {line && !measuring && <div className="guide-line" ref={guideLine} aria-hidden="true" />}
       </div>
     </div>
   )

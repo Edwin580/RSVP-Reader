@@ -1044,6 +1044,20 @@ h1, h2, p { margin: 0; }
 }
 .page-marker { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .page-pacer { height: 2px; background: var(--accent); }
+/* Guide › Show › Line: a line under the whole line you're on, gliding to
+   the next as the focus moves (useGuideLine places it). */
+.guide-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+  transition: transform 0.15s ease-out, width 0.15s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-line { transition: none; }
+}
 
 /* Page mode guide (Aa menu): the highlight, the line, or both. */
 .no-highlight .page-marker, .no-pacer .page-pacer { display: none; }

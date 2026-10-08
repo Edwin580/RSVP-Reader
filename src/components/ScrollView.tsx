@@ -1,4 +1,5 @@
 import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useGuideLine } from '../hooks/useGuideLine'
 import { DOUBLE_TAP_MS, hasSelection } from '../hooks/usePressGestures'
 import { draggedLine, focusRange, groupLines, lineAt, lineOf, lineSpacing, windowAround, type Line } from '../lib/guide'
 import { paragraphsBetween } from '../lib/pages'
@@ -14,7 +15,10 @@ interface Props {
   /** The reading font setting; lines are re-measured when it changes. */
   font?: string
   /** How many lines stay clear around the focused one (1 or 3); the rest black out. */
+  /** Lines kept clear around the one in focus; 0 for none blacked out. */
   focusLines: number
+  /** A line under the line in focus, moving with it. */
+  line?: boolean
   onSeek: (index: number) => void
   /** Double-tap on a word: select it, for the system's Look Up, Copy and so on. */
   onSelectWord?: (index: number) => void
@@ -46,9 +50,11 @@ const WHEEL_STEP = 40
  * the finger moves it, and only a stretch of the book around the reading
  * position is laid out, moved along as reading nears its ends.
  */
-export function ScrollView({ words, paragraphEnds, headings, index, scale, font, focusLines, onSeek, onSelectWord, navRef }: Props) {
+export function ScrollView({ words, paragraphEnds, headings, index, scale, font, focusLines, line = false, onSeek, onSelectWord, navRef }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
+  const guideLine = useRef<HTMLDivElement>(null)
+  useGuideLine(text, guideLine, index)
   const ends = useMemo(() => new Set(paragraphEnds), [paragraphEnds])
   const headingStarts = useMemo(() => new Set(headings.map((h) => h.start)), [headings])
   const [stretch, setStretch] = useState(() => windowAround(paragraphEnds, index, REACH, words.length))
@@ -158,6 +164,10 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
     const t = text.current
     const all = lines.current
     if (!t || all.length === 0) return
+    if (!focusLines) {
+      for (const s of t.querySelectorAll<HTMLElement>('[data-i]')) s.classList.remove('is-dim')
+      return
+    }
     const [first, last] = focusRange(all.length, lineOf(all, index), focusLines)
     const top = all[first].top
     const bottom = all[last].bottom
@@ -258,7 +268,7 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
 
   return (
     <div
-      className="page is-guided is-continuous has-focus"
+      className={`page is-guided is-continuous${focusLines ? ' has-focus' : ''}`}
       ref={box}
       style={{ '--page-scale': scale } as React.CSSProperties}
       onPointerDown={() => {
@@ -292,6 +302,7 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
     >
       <div className="page-text" ref={text}>
         {content}
+        {line && <div className="guide-line" ref={guideLine} aria-hidden="true" />}
       </div>
     </div>
   )

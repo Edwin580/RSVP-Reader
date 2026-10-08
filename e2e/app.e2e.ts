@@ -1197,3 +1197,45 @@ test('Free: just the page, turned with a tap on either side, Space or the arrow 
   await page.locator('.nav-button').click()
   await expect(page.locator('.stats-toggle')).toHaveText(/1 min today/)
 })
+
+for (const layout of ['pages', 'scroll'] as const) {
+  test(`Guide › Show › Line (${layout}): a line under the line you're on moves with it, with nothing blacked out`, async ({ page }) => {
+    await page.addInitScript(
+      `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: '${layout}', guideMark: 'line', v: 2 }))`,
+    )
+    await page.goto('./')
+    await upload(page, 'long.txt', LONG_STORY)
+    await settled(page)
+    const guideLine = page.locator('.page > .page-text .guide-line')
+    await expect(guideLine).toBeVisible()
+    await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+    // Under the words of the line in focus: its top at their bottom, as wide as the line.
+    const under = () =>
+      page.evaluate(`(() => {
+        const line = document.querySelector('.page > .page-text .guide-line').getBoundingClientRect()
+        const slider = document.querySelector('[role=slider]')
+        const i = slider.getAttribute('aria-valuenow')
+        const word = document.querySelector('.page > .page-text [data-i="' + i + '"]').getBoundingClientRect()
+        const onLine = [...document.querySelectorAll('.page > .page-text [data-i]')].map((s) => s.getBoundingClientRect()).filter((r) => Math.abs(r.top - word.top) < 1)
+        const left = Math.min(...onLine.map((r) => r.left))
+        const right = Math.max(...onLine.map((r) => r.right))
+        return Math.abs(line.top - (word.bottom - 2)) < 2 && Math.abs(line.left - left) < 2 && Math.abs(line.right - right) < 2
+      })()`)
+    await expect.poll(under).toBe(true)
+    const startTop = (await guideLine.boundingBox())!.y
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('ArrowDown')
+    await expect.poll(under).toBe(true)
+    await expect.poll(async () => (await guideLine.boundingBox())!.y).not.toBe(startTop)
+
+    // Both: the line, and the rest blacked out.
+    await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Both' }).click()
+    await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toBeVisible()
+    await expect(page.locator('.page-text .is-dim').first()).toBeAttached()
+    await expect(guideLine).toBeVisible()
+    // Focus: no line.
+    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Focus' }).click()
+    await expect(guideLine).toHaveCount(0)
+  })
+}

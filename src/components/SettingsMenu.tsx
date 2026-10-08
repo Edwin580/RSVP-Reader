@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, GuideLayout, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import type { Accent, GuideLayout, GuideMark, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -48,6 +48,12 @@ const PAGE_ONLY: PlayControl[] = ['guide', 'free']
 const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
   { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
   { value: 'scroll', label: 'Scroll', hint: 'One continuous column that scrolls along as you read' },
+]
+
+const MARK_OPTIONS: { value: GuideMark; label: string; hint: string }[] = [
+  { value: 'focus', label: 'Focus', hint: 'The lines around the one you’re on are blacked out' },
+  { value: 'line', label: 'Line', hint: 'A line under the one you’re on, with the whole page in view' },
+  { value: 'both', label: 'Both', hint: 'A line under the one you’re on, and the rest blacked out' },
 ]
 
 const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
@@ -162,6 +168,8 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
   const timed = playControl === 'tap' || playControl === 'hold'
   const focusOptions = playControl === 'guide' ? GUIDE_FOCUS_OPTIONS : FOCUS_OPTIONS
   const lineFocus = playControl === 'guide' && settings.lineFocus === 'off' ? 'one' : settings.lineFocus
+  // The guide's line focus only applies when it blacks out the rest.
+  const showFocus = settings.mode === 'page' && (timed || (playControl === 'guide' && settings.guideMark !== 'line'))
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const toggleMore = () => {
@@ -202,7 +210,15 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           </div>
         )}
 
-        {settings.mode === 'page' && playControl !== 'free' && (
+        {playControl === 'guide' && (
+          <div className="setting setting-stack">
+            <span className="setting-name">Show</span>
+            <Choice label="Show" options={MARK_OPTIONS} value={settings.guideMark} onChange={(guideMark) => set({ guideMark })} />
+            <span className="hint">{MARK_OPTIONS.find((m) => m.value === settings.guideMark)?.hint}</span>
+          </div>
+        )}
+
+        {showFocus && (
           <div className="setting setting-stack">
             <span className="setting-name">Line focus</span>
             <Choice label="Line focus" options={focusOptions} value={lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
