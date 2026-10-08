@@ -10,8 +10,8 @@
  * - Everything else: cache first. Built files have content hashes in their
  *   names, so a cached copy is never stale.
  */
-const VERSION = "43701f177cfd"
-const PRECACHE = ["./","./assets/covers-D6T0RbYq.js","./assets/demo-Dr8CeIcc.js","./assets/epub-TB7P9hnD.js","./assets/index-BQgnlYe8.js","./assets/index-DoLNo4W1.css","./assets/newsreader-italic-CEihAR-f.woff2","./assets/newsreader-s-izfB6B.woff2","./assets/parse.worker-DAk2S2PF.js","./assets/pdf-kNfGWrYo.js","./assets/pdf.worker.min-BmVo14Nb.mjs","./assets/search.worker-CgCEYrNq.js","./apple-touch-icon.png","./favicon.ico","./favicon.svg","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./manifest.webmanifest"]
+const VERSION = "1dfce09fae99"
+const PRECACHE = ["./","./assets/covers-D6T0RbYq.js","./assets/demo-Cq0mtC5w.js","./assets/epub-DGtcSYoT.js","./assets/index-BtJjjPni.js","./assets/index-DyzjISv-.css","./assets/newsreader-italic-CEihAR-f.woff2","./assets/newsreader-s-izfB6B.woff2","./assets/parse.worker-DAk2S2PF.js","./assets/pdf-DvjSRDwQ.js","./assets/pdf.worker.min-BmVo14Nb.mjs","./assets/search.worker-CgCEYrNq.js","./apple-touch-icon.png","./favicon.ico","./favicon.svg","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./manifest.webmanifest"]
 const PREFIX = 'rsvp-reader-'
 const CACHE = PREFIX + VERSION
 /** Give up on the network for page loads after this long and use the cached app. */
