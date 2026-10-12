@@ -122,17 +122,7 @@ export function Library({
           </p>
         )}
         <p className="brand">
-          <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
-            <rect width="32" height="32" rx="7" fill="#141414" /* ui-allow: the logo keeps its colours */ />
-            <path
-              d="M7 7.5h18M16 7.5v3M7 24.5h18M16 24.5v-3"
-              stroke="#fbfaf7" /* ui-allow: the logo keeps its colours */
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              fill="none"
-            />
-            <circle cx="16" cy="16" r="3.6" fill="#e0483a" /* ui-allow: the logo keeps its colours */ />
-          </svg>
+          <img src={`${import.meta.env.BASE_URL}favicon.svg?v=4`} width="22" height="22" alt="" />
           Chapter
         </p>
         <h1>Library</h1>
