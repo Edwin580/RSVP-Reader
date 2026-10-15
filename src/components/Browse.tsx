@@ -86,7 +86,11 @@ export function Browse({ books, wpm, onBack, onAdd, onOpen }: Props) {
 
   return (
     <main className="library browse">
-      {view.kind === 'list' && <BookList books={books} wpm={wpm} onBack={onBack} onPick={(entry) => show({ kind: 'book', entry })} />}
+      {/* Kept, hidden, while a book is open, so coming back finds the list as
+          it was: the pages shown so far, and so where it was scrolled to. */}
+      <div hidden={view.kind !== 'list'}>
+        <BookList books={books} wpm={wpm} onBack={onBack} onPick={(entry) => show({ kind: 'book', entry })} />
+      </div>
       {view.kind === 'book' && (
         <BookPage
           entry={view.entry}
