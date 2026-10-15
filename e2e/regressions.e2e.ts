@@ -580,3 +580,34 @@ for (const layout of ['pages', 'scroll'] as const) {
     await expect.poll(selected).toBe('')
   })
 }
+
+test('free books: back from a book and its preview comes back to the same place in the list (#69)', async ({ page }) => {
+  // Reported: after scrolling, tapping Show more and reading a book's
+  // preview, going back showed the list from the top. The list was dropped
+  // while a book was open, and with it the pages shown so far; now it's
+  // kept, hidden, so coming back finds it as it was.
+  await mockCatalog(page)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./')
+  await openBrowse(page)
+  const list = page.getByRole('list', { name: 'Books' })
+  // Shortest first puts the one book with a preview far down, a few pages in.
+  await page.getByRole('radio', { name: 'Shortest' }).click()
+  const book = list.getByRole('button', { name: /Pride and Prejudice/ })
+  await page.getByRole('button', { name: 'Show more' }).click()
+  await expect(list.getByRole('listitem')).toHaveCount(48)
+  await page.getByRole('button', { name: 'Show more' }).click()
+  await expect(book).toHaveCount(1)
+  const shown = await list.getByRole('listitem').count()
+  await book.scrollIntoViewIfNeeded()
+  const before = await page.evaluate<number>('window.scrollY')
+  expect(before).toBeGreaterThan(1000)
+  await book.click()
+  await page.getByRole('button', { name: 'Read a preview' }).click()
+  await expect(page.getByText(/^It is a truth universally acknowledged/)).toBeVisible()
+  await page.locator('.browse-preview .browse-back-text').click()
+  await page.getByRole('button', { name: 'Free books' }).click()
+  await expect(list.getByRole('listitem')).toHaveCount(shown)
+  expect(await page.evaluate<number>('window.scrollY')).toBe(before)
+  await expect(book).toBeInViewport()
+})
