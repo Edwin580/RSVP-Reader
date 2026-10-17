@@ -47,12 +47,12 @@ const PAGE_ONLY: PlayControl[] = ['guide', 'free']
 
 const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
   { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
-  { value: 'scroll', label: 'Scroll', hint: 'One continuous column you slide up and down; the line at the reading spot is the one you’re on' },
+  { value: 'scroll', label: 'Scroll', hint: 'One long column you slide up and down' },
 ]
 
 const MARK_OPTIONS: { value: GuideMark; label: string; hint: string }[] = [
   { value: 'focus', label: 'Focus', hint: 'The lines around the one you’re on are blacked out' },
-  { value: 'line', label: 'Line', hint: 'A line under the one you’re on, with the whole page in view' },
+  { value: 'line', label: 'Line', hint: 'A line under the one you’re on, with all the text in view' },
   { value: 'both', label: 'Both', hint: 'A line under the one you’re on, and the rest blacked out' },
   { value: 'none', label: 'None', hint: 'Nothing marked: just slide the text to scroll' },
 ]
@@ -215,6 +215,15 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
           </div>
         )}
 
+        {/* Layout first: it decides what Show offers. */}
+        {playControl === 'guide' && (
+          <div className="setting setting-stack">
+            <span className="setting-name">Layout</span>
+            <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
+            <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
+          </div>
+        )}
+
         {playControl === 'guide' && (
           <div className="setting setting-stack">
             <span className="setting-name">Show</span>
@@ -228,18 +237,12 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
             <span className="setting-name">Line focus</span>
             <Choice label="Line focus" options={focusOptions} value={lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
             <span className="hint">
-              {lineFocus === 'off'
-                ? 'Black out the lines around the one you’re reading'
-                : 'The rest of the page shows faintly when you pause'}
+              {playControl === 'guide'
+                ? 'Just the line you’re on, or the lines either side of it too'
+                : lineFocus === 'off'
+                  ? 'Black out the lines around the one you’re reading'
+                  : 'The rest of the page shows faintly when you pause'}
             </span>
-          </div>
-        )}
-
-        {playControl === 'guide' && (
-          <div className="setting setting-stack">
-            <span className="setting-name">Layout</span>
-            <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
-            <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
           </div>
         )}
 
