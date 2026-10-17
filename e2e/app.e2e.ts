@@ -1154,10 +1154,18 @@ test('Guide, continuous: the text slides with the finger, up and down, and a fli
   await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(lines[k + 1].start))
   expect(await page.evaluate('String(window.getSelection())')).toBe('')
 
-  // A flick up carries on after letting go, slowing to a stop.
-  const flick = await press(page, phone, x, start)
-  await flick.move(start - spacing * 4)
-  await flick.up()
+  // A flick up carries on after letting go, slowing to a stop. Sent from the
+  // page itself, so a slow test machine can't spread the moves out into a drag.
+  await page.evaluate(`(async () => {
+    const x = ${x}, y = ${start}, d = ${spacing * 4}
+    const at = (type, to) => new PointerEvent(type, { bubbles: true, pointerId: 7, isPrimary: true, pointerType: 'touch', button: 0, clientX: x, clientY: to })
+    document.elementFromPoint(x, y).dispatchEvent(at('pointerdown', y))
+    for (let k = 1; k <= 6; k++) {
+      await new Promise((done) => setTimeout(done, 10))
+      window.dispatchEvent(at('pointermove', y - (d * k) / 6))
+    }
+    window.dispatchEvent(at('pointerup', y - d))
+  })()`)
   const released = await topOf(below.start)
   await expect.poll(() => topOf(below.start)).toBeLessThan(released - spacing)
   const still = `new Promise((done) => { const t = () => document.querySelector('.page > .page-text').style.transform; const a = t(); setTimeout(() => done(t() === a), 300) })`
