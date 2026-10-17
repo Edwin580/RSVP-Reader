@@ -173,7 +173,7 @@ export interface Settings {
   playControl: PlayControl
   /** Guide: the text as pages you turn, or one continuous column that scrolls along. */
   guideLayout: GuideLayout
-  /** Guide: how the line you're on is shown: the rest blacked out ('focus'), a line under it ('line'), or both. */
+  /** Guide: how the line you're on is shown: the rest blacked out ('focus'), a line under it ('line'), both, or (scrolling only) not at all. */
   guideMark: GuideMark
 }
 
@@ -183,7 +183,7 @@ export type ReadingFont = 'sans' | 'serif'
 export type Accent = 'red' | 'blue' | 'green' | 'purple' | 'custom'
 export type PlayControl = 'tap' | 'hold' | 'guide' | 'free'
 export type GuideLayout = 'pages' | 'scroll'
-export type GuideMark = 'focus' | 'line' | 'both'
+export type GuideMark = 'focus' | 'line' | 'both' | 'none'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
 
@@ -192,7 +192,7 @@ export const FONTS: ReadingFont[] = ['serif', 'sans']
 export const ACCENTS: Accent[] = ['red', 'blue', 'green', 'purple', 'custom']
 export const PLAY_CONTROLS: PlayControl[] = ['tap', 'hold', 'guide', 'free']
 export const GUIDE_LAYOUTS: GuideLayout[] = ['pages', 'scroll']
-export const GUIDE_MARKS: GuideMark[] = ['focus', 'line', 'both']
+export const GUIDE_MARKS: GuideMark[] = ['focus', 'line', 'both', 'none']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
 
@@ -211,6 +211,10 @@ export const DEFAULT_SETTINGS: Settings = {
   guideLayout: 'pages',
   guideMark: 'focus',
 }
+
+/** The guide's mark as shown: nothing marked only scrolls (on a page you'd lose your place), so pages show the focus instead. */
+export const effectiveGuideMark = (s: Settings): GuideMark =>
+  s.guideMark === 'none' && s.guideLayout !== 'scroll' ? 'focus' : s.guideMark
 
 /** A plain '#rrggbb' colour, the only kind the colour picker gives and the page accepts. */
 export const isHexColor = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)

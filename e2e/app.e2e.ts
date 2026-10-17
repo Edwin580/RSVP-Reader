@@ -1108,39 +1108,111 @@ test('Guide: a tap moves the focus to a line; dragging from anywhere moves it li
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
 })
 
-test('Guide, continuous: dragging from anywhere moves the focus, and the text scrolls along to keep it in view', async ({ page }, testInfo) => {
+test('Guide, continuous: the text slides with the finger, up and down, and a flick carries on; the line at the reading spot is in focus', async ({ page }, testInfo) => {
   const phone = testInfo.project.name === 'phone'
   await guideSettings(page, 'scroll')
   await page.goto('./')
   await upload(page, 'long.txt', LONG_STORY)
   await settled(page)
   const view = (await page.locator('.page').boundingBox())!
+  const spot = view.y + view.height * 0.3
   const x = view.x + 60
   const lines = await visibleLines(page)
   const spacing = spacingOf(lines)
-  const middle = lines.filter((l) => l.middle > view.y + view.height * 0.3 && l.middle < view.y + view.height * 0.6)
-  expect(middle.length).toBeGreaterThan(2)
+  const topOf = (i: number) => page.evaluate(`document.querySelector('.page > .page-text [data-i="${i}"]').getBoundingClientRect().top`) as Promise<number>
+  // It opens with the first line at the reading spot, in focus.
+  expect(await focusedStart(page)).toBe(0)
+  expect(Math.abs((await topOf(0)) - spot)).toBeLessThan(2)
 
-  // A tap on a line: the focus goes there.
-  const tap = await press(page, phone, x, middle[0].middle)
+  // A tap on a line: the focus goes there, and it glides to the reading spot.
+  const below = lines.filter((l) => l.middle > spot + spacing * 2)[0]
+  const tap = await press(page, phone, x, below.middle)
   await tap.up()
-  await expect.poll(() => focusedStart(page)).toBe(middle[0].start)
-
-  // Held anywhere and dragged, it moves on a line per line's height.
-  const finger = await press(page, phone, x, view.y + 20)
-  await finger.move(view.y + 20 + spacing * 2)
-  await expect.poll(() => focusedStart(page)).toBe(middle[2].start)
-  // Dragged a long way on, well past what was on screen: the text scrolls
-  // along and the focused line stays in view.
-  await finger.move(view.y + view.height - 10)
-  await finger.up()
-  await expect.poll(() => focusedStart(page)).toBeGreaterThan(lines[lines.length - 1].start)
+  await expect.poll(() => focusedStart(page)).toBe(below.start)
   await settled(page)
-  const top = (await page.locator('.page > .page-text [data-i]:not(.is-dim)').first().boundingBox())!.y
-  expect(top).toBeGreaterThan(view.y)
-  expect(top - view.y).toBeLessThan(view.height * 0.7)
-  // The place is kept.
+  await expect.poll(async () => Math.abs((await topOf(below.start)) - spot)).toBeLessThan(2)
+
+  // Held anywhere and dragged up, the text moves with the finger exactly,
+  // and the focus is whichever line is at the reading spot.
+  const from = await topOf(below.start)
+  const start = view.y + view.height - 40
+  const finger = await press(page, phone, x, start)
+  await finger.move(start - spacing * 3)
+  const moved = async () => (await topOf(below.start)) - from
+  await expect.poll(async () => Math.abs((await moved()) + spacing * 3)).toBeLessThan(1.5)
+  const k = lines.findIndex((l) => l.start === below.start)
+  await expect.poll(() => focusedStart(page)).toBe(lines[k + 3].start)
+  // And back down, as smoothly.
+  await finger.move(start - spacing)
+  await expect.poll(async () => Math.abs((await moved()) + spacing)).toBeLessThan(1.5)
+  await expect.poll(() => focusedStart(page)).toBe(lines[k + 1].start)
+  // Let go after holding still: it stays, and the place is kept.
+  await page.waitForTimeout(200)
+  await finger.up()
+  await settled(page)
+  expect(Math.abs((await moved()) + spacing)).toBeLessThan(1.5)
+  await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(lines[k + 1].start))
+  expect(await page.evaluate('String(window.getSelection())')).toBe('')
+
+  // A flick up carries on after letting go, slowing to a stop. Sent from the
+  // page itself, so a slow test machine can't spread the moves out into a drag.
+  await page.evaluate(`(async () => {
+    const x = ${x}, y = ${start}, d = ${spacing * 4}
+    const at = (type, to) => new PointerEvent(type, { bubbles: true, pointerId: 7, isPrimary: true, pointerType: 'touch', button: 0, clientX: x, clientY: to })
+    document.elementFromPoint(x, y).dispatchEvent(at('pointerdown', y))
+    for (let k = 1; k <= 6; k++) {
+      await new Promise((done) => setTimeout(done, 10))
+      window.dispatchEvent(at('pointermove', y - (d * k) / 6))
+    }
+    window.dispatchEvent(at('pointerup', y - d))
+  })()`)
+  const released = await topOf(below.start)
+  await expect.poll(() => topOf(below.start)).toBeLessThan(released - spacing)
+  const still = `new Promise((done) => { const t = () => document.querySelector('.page > .page-text').style.transform; const a = t(); setTimeout(() => done(t() === a), 300) })`
+  await expect.poll(() => page.evaluate(still), { timeout: 10_000 }).toBe(true)
   await expect(page.getByRole('slider')).toHaveAttribute('aria-valuenow', String(await focusedStart(page)))
+  expect(await focusedStart(page)).toBeGreaterThan(lines[k + 5].start)
+
+  // A mouse wheel or trackpad scrolls it smoothly too, by as much as it turns.
+  if (!phone) {
+    const now = await topOf(below.start)
+    await page.mouse.move(x, view.y + view.height / 2)
+    await page.mouse.wheel(0, -50)
+    await expect.poll(async () => Math.abs((await topOf(below.start)) - now - 50)).toBeLessThan(1.5)
+  }
+})
+
+test('Guide, continuous › Show › None: nothing marked, just slide the text to scroll', async ({ page }, testInfo) => {
+  const phone = testInfo.project.name === 'phone'
+  await page.addInitScript(
+    `localStorage.setItem('rsvp-settings', JSON.stringify({ mode: 'page', playControl: 'guide', guideLayout: 'scroll', guideMark: 'none', v: 2 }))`,
+  )
+  await page.goto('./')
+  await upload(page, 'long.txt', LONG_STORY)
+  await settled(page)
+  await expect(page.locator('.page-text .guide-line')).toHaveCount(0)
+  await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+  const view = (await page.locator('.page').boundingBox())!
+  const slider = page.getByRole('slider')
+  // A tap does nothing; a slide scrolls, and the place moves on with it.
+  const tap = await press(page, phone, view.x + 60, view.y + view.height * 0.6)
+  await tap.up()
+  await expect(slider).toHaveAttribute('aria-valuenow', '0')
+  const finger = await press(page, phone, view.x + 60, view.y + view.height - 40)
+  await finger.move(view.y + view.height / 2)
+  await page.waitForTimeout(200)
+  await finger.up()
+  await expect.poll(async () => Number(await slider.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
+
+  // Offered for scrolling only: on pages, the guide shows the focus.
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const show = page.getByRole('radiogroup', { name: 'Show' })
+  await expect(show.getByRole('radio', { name: 'None' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toHaveCount(0)
+  await page.getByRole('radio', { name: 'Pages' }).click()
+  await expect(show.getByRole('radio', { name: 'None' })).toHaveCount(0)
+  await expect(show.getByRole('radio', { name: 'Focus' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.page-text .is-dim').first()).toBeAttached()
 })
 
 test('Guide is offered in page mode, with a choice of pages or continuous scroll', async ({ page }) => {
@@ -1222,11 +1294,12 @@ for (const layout of ['pages', 'scroll'] as const) {
         return Math.abs(line.top - (word.bottom - 2)) < 2 && Math.abs(line.left - left) < 2 && Math.abs(line.right - right) < 2
       })()`)
     await expect.poll(under).toBe(true)
-    const startTop = (await guideLine.boundingBox())!.y
+    // Scrolling, the text moves up under it instead, so it moves within the text.
+    const startAt = await guideLine.evaluate((el) => el.style.transform)
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('ArrowDown')
     await expect.poll(under).toBe(true)
-    await expect.poll(async () => (await guideLine.boundingBox())!.y).not.toBe(startTop)
+    await expect.poll(() => guideLine.evaluate((el) => el.style.transform)).not.toBe(startAt)
 
     // Both: the line, and the rest blacked out.
     await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
