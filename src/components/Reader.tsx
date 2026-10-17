@@ -9,7 +9,7 @@ import type { BookAnalysis } from '../lib/analysis'
 import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
-import type { Settings } from '../lib/storage'
+import { effectiveGuideMark, type Settings } from '../lib/storage'
 import type { Book, Bookmark } from '../lib/types'
 import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
@@ -80,9 +80,11 @@ export function Reader({
   // Either way you set the pace, so nothing plays.
   const selfPaced = guided || free
   // The guide shows the line you're on with a line under it, the rest
-  // blacked out (always at least that line), or both.
-  const guideLine = guided && settings.guideMark !== 'focus'
-  const guideFocus = settings.guideMark === 'line' ? 0 : settings.lineFocus === 'three' ? 3 : 1
+  // blacked out (always at least that line), or both; scrolling, it can show
+  // nothing at all.
+  const guideMark = effectiveGuideMark(settings)
+  const guideLine = guided && (guideMark === 'line' || guideMark === 'both')
+  const guideFocus = guideMark === 'line' || guideMark === 'none' ? 0 : settings.lineFocus === 'three' ? 3 : 1
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.

@@ -518,13 +518,15 @@ for (const layout of ['pages', 'scroll'] as const) {
     await page.waitForTimeout(800)
     await page.mouse.up()
     await expect.poll(() => page.evaluate('String(getSelection())')).toBe('heron')
-    // ...and dragging moves the focus without selecting text.
+    // ...and dragging moves the focus without selecting text (on pages a
+    // drag down reads on; scrolling, the text slides up to read on).
     await page.evaluate('getSelection().removeAllRanges()')
     const slider = page.getByRole('slider')
     const before = await slider.getAttribute('aria-valuenow')
-    await page.mouse.move(at.x, at.y - 60)
+    const dy = layout === 'pages' ? 60 : -60
+    await page.mouse.move(at.x, at.y - dy)
     await page.mouse.down()
-    await page.mouse.move(at.x, at.y + 60, { steps: 6 })
+    await page.mouse.move(at.x, at.y + dy, { steps: 6 })
     await page.mouse.up()
     await expect(slider).not.toHaveAttribute('aria-valuenow', before!)
     expect(await page.evaluate('String(getSelection())')).toBe('')

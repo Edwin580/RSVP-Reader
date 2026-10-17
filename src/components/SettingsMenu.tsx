@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import type { Accent, GuideLayout, GuideMark, LineFocus, PageGuide, PlayControl, ReadingFont, ReadingMode, Settings, Theme } from '../lib/storage'
+import { effectiveGuideMark, type Accent, type GuideLayout, type GuideMark, type LineFocus, type PageGuide, type PlayControl, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -33,7 +33,7 @@ const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
   {
     value: 'guide',
     label: 'Guide',
-    hint: 'Your own pace: hold anywhere and drag to move the focus line by line, or tap a line',
+    hint: 'Your own pace: hold anywhere and drag to move through the text, or tap a line',
   },
   {
     value: 'free',
@@ -47,14 +47,17 @@ const PAGE_ONLY: PlayControl[] = ['guide', 'free']
 
 const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
   { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
-  { value: 'scroll', label: 'Scroll', hint: 'One continuous column that scrolls along as you read' },
+  { value: 'scroll', label: 'Scroll', hint: 'One continuous column you slide up and down; the line at the reading spot is the one you’re on' },
 ]
 
 const MARK_OPTIONS: { value: GuideMark; label: string; hint: string }[] = [
   { value: 'focus', label: 'Focus', hint: 'The lines around the one you’re on are blacked out' },
   { value: 'line', label: 'Line', hint: 'A line under the one you’re on, with the whole page in view' },
   { value: 'both', label: 'Both', hint: 'A line under the one you’re on, and the rest blacked out' },
+  { value: 'none', label: 'None', hint: 'Nothing marked: just slide the text to scroll' },
 ]
+/** Nothing marked is for scrolling only (see effectiveGuideMark). */
+const PAGE_MARK_OPTIONS = MARK_OPTIONS.filter((m) => m.value !== 'none')
 
 const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
   { value: 'highlight', label: 'Highlight' },
@@ -169,7 +172,9 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
   const focusOptions = playControl === 'guide' ? GUIDE_FOCUS_OPTIONS : FOCUS_OPTIONS
   const lineFocus = playControl === 'guide' && settings.lineFocus === 'off' ? 'one' : settings.lineFocus
   // The guide's line focus only applies when it blacks out the rest.
-  const showFocus = settings.mode === 'page' && (timed || (playControl === 'guide' && settings.guideMark !== 'line'))
+  const guideMark = effectiveGuideMark(settings)
+  const markOptions = settings.guideLayout === 'scroll' ? MARK_OPTIONS : PAGE_MARK_OPTIONS
+  const showFocus = settings.mode === 'page' && (timed || (playControl === 'guide' && (guideMark === 'focus' || guideMark === 'both')))
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const toggleMore = () => {
@@ -213,8 +218,8 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
         {playControl === 'guide' && (
           <div className="setting setting-stack">
             <span className="setting-name">Show</span>
-            <Choice label="Show" options={MARK_OPTIONS} value={settings.guideMark} onChange={(guideMark) => set({ guideMark })} />
-            <span className="hint">{MARK_OPTIONS.find((m) => m.value === settings.guideMark)?.hint}</span>
+            <Choice label="Show" options={markOptions} value={guideMark} onChange={(guideMark) => set({ guideMark })} />
+            <span className="hint">{markOptions.find((m) => m.value === guideMark)?.hint}</span>
           </div>
         )}
 
