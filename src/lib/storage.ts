@@ -15,6 +15,8 @@ const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
 const progressKey = (id: string) => `progress:${id}`
 const bookmarksKey = (id: string) => `bookmarks:${id}`
+/** The file a book was added from (EPUBs only), for downloading it to an e-reader. */
+const originalKey = (id: string) => `original:${id}`
 
 export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
@@ -58,6 +60,15 @@ export async function deleteBook(id: string): Promise<void> {
   await del(bookKey(id), store)
   await del(progressKey(id), store)
   await del(bookmarksKey(id), store)
+  await del(originalKey(id), store)
+}
+
+export function saveOriginal(id: string, data: ArrayBuffer): Promise<void> {
+  return set(originalKey(id), data, store)
+}
+
+export function loadOriginal(id: string): Promise<ArrayBuffer | undefined> {
+  return get<ArrayBuffer>(originalKey(id), store)
 }
 
 export function loadProgress(id: string): Promise<Progress | undefined> {
@@ -77,9 +88,10 @@ export function saveBookmarks(id: string, bookmarks: Bookmark[]): Promise<void> 
 }
 
 /** Every stored entry, for backups. */
+/** Everything a backup holds: all but the original files, which a JSON backup can't carry (and which can be added again). */
 export async function allEntries(): Promise<[string, unknown][]> {
   const all = await entries<IDBValidKey, unknown>(store)
-  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string')
+  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string' && !e[0].startsWith('original:'))
 }
 
 export function writeEntries(writes: [string, unknown][]): Promise<void> {
