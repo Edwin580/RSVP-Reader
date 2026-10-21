@@ -1127,13 +1127,17 @@ test('Guide: a tap moves the focus to a line; dragging from anywhere moves it li
   expect(k).toBeGreaterThanOrEqual(0)
   expect(k).toBeLessThan(3)
 
-  // The next line button and the keys move a line at a time.
+  // The line buttons and the keys move a line at a time; the word and
+  // sentence steps (which mostly leave the focus where it was) aren't offered.
+  await expect(page.getByRole('button', { name: /one word|sentence/ })).toHaveCount(0)
   await page.getByRole('button', { name: 'Next line' }).click()
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
   await page.keyboard.press('ArrowDown')
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 2].start)
   await page.keyboard.press('ArrowUp')
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
+  await page.getByRole('button', { name: 'Previous line' }).click()
+  await expect.poll(() => focusedStart(page)).toBe(turned[k].start)
 })
 
 test('Guide, continuous: the text slides with the finger, up and down, and a flick carries on; the line at the reading spot is in focus', async ({ page }, testInfo) => {

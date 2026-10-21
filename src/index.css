@@ -974,6 +974,9 @@ h1, h2, p { margin: 0; }
   .popover.opens-up { top: auto; bottom: calc(100% + 0.6rem); left: 0; right: auto; width: 22rem; }
 }
 .transport { display: flex; align-items: center; gap: 0.25rem; }
+/* Just back and on (free reading, the guide): an empty slot the size of the
+   back button balances it, so the big button stays where play usually is. */
+.transport.is-pair::after { content: ''; width: 44px; }
 .play-button {
   display: grid;
   place-items: center;

@@ -830,12 +830,23 @@ export function Reader({
 
           {free ? (
             // Free reading has no timer or words to step through: just the pages.
-            <div className="transport">
+            <div className="transport is-pair">
               <button type="button" className="icon-button" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
                 <Icon name="back" />
               </button>
               <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Next page" title="Next page (→ or Space)">
                 <Icon name="forward" size={24} />
+              </button>
+            </div>
+          ) : guided ? (
+            // The guide moves a line at a time, so a word or sentence step
+            // mostly leaves the focus where it was: just the lines.
+            <div className="transport is-pair">
+              <button type="button" className="icon-button" title="Previous line (↑)" aria-label="Previous line" onClick={() => pageNav.current?.previousLine?.()}>
+                <Icon name="chevronUp" />
+              </button>
+              <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
+                <Icon name="chevronDown" size={24} />
               </button>
             </div>
           ) : (
@@ -846,12 +857,7 @@ export function Reader({
               <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
                 <Icon name="back" />
               </button>
-              {guided ? (
-                // The guide has no timer: the main button moves the focus on a line.
-                <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
-                  <Icon name="chevronDown" size={24} />
-                </button>
-              ) : holdToRead ? (
+              {holdToRead ? (
                 // Hold to read: no play button until you hold. A wide pad to rest
                 // a thumb on, labelled in words (an icon alone is ambiguous), that
                 // fills the moment it's pressed; then the controls fade away.
