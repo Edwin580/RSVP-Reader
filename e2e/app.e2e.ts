@@ -682,6 +682,34 @@ test('old settings with both page guides off come back with both on', async ({ p
   await expect(page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
 })
 
+test('the progress bar can be a thin line at the bottom instead of the slider', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await expect(page.getByRole('slider', { name: 'Position in book' })).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('radio', { name: 'Thin', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+
+  await expect(page.getByRole('slider', { name: 'Position in book' })).toHaveCount(0)
+  const line = page.getByRole('progressbar', { name: 'Position in book' })
+  await expect(line).toBeVisible()
+  // Small, and below the controls.
+  const box = (await line.boundingBox())!
+  const controls = (await page.locator('.reader-bottom').boundingBox())!
+  expect(box.height).toBeLessThan(5)
+  expect(box.y).toBeGreaterThanOrEqual(controls.y + controls.height - 1)
+  // It follows the reading position, and the choice is remembered.
+  await expect(line).toHaveAttribute('aria-valuenow', '0')
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight')
+  await expect(line).not.toHaveAttribute('aria-valuenow', '0')
+  await page.locator('.nav-button').click()
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(page.getByRole('progressbar', { name: 'Position in book' })).toBeVisible()
+})
+
 test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
   test.setTimeout(40_000)
   await page.goto('./')

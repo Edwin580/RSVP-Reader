@@ -772,7 +772,9 @@ export function Reader({
             <span>Back to {describePosition(jumpedFrom)}</span>
           </button>
         )}
-        <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
+        {settings.progressBar === 'slider' && (
+          <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
+        )}
 
         <div className="deck">
           <div className="deck-meta-wrap">
@@ -896,6 +898,21 @@ export function Reader({
           </div>
         </div>
       </footer>
+
+      {/* Outside the controls, so it stays while they fade: small enough to read by. */}
+      {settings.progressBar === 'thin' && (
+        <div
+          className="progress-line"
+          role="progressbar"
+          aria-label="Position in book"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          aria-valuetext={describePosition(index)}
+        >
+          <div className="progress-line-fill" style={{ width: `${percent}%` }} />
+        </div>
+      )}
 
 
       {panel === 'bookmarks' && (

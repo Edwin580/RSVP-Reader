@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import { effectiveGuideMark, type Accent, type GuideLayout, type GuideMark, type LineFocus, type PageGuide, type PlayControl, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
+import { effectiveGuideMark, type Accent, type GuideLayout, type GuideMark, type LineFocus, type PageGuide, type PlayControl, type ProgressBar, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -92,6 +92,11 @@ const ACCENT_OPTIONS: { value: Accent; label: string; color: string }[] = [
   { value: 'blue', label: 'Blue', color: '#1f4fb4' }, // ui-allow: a swatch shows its colour
   { value: 'green', label: 'Green', color: '#1d6b43' }, // ui-allow: a swatch shows its colour
   { value: 'purple', label: 'Purple', color: '#6a3fb0' }, // ui-allow: a swatch shows its colour
+]
+
+const PROGRESS_OPTIONS: { value: ProgressBar; label: string; hint: string }[] = [
+  { value: 'slider', label: 'Slider', hint: 'A bar you can drag to move through the book' },
+  { value: 'thin', label: 'Thin', hint: 'A thin line along the bottom that just shows how far you are' },
 ]
 
 const SHORTCUTS: [string, string][] = [
@@ -275,6 +280,12 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
               <span className="setting-name">Word timing</span>
               <Choice label="Word timing" options={TIMINGS} value={settings.wordTiming} onChange={(wordTiming) => set({ wordTiming })} />
               <span className="hint">{TIMINGS.find((t) => t.value === settings.wordTiming)?.hint}</span>
+            </div>
+
+            <div className="setting setting-stack">
+              <span className="setting-name">Progress bar</span>
+              <Choice label="Progress bar" options={PROGRESS_OPTIONS} value={settings.progressBar} onChange={(progressBar) => set({ progressBar })} />
+              <span className="hint">{PROGRESS_OPTIONS.find((p) => p.value === settings.progressBar)?.hint}</span>
             </div>
 
             <div className="setting">

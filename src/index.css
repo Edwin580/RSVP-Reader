@@ -803,6 +803,18 @@ h1, h2, p { margin: 0; }
 
 .reader-bottom { width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
 
+/* The thin progress bar (Aa › More settings): a line under the controls that only shows how far you are. */
+.progress-line {
+  width: calc(100% - 2rem);
+  max-width: 46rem;
+  height: 3px;
+  margin: 0 auto 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--separator);
+  overflow: hidden;
+}
+.progress-line-fill { height: 100%; background: var(--text-2); }
+
 .scrubber {
   position: relative;
   height: 32px;
