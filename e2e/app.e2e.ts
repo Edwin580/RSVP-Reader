@@ -1236,6 +1236,20 @@ test('Guide, continuous › Show › None: nothing marked, just slide the text t
   await finger.up()
   await expect.poll(async () => Number(await slider.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
 
+  // With no line to step, the buttons and Space move about a screenful (#71).
+  await expect(page.getByRole('button', { name: /line|word|sentence/ })).toHaveCount(0)
+  const at = async () => Number(await slider.getAttribute('aria-valuenow'))
+  await settled(page)
+  const before = await at()
+  await page.getByRole('button', { name: 'Scroll down' }).click()
+  await expect.poll(at).toBeGreaterThan(before + 30)
+  await settled(page)
+  await page.getByRole('button', { name: 'Scroll up' }).click()
+  await expect.poll(at).toBeLessThan(before + 15)
+  await settled(page)
+  await page.keyboard.press(' ')
+  await expect.poll(at).toBeGreaterThan(before + 30)
+
   // Offered for scrolling only: on pages, the guide shows the focus.
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   const show = page.getByRole('radiogroup', { name: 'Show' })

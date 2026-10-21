@@ -85,6 +85,9 @@ export function Reader({
   const guideMark = effectiveGuideMark(settings)
   const guideLine = guided && (guideMark === 'line' || guideMark === 'both')
   const guideFocus = guideMark === 'line' || guideMark === 'none' ? 0 : settings.lineFocus === 'three' ? 3 : 1
+  // Scrolling with nothing marked: there's no line to step, so the buttons
+  // and Space move the text about a screenful, as a browser does.
+  const scrollOnly = guided && guideMark === 'none'
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -452,8 +455,8 @@ export function Reader({
       case ' ':
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
-        if (guided) pageNav.current?.nextLine?.()
-        else if (free) pageNav.current?.next()
+        if (free || scrollOnly) pageNav.current?.next()
+        else if (guided) pageNav.current?.nextLine?.()
         else if (!holdToRead) toggle()
         else if (!e.repeat) startHold()
         break
@@ -836,6 +839,15 @@ export function Reader({
               </button>
               <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Next page" title="Next page (→ or Space)">
                 <Icon name="forward" size={24} />
+              </button>
+            </div>
+          ) : scrollOnly ? (
+            <div className="transport is-pair">
+              <button type="button" className="icon-button" title="Scroll up (PgUp)" aria-label="Scroll up" onClick={() => pageNav.current?.previous()}>
+                <Icon name="chevronUp" />
+              </button>
+              <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Scroll down" title="Scroll down (Space or PgDn)">
+                <Icon name="chevronDown" size={24} />
               </button>
             </div>
           ) : guided ? (
