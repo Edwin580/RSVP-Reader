@@ -710,6 +710,42 @@ test('the progress bar can be a thin line at the bottom instead of the slider', 
   await expect(page.getByRole('progressbar', { name: 'Position in book' })).toBeVisible()
 })
 
+test('the slider\'s handle stays within the bar at the start and the end (#71)', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await settled(page)
+  const slider = page.getByRole('slider', { name: 'Position in book' })
+  const inside = async () => {
+    const bar = (await page.locator('.scrubber-track').boundingBox())!
+    const handle = (await page.locator('.scrubber-thumb').boundingBox())!
+    return handle.x >= bar.x - 0.5 && handle.x + handle.width <= bar.x + bar.width + 0.5
+  }
+  expect(await inside()).toBe(true)
+  // A click at the very end (a mouse can click anywhere) goes to the last word.
+  const bar = (await slider.boundingBox())!
+  await page.mouse.click(bar.x + bar.width - 1, bar.y + bar.height / 2)
+  await expect(slider).toHaveAttribute('aria-valuenow', (await slider.getAttribute('aria-valuemax'))!)
+  expect(await inside()).toBe(true)
+})
+
+test('Guide shows its step buttons on pages only; scrolling, you slide the text (#71)', async ({ page }) => {
+  await guideSettings(page, 'scroll')
+  await page.goto('./')
+  await upload(page)
+  await expect(page.locator('.transport')).toHaveCount(0)
+  await expect(page.locator('.session-open')).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Pages' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Previous line' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next line' })).toBeVisible()
+  // The pair is the same size, side by side.
+  const back = (await page.getByRole('button', { name: 'Previous line' }).boundingBox())!
+  const on = (await page.getByRole('button', { name: 'Next line' }).boundingBox())!
+  expect(back.width).toBe(on.width)
+  expect(back.height).toBe(on.height)
+})
+
 test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
   test.setTimeout(40_000)
   await page.goto('./')
@@ -1236,17 +1272,12 @@ test('Guide, continuous › Show › None: nothing marked, just slide the text t
   await finger.up()
   await expect.poll(async () => Number(await slider.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
 
-  // With no line to step, the buttons and Space move about a screenful (#71).
-  await expect(page.getByRole('button', { name: /line|word|sentence/ })).toHaveCount(0)
+  // Scrolling has no step buttons: you slide the text. With no line to step,
+  // Space moves it about a screenful, as in a browser (#71).
+  await expect(page.locator('.transport')).toHaveCount(0)
   const at = async () => Number(await slider.getAttribute('aria-valuenow'))
   await settled(page)
   const before = await at()
-  await page.getByRole('button', { name: 'Scroll down' }).click()
-  await expect.poll(at).toBeGreaterThan(before + 30)
-  await settled(page)
-  await page.getByRole('button', { name: 'Scroll up' }).click()
-  await expect.poll(at).toBeLessThan(before + 15)
-  await settled(page)
   await page.keyboard.press(' ')
   await expect.poll(at).toBeGreaterThan(before + 30)
 

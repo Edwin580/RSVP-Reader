@@ -85,8 +85,10 @@ export function Reader({
   const guideMark = effectiveGuideMark(settings)
   const guideLine = guided && (guideMark === 'line' || guideMark === 'both')
   const guideFocus = guideMark === 'line' || guideMark === 'none' ? 0 : settings.lineFocus === 'three' ? 3 : 1
-  // Scrolling with nothing marked: there's no line to step, so the buttons
-  // and Space move the text about a screenful, as a browser does.
+  // The guide's continuous scroll: you slide the text yourself, so there are
+  // no buttons to step it. With nothing marked there's no line to step either,
+  // so Space moves the text about a screenful, as a browser does.
+  const scrolling = guided && settings.guideLayout === 'scroll'
   const scrollOnly = guided && guideMark === 'none'
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
@@ -779,7 +781,7 @@ export function Reader({
           <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
         )}
 
-        <div className="deck">
+        <div className={`deck${selfPaced ? ' is-self-paced' : ''}`}>
           <div className="deck-meta-wrap">
             {session ? (
               <div className="deck-meta session-active">
@@ -831,31 +833,22 @@ export function Reader({
             )}
           </div>
 
-          {free ? (
+          {scrolling ? null : free ? (
             // Free reading has no timer or words to step through: just the pages.
             <div className="transport is-pair">
-              <button type="button" className="icon-button" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
-                <Icon name="back" />
+              <button type="button" className="play-button is-outline" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
+                <Icon name="back" size={24} />
               </button>
               <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Next page" title="Next page (→ or Space)">
                 <Icon name="forward" size={24} />
-              </button>
-            </div>
-          ) : scrollOnly ? (
-            <div className="transport is-pair">
-              <button type="button" className="icon-button" title="Scroll up (PgUp)" aria-label="Scroll up" onClick={() => pageNav.current?.previous()}>
-                <Icon name="chevronUp" />
-              </button>
-              <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Scroll down" title="Scroll down (Space or PgDn)">
-                <Icon name="chevronDown" size={24} />
               </button>
             </div>
           ) : guided ? (
             // The guide moves a line at a time, so a word or sentence step
             // mostly leaves the focus where it was: just the lines.
             <div className="transport is-pair">
-              <button type="button" className="icon-button" title="Previous line (↑)" aria-label="Previous line" onClick={() => pageNav.current?.previousLine?.()}>
-                <Icon name="chevronUp" />
+              <button type="button" className="play-button is-outline" title="Previous line (↑)" aria-label="Previous line" onClick={() => pageNav.current?.previousLine?.()}>
+                <Icon name="chevronUp" size={24} />
               </button>
               <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
                 <Icon name="chevronDown" size={24} />

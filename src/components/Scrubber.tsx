@@ -24,6 +24,7 @@ interface Gesture {
  */
 export function Scrubber({ value, max, onSeek, describe }: Props) {
   const bar = useRef<HTMLDivElement>(null)
+  const thumb = useRef<HTMLDivElement>(null)
   const gesture = useRef<Gesture | null>(null)
   // While dragging: the position under the finger or cursor, not yet applied.
   const [preview, setPreview] = useState<{ value: number; touch: boolean } | null>(null)
@@ -31,9 +32,16 @@ export function Scrubber({ value, max, onSeek, describe }: Props) {
   const shown = preview?.value ?? value
   const percent = max > 0 ? (shown / max) * 100 : 0
 
-  const at = (x: number) => {
+  // The handle's centre runs from one radius in from either end, so it never
+  // overhangs the bar; positions are measured along that stretch.
+  const span = () => {
     const r = bar.current!.getBoundingClientRect()
-    return valueAt(x, r.left, r.width, max)
+    const inset = (thumb.current?.offsetWidth ?? 0) / 2
+    return { left: r.left + inset, width: r.width - 2 * inset }
+  }
+  const at = (x: number) => {
+    const { left, width } = span()
+    return valueAt(x, left, width, max)
   }
   const reset = () => {
     gesture.current = null
@@ -52,8 +60,8 @@ export function Scrubber({ value, max, onSeek, describe }: Props) {
       aria-valuetext={describe(value)}
       onPointerDown={(e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return
-        const r = bar.current!.getBoundingClientRect()
-        const thumbX = r.left + (max > 0 ? (value / max) * r.width : 0)
+        const { left, width } = span()
+        const thumbX = left + (max > 0 ? (value / max) * width : 0)
         if (!canGrab(e.pointerType, e.clientX, thumbX)) return
         e.currentTarget.setPointerCapture(e.pointerId)
         const dragging = isDrag(e.pointerType, e.clientX, e.clientX)
@@ -76,13 +84,14 @@ export function Scrubber({ value, max, onSeek, describe }: Props) {
         reset()
       }}
       onPointerCancel={reset}
+      style={{ '--at': percent / 100 } as React.CSSProperties}
     >
       <div className="scrubber-track">
-        <div className="scrubber-fill" style={{ width: `${percent}%` }} />
+        <div className="scrubber-fill" />
       </div>
-      <div className="scrubber-thumb" style={{ left: `${percent}%` }} />
+      <div className="scrubber-thumb" ref={thumb} />
       {preview?.touch && (
-        <div className="scrubber-bubble" style={{ left: `${percent}%` }}>
+        <div className="scrubber-bubble">
           {describe(preview.value)}
         </div>
       )}

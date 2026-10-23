@@ -807,15 +807,19 @@ h1, h2, p { margin: 0; }
 .progress-line {
   width: calc(100% - 2rem);
   max-width: 46rem;
-  height: 3px;
-  margin: 0 auto 0.5rem;
-  border-radius: var(--radius-sm);
+  height: 4px;
+  margin: 0.25rem auto 0.75rem;
+  border-radius: 999px;
   background: var(--separator);
   overflow: hidden;
 }
-.progress-line-fill { height: 100%; background: var(--text-2); }
+.progress-line-fill { height: 100%; background: var(--text); }
 
 .scrubber {
+  /* The handle's size; its centre runs from one radius in at either end
+     (--at, 0 to 1), so it never overhangs the bar. */
+  --thumb: 12px;
+  --thumb-x: calc(var(--at) * (100% - var(--thumb)) + var(--thumb) / 2);
   position: relative;
   height: 32px;
   cursor: pointer;
@@ -828,30 +832,32 @@ h1, h2, p { margin: 0; }
   left: 0;
   right: 0;
   top: 50%;
-  height: 2px;
-  margin-top: -1px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
   background: var(--separator);
   overflow: hidden;
 }
-.scrubber-fill { height: 100%; background: var(--text); }
+.scrubber-fill { width: var(--thumb-x); height: 100%; background: var(--text); }
 /* A small ink marker; the whole 32px-tall bar is the target, so it's easy to grab. */
 .scrubber-thumb {
   position: absolute;
   top: 50%;
-  width: 12px;
-  height: 12px;
-  margin: -6px 0 0 -6px;
+  left: var(--thumb-x);
+  width: var(--thumb);
+  height: var(--thumb);
+  margin: calc(var(--thumb) / -2) 0 0 calc(var(--thumb) / -2);
   border-radius: 50%;
   background: var(--text);
   transition: transform 0.12s;
 }
 @media (pointer: coarse) {
-  .scrubber { cursor: default; }
-  .scrubber-thumb { width: 16px; height: 16px; margin: -8px 0 0 -8px; }
+  .scrubber { --thumb: 16px; cursor: default; }
 }
 .scrubber.is-dragging .scrubber-thumb { transform: scale(1.3); }
 .scrubber-bubble {
   position: absolute;
+  left: var(--thumb-x);
   bottom: calc(100% + 6px);
   transform: translateX(-50%);
   padding: 0.3rem 0.6rem;
@@ -974,9 +980,12 @@ h1, h2, p { margin: 0; }
   .popover.opens-up { top: auto; bottom: calc(100% + 0.6rem); left: 0; right: auto; width: 22rem; }
 }
 .transport { display: flex; align-items: center; gap: 0.25rem; }
-/* Just back and on (free reading, the guide): an empty slot the size of the
-   back button balances it, so the big button stays where play usually is. */
-.transport.is-pair::after { content: ''; width: 44px; }
+/* Just back and on (free reading, the guide's pages): two buttons the same
+   size, side by side, back in outline. */
+.transport.is-pair { gap: 1rem; }
+.transport.is-pair .play-button { margin: 0; }
+/* Outlined like the Hold to read pad: filled ink is the main action. */
+.play-button.is-outline { border: 1.5px solid var(--text); background: none; color: var(--text); }
 .play-button {
   display: grid;
   place-items: center;
@@ -1543,6 +1552,9 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .transport { grid-column: 1 / -1; grid-row: 1; justify-content: center; }
   .deck-meta { grid-row: 2; }
   .speed { grid-row: 2; }
+  /* No speed (the guide, free reading): the time left sits centred under the buttons. */
+  .deck.is-self-paced .speed { display: none; }
+  .deck.is-self-paced .deck-meta-wrap { grid-column: 1 / -1; justify-self: center; }
 
   /* Settings and "Read for" become bottom sheets within thumb reach, over a
      dimmed page. */
