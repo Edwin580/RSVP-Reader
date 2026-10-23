@@ -475,17 +475,22 @@ test('free books: a word still being typed finds the book (#62)', async ({ page 
 test('Guide: the settings show the line focus it uses, and no pacer it ignores (#66)', async ({ page }) => {
   // Reported: "I tried to turn off line focus and just switch to guide mode
   // hoping it would be normal but that defaults to line." The guide always
-  // focuses a line and never shows the pacer, yet the menu offered line
-  // focus Off and the pacer choices. Reading the page as it is is now Free.
+  // marks a line and never shows the pacer, yet the menu offered line focus
+  // Off (which did nothing) and the pacer choices. Reading the page as it is
+  // is now Free. Since #71 the guide's Off is real: no blackout, with the
+  // line under the one you're on instead, so it never leaves nothing marked.
   await page.goto('./')
   await upload(page)
   await openSettings(page)
   await page.getByRole('radio', { name: 'Page', exact: true }).click()
   await page.getByRole('radio', { name: 'Guide' }).click()
   const focus = page.getByRole('radiogroup', { name: 'Line focus' })
-  await expect(focus.getByRole('radio', { name: 'Off' })).toHaveCount(0)
   await expect(focus.getByRole('radio', { name: '1 line' })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await expect(page.getByRole('switch', { name: 'Pacer line' })).toHaveCount(0)
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect(page.getByRole('switch', { name: 'Line under' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+  await expect(page.locator('.page > .page-text .guide-line')).toBeVisible()
   await page.getByRole('radio', { name: 'Free' }).click()
   await expect(focus).toHaveCount(0)
 })

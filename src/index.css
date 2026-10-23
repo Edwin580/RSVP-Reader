@@ -1157,6 +1157,12 @@ h1, h2, p { margin: 0; }
 .segmented .serif { font-family: var(--serif); }
 /* A choice beside its label (Mode, Font) stays compact. */
 .setting:not(.setting-stack) > .segmented { flex: 0 1 11rem; }
+/* On/off: the whole row is the switch, its name on the left. */
+.switch-row { flex-wrap: nowrap; width: 100%; min-height: 44px; margin-block: -0.35rem; padding: 0; border: 0; background: none; color: var(--text); text-align: left; }
+.switch { flex: none; position: relative; width: 44px; height: 26px; border-radius: 999px; background: var(--separator); transition: background-color 0.15s ease; }
+.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-2); transition: transform 0.15s ease, background-color 0.15s ease; }
+.switch-row[aria-checked='true'] .switch { background: var(--text); }
+.switch-row[aria-checked='true'] .switch::after { background: var(--bg); transform: translateX(18px); }
 /* Everything past the essentials, behind one quiet toggle. */
 .more-toggle {
   display: flex;
