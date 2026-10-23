@@ -174,26 +174,36 @@ export function rerank<T extends CatalogBook>(books: T[], query: string, sort?: 
 
 // ——— Kept compactly ———
 
-/** A book as kept in the list: id, title, author, words, reading ease, subjects. About 90 bytes. */
-export type IndexRow = [string, string, string, number | null, number | null, string]
+/**
+ * A book as kept in the list: id, title, author, words, reading ease,
+ * subjects, and its cover's path on the site (so search results show the
+ * same image as browsing, already loaded). About 180 bytes.
+ */
+export type IndexRow = [string, string, string, number | null, number | null, string, string?]
+
+const COVERS = `${CATALOG_ORIGIN}/images/covers/`
 
 /** The list as kept on the device: only what searching and listing need. */
 export function packIndex(books: readonly IndexedBook[]): IndexRow[] {
-  return books.map((b) => [b.id, b.title, b.author, b.words ?? null, b.readingEase ?? null, b.tags.join(' ')])
+  return books.map((b) => {
+    const row: IndexRow = [b.id, b.title, b.author, b.words ?? null, b.readingEase ?? null, b.tags.join(' ')]
+    if (b.cover?.startsWith(COVERS)) row.push(b.cover.slice(COVERS.length))
+    return row
+  })
 }
 
 const LABELS = new Map(SUBJECTS.map((s) => [s.value, s.label]))
 const label = (tag: string) => LABELS.get(tag) ?? tag.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
-/** Back from the kept list: covers are found from each book's address, and subjects named from their slugs. */
+/** Back from the kept list, subjects named from their slugs. A list kept before covers were (or a book without one) finds it from the book's address. */
 export function unpackIndex(rows: readonly IndexRow[]): IndexedBook[] {
-  return rows.map(([id, title, author, words, readingEase, tags], popular) => {
+  return rows.map(([id, title, author, words, readingEase, tags, cover], popular) => {
     const slugs = tags ? tags.split(' ') : []
     return {
       id,
       title,
       author,
-      cover: `${CATALOG_ORIGIN}/ebooks/${id}/downloads/cover-thumbnail.jpg`,
+      cover: cover ? COVERS + cover : `${CATALOG_ORIGIN}/ebooks/${id}/downloads/cover-thumbnail.jpg`,
       ...(words !== null && { words }),
       ...(readingEase !== null && { readingEase }),
       tags: slugs,

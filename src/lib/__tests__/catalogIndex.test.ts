@@ -99,7 +99,7 @@ describe('rerank', () => {
 })
 
 describe('the list as kept', () => {
-  it('keeps only what searching needs, and finds each cover from the address', () => {
+  it('keeps only what searching needs, and finds a missing cover from the address', () => {
     const rows = packIndex(BOOKS)
     expect(rows[0]).toEqual(['jane-austen/pride-and-prejudice', 'Pride and Prejudice', 'Jane Austen', 121970, 60.95, 'fiction'])
     const back = unpackIndex(rows)
@@ -107,5 +107,12 @@ describe('the list as kept', () => {
     expect(back[2].cover).toBe('https://standardebooks.org/ebooks/leo-tolstoy/war-and-peace/louise-maude_aylmer-maude/downloads/cover-thumbnail.jpg')
     expect(back[6].subjects).toEqual(['Fiction', 'Horror', 'Science fiction'])
     expect(JSON.stringify(rows).length / rows.length).toBeLessThan(120)
+  })
+
+  it('keeps each cover, so search results show the image browsing already loaded', () => {
+    const cover = 'https://standardebooks.org/images/covers/jane-austen_emma/0123abcd/cover.jpg'
+    const rows = packIndex([{ ...BOOKS[0], cover }])
+    expect(rows[0][6]).toBe('jane-austen_emma/0123abcd/cover.jpg')
+    expect(unpackIndex(rows)[0].cover).toBe(cover)
   })
 })

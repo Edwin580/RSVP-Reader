@@ -53,7 +53,8 @@ describe('parseCatalogPage', () => {
     expect(northanger).toMatchObject({ title: 'Northanger Abbey', author: 'Jane Austen', words: 77464, readingEase: 66.88 })
     expect(northanger.subjects).toContain('Fiction')
     expect(northanger.tags).toContain('fiction')
-    expect(northanger.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_northanger-abbey\/.+\.jpg$/)
+    // The plain cover for a list's small thumbnails, not the sharper one (four times the pixels).
+    expect(northanger.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_northanger-abbey\/.+\/cover\.jpg$/)
   })
 
   it('knows when there are more pages', () => {
@@ -106,7 +107,8 @@ describe('parseDetails', () => {
   it('picks the compatible EPUB, and the read-online contents', () => {
     expect(book.epub).toBe('https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/downloads/jane-austen_pride-and-prejudice.epub')
     expect(book.contents).toBe('https://standardebooks.org/ebooks/jane-austen/pride-and-prejudice/text')
-    expect(book.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_pride-and-prejudice\/.+\.jpg$/)
+    // The sharper cover for the book's own page, where it's shown large.
+    expect(book.cover).toMatch(/^https:\/\/standardebooks\.org\/images\/covers\/jane-austen_pride-and-prejudice\/.+\/cover@2x\.jpg$/)
   })
 
   it('names the translator', () => {

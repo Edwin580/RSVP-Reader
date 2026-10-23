@@ -475,17 +475,22 @@ test('free books: a word still being typed finds the book (#62)', async ({ page 
 test('Guide: the settings show the line focus it uses, and no pacer it ignores (#66)', async ({ page }) => {
   // Reported: "I tried to turn off line focus and just switch to guide mode
   // hoping it would be normal but that defaults to line." The guide always
-  // focuses a line and never shows the pacer, yet the menu offered line
-  // focus Off and the pacer choices. Reading the page as it is is now Free.
+  // marks a line and never shows the pacer, yet the menu offered line focus
+  // Off (which did nothing) and the pacer choices. Reading the page as it is
+  // is now Free. Since #71 the guide's Off is real: no blackout, with the
+  // line under the one you're on instead, so it never leaves nothing marked.
   await page.goto('./')
   await upload(page)
   await openSettings(page)
   await page.getByRole('radio', { name: 'Page', exact: true }).click()
   await page.getByRole('radio', { name: 'Guide' }).click()
   const focus = page.getByRole('radiogroup', { name: 'Line focus' })
-  await expect(focus.getByRole('radio', { name: 'Off' })).toHaveCount(0)
   await expect(focus.getByRole('radio', { name: '1 line' })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await expect(page.getByRole('switch', { name: 'Pacer line' })).toHaveCount(0)
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect(page.getByRole('switch', { name: 'Line under' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.locator('.page-text .is-dim')).toHaveCount(0)
+  await expect(page.locator('.page > .page-text .guide-line')).toBeVisible()
   await page.getByRole('radio', { name: 'Free' }).click()
   await expect(focus).toHaveCount(0)
 })
@@ -612,4 +617,26 @@ test('free books: back from a book and its preview comes back to the same place 
   await expect(list.getByRole('listitem')).toHaveCount(shown)
   expect(await page.evaluate<number>('window.scrollY')).toBe(before)
   await expect(book).toBeInViewport()
+})
+
+test('searching: the site failing to add to the matches found on the device shows no error under them (#71)', async ({ page }) => {
+  // Reported while Standard Ebooks was down: searches showed "Couldn’t reach
+  // Standard Ebooks" under matches that were already there, from the list on
+  // the device. The site's own search only adds description matches to them.
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const box = page.getByRole('searchbox', { name: 'Search free books' })
+  const list = page.getByRole('list', { name: 'Books' })
+  await box.fill('sherl')
+  await expect(list.getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
+  // The site's search fails, its retry too.
+  catalog.failNext(/query=war/)
+  catalog.failNext(/query=war/)
+  await box.fill('war and peace')
+  await expect(list.getByRole('button').first()).toContainText('War and Peace')
+  await expect.poll(() => catalog.searches().filter((u) => u.searchParams.get('query') === 'war and peace').length).toBe(2)
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveCount(0)
 })

@@ -82,7 +82,8 @@ test('page mode pacer can be none, for reading the page as it is', async ({ page
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  await page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'None' }).click()
+  await page.getByRole('switch', { name: 'Highlight word' }).click()
+  await page.getByRole('switch', { name: 'Pacer line' }).click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
   await expect(page.locator('.page-marker')).toBeHidden()
@@ -133,17 +134,20 @@ test('page mode pacer: highlight, line or both', async ({ page }) => {
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
   await page.getByRole('radio', { name: 'Page' }).click()
-  const guide = page.getByRole('radiogroup', { name: 'Pacer' })
-  await expect(guide.getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
+  const highlight = page.getByRole('switch', { name: 'Highlight word' })
+  const pacer = page.getByRole('switch', { name: 'Pacer line' })
+  await expect(highlight).toHaveAttribute('aria-checked', 'true')
+  await expect(pacer).toHaveAttribute('aria-checked', 'true')
 
-  await guide.getByRole('radio', { name: 'Line' }).click()
+  await highlight.click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await page.getByRole('button', { name: 'Forward one word', exact: true }).click()
   await expect(page.locator('.page-marker')).toBeHidden()
   await expect(page.locator('.page-pacer')).toBeVisible()
 
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  await guide.getByRole('radio', { name: 'Highlight' }).click()
+  await highlight.click()
+  await pacer.click()
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await expect(page.locator('.page-marker')).toBeVisible()
   await expect(page.locator('.page-pacer')).toBeHidden()
@@ -679,7 +683,72 @@ test('old settings with both page guides off come back with both on', async ({ p
   await page.goto('./')
   await upload(page)
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  await expect(page.getByRole('radiogroup', { name: 'Pacer' }).getByRole('radio', { name: 'Both' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('switch', { name: 'Highlight word' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('switch', { name: 'Pacer line' })).toHaveAttribute('aria-checked', 'true')
+})
+
+test('the progress bar can be a thin line at the bottom instead of the slider', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await expect(page.getByRole('slider', { name: 'Position in book' })).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('button', { name: 'More settings' }).click()
+  await page.getByRole('switch', { name: 'Thin progress bar' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.popover')).toBeHidden()
+
+  await expect(page.getByRole('slider', { name: 'Position in book' })).toHaveCount(0)
+  const line = page.getByRole('progressbar', { name: 'Position in book' })
+  await expect(line).toBeVisible()
+  // Small, and below the controls.
+  const box = (await line.boundingBox())!
+  const controls = (await page.locator('.reader-bottom').boundingBox())!
+  expect(box.height).toBeLessThan(5)
+  expect(box.y).toBeGreaterThanOrEqual(controls.y + controls.height - 1)
+  // It follows the reading position, and the choice is remembered.
+  await expect(line).toHaveAttribute('aria-valuenow', '0')
+  for (let i = 0; i < 10; i++) await page.keyboard.press('ArrowRight')
+  await expect(line).not.toHaveAttribute('aria-valuenow', '0')
+  await page.locator('.nav-button').click()
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(page.getByRole('progressbar', { name: 'Position in book' })).toBeVisible()
+})
+
+test('the slider\'s handle stays within the bar at the start and the end (#71)', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await settled(page)
+  const slider = page.getByRole('slider', { name: 'Position in book' })
+  const inside = async () => {
+    const bar = (await page.locator('.scrubber-track').boundingBox())!
+    const handle = (await page.locator('.scrubber-thumb').boundingBox())!
+    return handle.x >= bar.x - 0.5 && handle.x + handle.width <= bar.x + bar.width + 0.5
+  }
+  expect(await inside()).toBe(true)
+  // A click at the very end (a mouse can click anywhere) goes to the last word.
+  const bar = (await slider.boundingBox())!
+  await page.mouse.click(bar.x + bar.width - 1, bar.y + bar.height / 2)
+  await expect(slider).toHaveAttribute('aria-valuenow', (await slider.getAttribute('aria-valuemax'))!)
+  expect(await inside()).toBe(true)
+})
+
+test('Guide shows its step buttons on pages only; scrolling, you slide the text (#71)', async ({ page }) => {
+  await guideSettings(page, 'scroll')
+  await page.goto('./')
+  await upload(page)
+  await expect(page.locator('.transport')).toHaveCount(0)
+  await expect(page.locator('.session-open')).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('switch', { name: 'Continuous scroll' }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('button', { name: 'Previous line' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Next line' })).toBeVisible()
+  // The pair is the same size, side by side.
+  const back = (await page.getByRole('button', { name: 'Previous line' }).boundingBox())!
+  const on = (await page.getByRole('button', { name: 'Next line' }).boundingBox())!
+  expect(back.width).toBe(on.width)
+  expect(back.height).toBe(on.height)
 })
 
 test('holding to read keeps the controls hidden, through drift and page turns', async ({ page }) => {
@@ -1099,13 +1168,17 @@ test('Guide: a tap moves the focus to a line; dragging from anywhere moves it li
   expect(k).toBeGreaterThanOrEqual(0)
   expect(k).toBeLessThan(3)
 
-  // The next line button and the keys move a line at a time.
+  // The line buttons and the keys move a line at a time; the word and
+  // sentence steps (which mostly leave the focus where it was) aren't offered.
+  await expect(page.getByRole('button', { name: /one word|sentence/ })).toHaveCount(0)
   await page.getByRole('button', { name: 'Next line' }).click()
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
   await page.keyboard.press('ArrowDown')
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 2].start)
   await page.keyboard.press('ArrowUp')
   await expect.poll(() => focusedStart(page)).toBe(turned[k + 1].start)
+  await page.getByRole('button', { name: 'Previous line' }).click()
+  await expect.poll(() => focusedStart(page)).toBe(turned[k].start)
 })
 
 test('Guide, continuous: the text slides with the finger, up and down, and a flick carries on; the line at the reading spot is in focus', async ({ page }, testInfo) => {
@@ -1204,15 +1277,28 @@ test('Guide, continuous › Show › None: nothing marked, just slide the text t
   await finger.up()
   await expect.poll(async () => Number(await slider.getAttribute('aria-valuenow'))).toBeGreaterThan(0)
 
-  // Offered for scrolling only: on pages, the guide shows the focus.
+  // Scrolling has no step buttons: you slide the text. With no line to step,
+  // Space moves it about a screenful, as in a browser (#71).
+  await expect(page.locator('.transport')).toHaveCount(0)
+  const at = async () => Number(await slider.getAttribute('aria-valuenow'))
+  await settled(page)
+  const before = await at()
+  await page.keyboard.press(' ')
+  await expect.poll(at).toBeGreaterThan(before + 30)
+
+  // Nothing marked is for scrolling only: on pages, the guide shows the focus.
   await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-  const show = page.getByRole('radiogroup', { name: 'Show' })
-  await expect(show.getByRole('radio', { name: 'None' })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toHaveCount(0)
-  await page.getByRole('radio', { name: 'Pages' }).click()
-  await expect(show.getByRole('radio', { name: 'None' })).toHaveCount(0)
-  await expect(show.getByRole('radio', { name: 'Focus' })).toHaveAttribute('aria-checked', 'true')
+  const focus = page.getByRole('radiogroup', { name: 'Line focus' })
+  await expect(focus.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('switch', { name: 'Line under' })).toHaveAttribute('aria-checked', 'false')
+  await page.getByRole('switch', { name: 'Continuous scroll' }).click()
+  await expect(focus.getByRole('radio', { name: '1 line' })).toHaveAttribute('aria-checked', 'true')
   await expect(page.locator('.page-text .is-dim').first()).toBeAttached()
+  // On pages, turning off the one mark left switches on the other, so the line is always marked.
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect(page.getByRole('switch', { name: 'Line under' })).toHaveAttribute('aria-checked', 'true')
+  await page.getByRole('switch', { name: 'Line under' }).click()
+  await expect(focus.getByRole('radio', { name: '1 line' })).toHaveAttribute('aria-checked', 'true')
 })
 
 test('Guide is offered in page mode, with a choice of pages or continuous scroll', async ({ page }) => {
@@ -1224,10 +1310,11 @@ test('Guide is offered in page mode, with a choice of pages or continuous scroll
   await expect(page.getByRole('radio', { name: 'Guide' })).toHaveCount(0)
   await page.getByRole('radio', { name: 'Page' }).click()
   await page.getByRole('radio', { name: 'Guide' }).click()
-  await expect(page.getByRole('radiogroup', { name: 'Layout' })).toBeVisible()
-  await page.getByRole('radio', { name: 'Scroll' }).click()
+  const scroll = page.getByRole('switch', { name: 'Continuous scroll' })
+  await expect(scroll).toHaveAttribute('aria-checked', 'false')
+  await scroll.click()
   await expect(page.locator('.page.is-continuous')).toBeVisible()
-  await page.getByRole('radio', { name: 'Pages' }).click()
+  await scroll.click()
   await expect(page.locator('.page.is-continuous')).toHaveCount(0)
   await expect(page.locator('.page.is-guided')).toBeVisible()
 })
@@ -1240,7 +1327,7 @@ test('Free: just the page, turned with a tap on either side, Space or the arrow 
   await page.getByRole('radio', { name: 'Page', exact: true }).click()
   await page.getByRole('radio', { name: 'Free' }).click()
   // No timer, so nothing that goes with one: no pacer, line focus or speed.
-  await expect(page.getByRole('radiogroup', { name: 'Pacer' })).toHaveCount(0)
+  await expect(page.getByRole('switch')).toHaveCount(0)
   await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toHaveCount(0)
   await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
   await expect(page.locator('.popover')).toBeHidden()
@@ -1303,12 +1390,11 @@ for (const layout of ['pages', 'scroll'] as const) {
 
     // Both: the line, and the rest blacked out.
     await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
-    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Both' }).click()
-    await expect(page.getByRole('radiogroup', { name: 'Line focus' })).toBeVisible()
+    await page.getByRole('radiogroup', { name: 'Line focus' }).getByRole('radio', { name: '1 line' }).click()
     await expect(page.locator('.page-text .is-dim').first()).toBeAttached()
     await expect(guideLine).toBeVisible()
     // Focus: no line.
-    await page.getByRole('radiogroup', { name: 'Show' }).getByRole('radio', { name: 'Focus' }).click()
+    await page.getByRole('switch', { name: 'Line under' }).click()
     await expect(guideLine).toHaveCount(0)
   })
 }
