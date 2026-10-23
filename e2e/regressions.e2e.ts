@@ -618,3 +618,25 @@ test('free books: back from a book and its preview comes back to the same place 
   expect(await page.evaluate<number>('window.scrollY')).toBe(before)
   await expect(book).toBeInViewport()
 })
+
+test('searching: the site failing to add to the matches found on the device shows no error under them (#71)', async ({ page }) => {
+  // Reported while Standard Ebooks was down: searches showed "Couldn’t reach
+  // Standard Ebooks" under matches that were already there, from the list on
+  // the device. The site's own search only adds description matches to them.
+  const catalog = await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const box = page.getByRole('searchbox', { name: 'Search free books' })
+  const list = page.getByRole('list', { name: 'Books' })
+  await box.fill('sherl')
+  await expect(list.getByRole('button').first()).toContainText('The Adventures of Sherlock Holmes')
+  // The site's search fails, its retry too.
+  catalog.failNext(/query=war/)
+  catalog.failNext(/query=war/)
+  await box.fill('war and peace')
+  await expect(list.getByRole('button').first()).toContainText('War and Peace')
+  await expect.poll(() => catalog.searches().filter((u) => u.searchParams.get('query') === 'war and peace').length).toBe(2)
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveCount(0)
+})

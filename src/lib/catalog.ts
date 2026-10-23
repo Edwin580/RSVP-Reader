@@ -197,11 +197,16 @@ function wordsAndEase(line: string): { words?: number; readingEase?: number } {
   }
 }
 
-function coverOf(scope: Element): string | undefined {
+/**
+ * A cover from "…/cover@2x.jpg 2x, …/cover.jpg 1x": the sharper one for a
+ * book's own page, the plain one (224 × 335, a quarter of the pixels) for a
+ * list's 48px thumbnails, still sharp on any screen and much quicker to load.
+ */
+function coverOf(scope: Element, sharp: boolean): string | undefined {
   const jpeg = scope.querySelector('source[type="image/jpeg"]')?.getAttribute('srcset')
-  // "…/cover@2x.jpg 2x, …/cover.jpg 1x": the sharper one, for high-density screens.
-  const best = jpeg?.split(',')[0]?.trim().split(/\s+/)[0]
-  return catalogAddress(best ?? scope.querySelector('img')?.getAttribute('src'))
+  const sources = jpeg?.split(',').map((s) => s.trim().split(/\s+/))
+  const pick = sources?.find(([, density]) => density === (sharp ? '2x' : '1x'))?.[0] ?? sources?.[0]?.[0]
+  return catalogAddress(pick ?? scope.querySelector('img')?.getAttribute('src'))
 }
 
 export function parseCatalogPage(html: string): CatalogPage {
@@ -217,7 +222,7 @@ export function parseCatalogPage(html: string): CatalogPage {
       id,
       title,
       author: authors.join(' & '),
-      cover: coverOf(item),
+      cover: coverOf(item, false),
       ...wordsAndEase(details),
       subjects: [...item.querySelectorAll('.tags a')].map(text).filter(Boolean),
       tags: tagsOf(item.querySelectorAll('.tags a')),
@@ -251,7 +256,7 @@ export function parseDetails(html: string, id: string): CatalogDetails {
     id,
     title,
     author: authors.join(' & '),
-    cover: coverOf(article.querySelector('#read-free') ?? article),
+    cover: coverOf(article.querySelector('#read-free') ?? article, true),
     ...(words && { words }),
     ...(ease && { readingEase: Number(ease[1]) }),
     subjects: [...article.querySelectorAll('#reading-ease .tags a')].map(text).filter(Boolean),
