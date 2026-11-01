@@ -85,6 +85,11 @@ export function Reader({
   const guideMark = effectiveGuideMark(settings)
   const guideLine = guided && (guideMark === 'line' || guideMark === 'both')
   const guideFocus = guideMark === 'line' || guideMark === 'none' ? 0 : settings.lineFocus === 'three' ? 3 : 1
+  // The guide's continuous scroll: you slide the text yourself, so there are
+  // no buttons to step it. With nothing marked there's no line to step either,
+  // so Space moves the text about a screenful, as a browser does.
+  const scrolling = guided && settings.guideLayout === 'scroll'
+  const scrollOnly = guided && guideMark === 'none'
   const headings = useMemo(() => book.headings ?? [], [book.headings])
   // People, places and smart-pacing extras, worked out in the background by
   // the search worker. Until they arrive, smart pacing times words naturally.
@@ -452,8 +457,8 @@ export function Reader({
       case ' ':
       case 'k':
         // Hold to read: hold the key to read, let go to stop (see keyup below).
-        if (guided) pageNav.current?.nextLine?.()
-        else if (free) pageNav.current?.next()
+        if (free || scrollOnly) pageNav.current?.next()
+        else if (guided) pageNav.current?.nextLine?.()
         else if (!holdToRead) toggle()
         else if (!e.repeat) startHold()
         break
@@ -772,9 +777,11 @@ export function Reader({
             <span>Back to {describePosition(jumpedFrom)}</span>
           </button>
         )}
-        <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
+        {settings.progressBar === 'slider' && (
+          <Scrubber value={index} max={Math.max(words.length - 1, 0)} onSeek={jumpTo} describe={describePosition} />
+        )}
 
-        <div className="deck">
+        <div className={`deck${selfPaced ? ' is-self-paced' : ''}`}>
           <div className="deck-meta-wrap">
             {session ? (
               <div className="deck-meta session-active">
@@ -826,14 +833,25 @@ export function Reader({
             )}
           </div>
 
-          {free ? (
+          {scrolling ? null : free ? (
             // Free reading has no timer or words to step through: just the pages.
-            <div className="transport">
-              <button type="button" className="icon-button" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
-                <Icon name="back" />
+            <div className="transport is-pair">
+              <button type="button" className="play-button is-outline" title="Previous page (←)" aria-label="Previous page" onClick={() => pageNav.current?.previous()}>
+                <Icon name="back" size={24} />
               </button>
               <button type="button" className="play-button" onClick={() => pageNav.current?.next()} aria-label="Next page" title="Next page (→ or Space)">
                 <Icon name="forward" size={24} />
+              </button>
+            </div>
+          ) : guided ? (
+            // The guide moves a line at a time, so a word or sentence step
+            // mostly leaves the focus where it was: just the lines.
+            <div className="transport is-pair">
+              <button type="button" className="play-button is-outline" title="Previous line (↑)" aria-label="Previous line" onClick={() => pageNav.current?.previousLine?.()}>
+                <Icon name="chevronUp" size={24} />
+              </button>
+              <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
+                <Icon name="chevronDown" size={24} />
               </button>
             </div>
           ) : (
@@ -844,12 +862,7 @@ export function Reader({
               <button type="button" className="icon-button" title="Back one word (←)" aria-label="Back one word" onClick={() => seek(index - 1)}>
                 <Icon name="back" />
               </button>
-              {guided ? (
-                // The guide has no timer: the main button moves the focus on a line.
-                <button type="button" className="play-button" onClick={() => pageNav.current?.nextLine?.()} aria-label="Next line" title="Next line (↓ or Space)">
-                  <Icon name="chevronDown" size={24} />
-                </button>
-              ) : holdToRead ? (
+              {holdToRead ? (
                 // Hold to read: no play button until you hold. A wide pad to rest
                 // a thumb on, labelled in words (an icon alone is ambiguous), that
                 // fills the moment it's pressed; then the controls fade away.
@@ -896,6 +909,21 @@ export function Reader({
           </div>
         </div>
       </footer>
+
+      {/* Outside the controls, so it stays while they fade: small enough to read by. */}
+      {settings.progressBar === 'thin' && (
+        <div
+          className="progress-line"
+          role="progressbar"
+          aria-label="Position in book"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          aria-valuetext={describePosition(index)}
+        >
+          <div className="progress-line-fill" style={{ width: `${percent}%` }} />
+        </div>
+      )}
 
 
       {panel === 'bookmarks' && (

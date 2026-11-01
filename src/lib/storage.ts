@@ -175,6 +175,8 @@ export interface Settings {
   guideLayout: GuideLayout
   /** Guide: how the line you're on is shown: the rest blacked out ('focus'), a line under it ('line'), both, or (scrolling only) not at all. */
   guideMark: GuideMark
+  /** 'slider' is the full-size bar you can drag; 'thin' a small line along the bottom edge that only shows how far you are. */
+  progressBar: ProgressBar
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -186,6 +188,7 @@ export type GuideLayout = 'pages' | 'scroll'
 export type GuideMark = 'focus' | 'line' | 'both' | 'none'
 export type PageGuide = 'highlight' | 'pacer' | 'both' | 'none'
 export type LineFocus = 'off' | 'one' | 'three'
+export type ProgressBar = 'slider' | 'thin'
 
 export const THEMES: Theme[] = ['system', 'light', 'sepia', 'dark']
 export const FONTS: ReadingFont[] = ['serif', 'sans']
@@ -195,6 +198,7 @@ export const GUIDE_LAYOUTS: GuideLayout[] = ['pages', 'scroll']
 export const GUIDE_MARKS: GuideMark[] = ['focus', 'line', 'both', 'none']
 export const PAGE_GUIDES: PageGuide[] = ['highlight', 'pacer', 'both', 'none']
 export const LINE_FOCUSES: LineFocus[] = ['off', 'one', 'three']
+export const PROGRESS_BARS: ProgressBar[] = ['slider', 'thin']
 
 export const DEFAULT_SETTINGS: Settings = {
   wpm: 300,
@@ -210,6 +214,7 @@ export const DEFAULT_SETTINGS: Settings = {
   playControl: 'tap',
   guideLayout: 'pages',
   guideMark: 'focus',
+  progressBar: 'slider',
 }
 
 /** The guide's mark as shown: nothing marked only scrolls (on a page you'd lose your place), so pages show the focus instead. */
@@ -241,6 +246,7 @@ export function loadSettings(): Settings {
       playControl: oneOf(PLAY_CONTROLS, saved.playControl, DEFAULT_SETTINGS.playControl),
       guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
       guideMark: oneOf(GUIDE_MARKS, saved.guideMark, DEFAULT_SETTINGS.guideMark),
+      progressBar: oneOf(PROGRESS_BARS, saved.progressBar, DEFAULT_SETTINGS.progressBar),
     }
   } catch {
     return DEFAULT_SETTINGS

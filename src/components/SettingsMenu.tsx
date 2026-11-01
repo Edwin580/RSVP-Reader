@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
 import type { WordTiming } from '../lib/rsvp'
-import { effectiveGuideMark, type Accent, type GuideLayout, type GuideMark, type LineFocus, type PageGuide, type PlayControl, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
+import { effectiveGuideMark, type Accent, type LineFocus, type PlayControl, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
 
 interface Props {
   settings: Settings
@@ -45,34 +45,11 @@ const PLAY_OPTIONS: { value: PlayControl; label: string; hint: string }[] = [
 /** Play controls that set their own pace on a page, so only page mode offers them. */
 const PAGE_ONLY: PlayControl[] = ['guide', 'free']
 
-const LAYOUT_OPTIONS: { value: GuideLayout; label: string; hint: string }[] = [
-  { value: 'pages', label: 'Pages', hint: 'Drag past the last line to turn the page' },
-  { value: 'scroll', label: 'Scroll', hint: 'One long column you slide up and down' },
-]
-
-const MARK_OPTIONS: { value: GuideMark; label: string; hint: string }[] = [
-  { value: 'focus', label: 'Focus', hint: 'The lines around the one you’re on are blacked out' },
-  { value: 'line', label: 'Line', hint: 'A line under the one you’re on, with all the text in view' },
-  { value: 'both', label: 'Both', hint: 'A line under the one you’re on, and the rest blacked out' },
-  { value: 'none', label: 'None', hint: 'Nothing marked: just slide the text to scroll' },
-]
-/** Nothing marked is for scrolling only (see effectiveGuideMark). */
-const PAGE_MARK_OPTIONS = MARK_OPTIONS.filter((m) => m.value !== 'none')
-
-const GUIDE_OPTIONS: { value: PageGuide; label: string }[] = [
-  { value: 'highlight', label: 'Highlight' },
-  { value: 'pacer', label: 'Line' },
-  { value: 'both', label: 'Both' },
-  { value: 'none', label: 'None' },
-]
-
 const FOCUS_OPTIONS: { value: LineFocus; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'one', label: '1 line' },
   { value: 'three', label: '3 lines' },
 ]
-/** The guide is a line focus, so it always keeps at least one line clear. */
-const GUIDE_FOCUS_OPTIONS = FOCUS_OPTIONS.filter((f) => f.value !== 'off')
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'system', label: 'Auto' },
@@ -146,6 +123,16 @@ function Choice<T extends string>({
   )
 }
 
+/** An on/off setting: its name and a switch, the whole row one tap target. */
+function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} className="setting switch-row" onClick={() => onChange(!checked)}>
+      <span className="setting-name">{label}</span>
+      <span className="switch" aria-hidden="true" />
+    </button>
+  )
+}
+
 /**
  * The Aa menu. Up front, what people change while reading: mode, how to read
  * (and the options that go with it), text size and theme. Everything else
@@ -167,14 +154,26 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
   const playOptions = settings.mode === 'page' ? PLAY_OPTIONS : PLAY_OPTIONS.filter((p) => !PAGE_ONLY.includes(p.value))
   const playControl = settings.mode === 'word' && PAGE_ONLY.includes(settings.playControl) ? 'tap' : settings.playControl
   // Only what applies to how you read: the pacer moves with the timer (tap or
-  // hold), the guide is a line focus of its own, and free reading has neither.
+  // hold), the guide marks the line you're on, and free reading has neither.
   const timed = playControl === 'tap' || playControl === 'hold'
-  const focusOptions = playControl === 'guide' ? GUIDE_FOCUS_OPTIONS : FOCUS_OPTIONS
-  const lineFocus = playControl === 'guide' && settings.lineFocus === 'off' ? 'one' : settings.lineFocus
-  // The guide's line focus only applies when it blacks out the rest.
+  const guided = settings.mode === 'page' && playControl === 'guide'
+  // The guide's mark as two parts: the rest blacked out (its line focus) and
+  // a line under the one you're on. On pages it always marks something (see
+  // effectiveGuideMark), so turning off the one left switches on the other.
   const guideMark = effectiveGuideMark(settings)
-  const markOptions = settings.guideLayout === 'scroll' ? MARK_OPTIONS : PAGE_MARK_OPTIONS
-  const showFocus = settings.mode === 'page' && (timed || (playControl === 'guide' && (guideMark === 'focus' || guideMark === 'both')))
+  const blackout = guideMark === 'focus' || guideMark === 'both'
+  const under = guideMark === 'line' || guideMark === 'both'
+  const pages = settings.guideLayout === 'pages'
+  const guideFocus: LineFocus = settings.lineFocus === 'three' ? 'three' : 'one'
+  const setGuide = (blackout: boolean, under: boolean, lineFocus = guideFocus) =>
+    set({ guideMark: blackout && under ? 'both' : blackout ? 'focus' : under ? 'line' : 'none', lineFocus })
+  const lineFocus = guided ? (blackout ? guideFocus : 'off') : settings.lineFocus
+  const setLineFocus = (value: LineFocus) =>
+    guided ? (value === 'off' ? setGuide(false, under || pages) : setGuide(true, under, value)) : set({ lineFocus: value })
+  const highlight = settings.pageGuide === 'highlight' || settings.pageGuide === 'both'
+  const pacer = settings.pageGuide === 'pacer' || settings.pageGuide === 'both'
+  const setPageGuide = (highlight: boolean, pacer: boolean) =>
+    set({ pageGuide: highlight && pacer ? 'both' : highlight ? 'highlight' : pacer ? 'pacer' : 'none' })
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
   const toggleMore = () => {
@@ -209,42 +208,24 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
         </div>
 
         {settings.mode === 'page' && timed && (
-          <div className="setting setting-stack">
-            <span className="setting-name">Pacer</span>
-            <Choice label="Pacer" options={GUIDE_OPTIONS} value={settings.pageGuide} onChange={(pageGuide) => set({ pageGuide })} />
-          </div>
+          <>
+            <Switch label="Highlight word" checked={highlight} onChange={(on) => setPageGuide(on, pacer)} />
+            <Switch label="Pacer line" checked={pacer} onChange={(on) => setPageGuide(highlight, on)} />
+          </>
         )}
 
-        {/* Layout first: it decides what Show offers. */}
-        {playControl === 'guide' && (
-          <div className="setting setting-stack">
-            <span className="setting-name">Layout</span>
-            <Choice label="Layout" options={LAYOUT_OPTIONS} value={settings.guideLayout} onChange={(guideLayout) => set({ guideLayout })} />
-            <span className="hint">{LAYOUT_OPTIONS.find((l) => l.value === settings.guideLayout)?.hint}</span>
-          </div>
+        {guided && (
+          <Switch label="Continuous scroll" checked={!pages} onChange={(on) => set({ guideLayout: on ? 'scroll' : 'pages' })} />
         )}
 
-        {playControl === 'guide' && (
-          <div className="setting setting-stack">
-            <span className="setting-name">Show</span>
-            <Choice label="Show" options={markOptions} value={guideMark} onChange={(guideMark) => set({ guideMark })} />
-            <span className="hint">{markOptions.find((m) => m.value === guideMark)?.hint}</span>
-          </div>
-        )}
-
-        {showFocus && (
+        {settings.mode === 'page' && (timed || guided) && (
           <div className="setting setting-stack">
             <span className="setting-name">Line focus</span>
-            <Choice label="Line focus" options={focusOptions} value={lineFocus} onChange={(lineFocus) => set({ lineFocus })} />
-            <span className="hint">
-              {playControl === 'guide'
-                ? 'Just the line you’re on, or the lines either side of it too'
-                : lineFocus === 'off'
-                  ? 'Black out the lines around the one you’re reading'
-                  : 'The rest of the page shows faintly when you pause'}
-            </span>
+            <Choice label="Line focus" options={FOCUS_OPTIONS} value={lineFocus} onChange={setLineFocus} />
           </div>
         )}
+
+        {guided && <Switch label="Line under" checked={under} onChange={(on) => setGuide(blackout || (!on && pages), on)} />}
 
         <div className="setting">
           <span className="setting-name">Text size</span>
@@ -276,6 +257,12 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
               <Choice label="Word timing" options={TIMINGS} value={settings.wordTiming} onChange={(wordTiming) => set({ wordTiming })} />
               <span className="hint">{TIMINGS.find((t) => t.value === settings.wordTiming)?.hint}</span>
             </div>
+
+            <Switch
+              label="Thin progress bar"
+              checked={settings.progressBar === 'thin'}
+              onChange={(on) => set({ progressBar: on ? 'thin' : 'slider' })}
+            />
 
             <div className="setting">
               <span className="setting-name">Font</span>

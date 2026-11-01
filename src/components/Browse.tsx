@@ -207,7 +207,11 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
     list = fromSite && (searching ? rerank(fromSite.books, search.query, search.sort) : fromSite.books)
     if (fromSite?.hasMore && !page.loading) more = () => setPages((n) => n + 1)
   }
-  const waiting = page.loading || (searching && index.loading && !list?.length)
+  // With matches from the device on screen, the site's first page only adds
+  // to them, so it arrives (or fails) quietly; asking for more shows as usual.
+  const quiet = !!local && pages === 1 && !!list?.length
+  const waiting = (page.loading && !quiet) || (searching && index.loading && !list?.length)
+  const error = quiet ? undefined : page.error
 
   return (
     <>
@@ -294,18 +298,18 @@ function BookList({ books, wpm, onBack, onPick }: { books: BookMeta[]; wpm: numb
       )}
 
       {waiting && <p className="browse-status muted" role="status">{searching ? 'Searching…' : 'Loading books…'}</p>}
-      {page.error && (
+      {error && (
         <div className="browse-status" role="alert">
-          <p>{page.error}</p>
+          <p>{error}</p>
           <button type="button" className="text-button" onClick={page.retry}>
             Try again
           </button>
         </div>
       )}
-      {list && list.length === 0 && !waiting && !page.error && (
+      {list && list.length === 0 && !waiting && !error && (
         <p className="browse-status muted">No books match. Try other words, or another subject.</p>
       )}
-      {more && !page.error && (
+      {more && !error && (
         <button type="button" className="text-button browse-more" onClick={more}>
           Show more
         </button>
@@ -343,6 +347,7 @@ function CatalogCover({ book, large }: { book: Pick<CatalogBook, 'cover' | 'titl
       src={book.cover}
       alt=""
       loading="lazy"
+      decoding="async"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />

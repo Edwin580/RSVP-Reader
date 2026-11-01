@@ -75,6 +75,20 @@ test('searching: as you type, titles first, and slips forgiven', async ({ page }
   await expect(list.getByRole('button')).toHaveText([/The Hound of the Baskervilles/, /The Adventures of Sherlock Holmes/])
 })
 
+test('covers: small ones in the list, and search results show the same image, already loaded', async ({ page }) => {
+  await mockCatalog(page)
+  await page.goto('./')
+  await openBrowse(page)
+  const list = page.getByRole('list', { name: 'Books' })
+  const cover = list.getByRole('button', { name: /Pride and Prejudice/ }).locator('img')
+  // The plain cover for a 48px thumbnail, not the sharper one with four times the pixels.
+  const src = await cover.getAttribute('src')
+  expect(src).toMatch(/\/cover\.jpg$/)
+  await page.getByRole('searchbox', { name: 'Search free books' }).fill('pride')
+  await expect(list.getByRole('button').first()).toContainText('Pride and Prejudice')
+  await expect(cover).toHaveAttribute('src', src!)
+})
+
 test('only what’s looked at is kept: coming back to it fetches nothing', async ({ page }) => {
   const catalog = await mockCatalog(page)
   await page.goto('./')
