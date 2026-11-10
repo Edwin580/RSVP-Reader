@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildBook, isChapterHeading, splitMarkdownChapters, splitParagraphs, splitTextChapters, splitWords, stripMarkdown } from '../text'
+import { buildBook, isChapterHeading, splitMarkdownChapters, splitParagraphs, splitTextChapters, splitWords, stripMarkdown, decodeText } from '../text'
 
 describe('splitWords', () => {
   it('splits on whitespace and em dashes between words', () => {
@@ -81,5 +81,32 @@ describe('buildBook headings', () => {
   it('records heading word ranges', () => {
     const book = buildBook('id', 'T', [{ title: 'Ch 1', paragraphs: ['Chapter One', 'Hello there.'], headings: [0] }])
     expect(book.headings).toEqual([{ start: 0, end: 1 }])
+  })
+})
+
+describe('stripMarkdown underscores', () => {
+  it('keeps underscores inside words and strips them around words', () => {
+    expect(stripMarkdown('Call read_file_name here, _really_ and __truly__.')).toBe('Call read_file_name here, really and truly.')
+    expect(stripMarkdown('_Start_ of a line')).toBe('Start of a line')
+    expect(stripMarkdown('**bold with _em_ inside**')).toBe('bold with em inside')
+  })
+})
+
+describe('decodeText', () => {
+  const bytes = (...b: number[]) => new Uint8Array(b).buffer
+  it('reads UTF-8, with or without a byte-order mark', () => {
+    expect(decodeText(new TextEncoder().encode('café “quoted”').buffer as ArrayBuffer)).toBe('café “quoted”')
+    expect(decodeText(bytes(0xef, 0xbb, 0xbf, 0x68, 0x69))).toBe('hi')
+  })
+  it('reads UTF-16 by its byte-order mark', () => {
+    expect(decodeText(bytes(0xff, 0xfe, 0x68, 0x00, 0xe9, 0x00))).toBe('hé')
+    expect(decodeText(bytes(0xfe, 0xff, 0x00, 0x68, 0x00, 0xe9))).toBe('hé')
+  })
+  it('reads Windows-1252 when the bytes are not UTF-8', () => {
+    // "café" and curly quotes as an older Windows text file stores them.
+    expect(decodeText(bytes(0x93, 0x63, 0x61, 0x66, 0xe9, 0x94))).toBe('“café”')
+  })
+  it('reads an empty file', () => {
+    expect(decodeText(bytes())).toBe('')
   })
 })

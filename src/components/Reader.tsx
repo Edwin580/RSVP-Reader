@@ -451,6 +451,9 @@ export function Reader({
       openPanel('search')
       return
     }
+    // Letters and Space with Ctrl, Cmd or Alt are the browser's own shortcuts
+    // (Ctrl+B, Cmd+K); the arrows use those keys to step by sentence.
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !e.key.startsWith('Arrow')) return
     const t = e.target
     if (t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && e.key.startsWith('Arrow'))) return
     switch (e.key) {
