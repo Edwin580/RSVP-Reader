@@ -31,6 +31,7 @@ describe('timeAgo', () => {
   it('reads naturally', () => {
     expect(timeAgo(now - 5 * 3_600_000, now)).toBe('5 hours ago')
     expect(timeAgo(now - 30 * 3_600_000, now)).toBe('yesterday')
+    expect(timeAgo(now - 23.6 * 3_600_000, now)).toBe('yesterday') // not "24 hours ago"
     expect(timeAgo(now - 4 * 86_400_000, now)).toBe('4 days ago')
     expect(timeAgo(now - 21 * 86_400_000, now)).toBe('3 weeks ago')
     expect(timeAgo(now - 90 * 86_400_000, now)).toBe('3 months ago')

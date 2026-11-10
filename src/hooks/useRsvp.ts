@@ -49,13 +49,11 @@ export function useRsvp(
     const due = clock.current.at + duration
     const timer = window.setTimeout(() => {
       sincePlay.current++
-      if (index >= count - 1) {
+      // A session can end on the book's last word, so that's checked first.
+      const sessionEnd = stopAt !== undefined && index === stopAt
+      if (sessionEnd || index >= count - 1) {
         setPlaying(false)
-        return
-      }
-      if (stopAt !== undefined && index === stopAt) {
-        setPlaying(false)
-        stopped.current?.()
+        if (sessionEnd) stopped.current?.()
         return
       }
       clock.current = { index: index + 1, at: due }

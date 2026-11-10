@@ -640,3 +640,33 @@ test('searching: the site failing to add to the matches found on the device show
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('status')).toHaveCount(0)
 })
+
+test('a session that reaches the end of the book finishes, with its summary (#72)', async ({ page }) => {
+  // Found in review: a session planned "to the end of the book" (or to the
+  // end of the last chapter) stopped on the last word but never finished:
+  // "left in session" stayed up and no summary came.
+  await page.goto('./')
+  await upload(page)
+  await page.locator('.chapter-select').selectOption({ index: 1 })
+  await page.locator('.session-open').click()
+  await expect(page.locator('.session-lands')).toContainText('To the end of the book')
+  await page.getByRole('button', { name: 'Start reading' }).click()
+  await expect(page.getByLabel('Session done')).toContainText('finished the book', { timeout: 15000 })
+  await expect(page.locator('.session-active')).toHaveCount(0)
+})
+
+test('the browser’s own shortcuts (Ctrl+B, Ctrl+K) aren’t taken as the reader’s (#72)', async ({ page }) => {
+  // Found in review: Ctrl+B added a bookmark and Ctrl+K started reading.
+  await page.goto('./')
+  await upload(page)
+  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Control+k')
+  await page.waitForTimeout(200)
+  await expect(page.locator('.icon-button.is-marked')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  // On their own the keys still work, and so does Shift+arrow for a sentence.
+  await page.keyboard.press('b')
+  await expect(page.locator('.icon-button.is-marked')).toHaveCount(1)
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect(page.locator('.word')).toHaveText('Alice')
+})

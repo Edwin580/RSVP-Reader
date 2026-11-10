@@ -20,6 +20,22 @@ export function splitWords(paragraph: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * A text file's bytes as text: UTF-8 normally, UTF-16 when it starts with a
+ * byte-order mark, and Windows-1252 (older plain-text files) when the bytes
+ * aren't valid UTF-8, so accents and curly quotes don't come out as "�".
+ */
+export function decodeText(data: ArrayBuffer): string {
+  const [a, b] = new Uint8Array(data, 0, Math.min(2, data.byteLength))
+  if (a === 0xff && b === 0xfe) return new TextDecoder('utf-16le').decode(data)
+  if (a === 0xfe && b === 0xff) return new TextDecoder('utf-16be').decode(data)
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    return new TextDecoder('windows-1252').decode(data)
+  }
+}
+
 /** Split plain text into paragraphs on blank lines, unwrapping hard-wrapped lines. */
 export function splitParagraphs(text: string): string[] {
   return text
@@ -36,7 +52,9 @@ export function stripMarkdown(md: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/^[ \t]{0,3}(#{1,6}|>|[-*+]|\d+\.)[ \t]+/gm, '')
-    .replace(/(\*\*|__|\*|_|`|~~)(\S(?:.*?\S)?)\1/g, '$2')
+    .replace(/(\*\*|\*|`|~~)(\S(?:.*?\S)?)\1/g, '$2')
+    // Underscores only mark emphasis around a word, not inside one (snake_case_name).
+    .replace(/(^|[^\p{L}\p{N}_])(__|_)(\S(?:.*?\S)?)\2(?![\p{L}\p{N}_])/gmu, '$1$3')
     .replace(/^[ \t]*([-*_][ \t]*){3,}$/gm, '')
 }
 
