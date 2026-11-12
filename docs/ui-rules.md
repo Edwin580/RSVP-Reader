@@ -33,6 +33,17 @@ pop-overs, and `--radius-sheet` (12px) for the top of bottom sheets. Circles
 are `50%`, pills `999px`, and book covers `--radius-cover`.
 *Checked by:* `check:ui`.
 
+**3a. Set like a book, front matter included.** Everything is in Newsreader,
+the controls too; the system font is only the *Sans* choice for a book's
+text. The quiet lines (a book's details, a hint, a note) are italic. A choice
+is a word on a rule, the chosen one in ink and underlined (`.segmented`, the
+shelf tabs, the subjects), not a boxed or pill button. A field is a line to
+write on. Things to do on an empty screen read like a contents page: a name, a
+row of dots (`.leader`), a note. No capitals-and-letterspacing labels, no
+bordered cards around an icon and two lines of text. Filled ink is for the
+one main action on a screen.
+*Checked by:* review.
+
 ## Pop-ups
 
 **4. Every pop-up can be put away the same ways.** Anything with
@@ -99,6 +110,7 @@ each theme.
 Use the existing pieces before making new ones: `.icon-button` for icon
 buttons, `.text-button` for quiet text actions, `.demo-button` for the one
 filled main action on a screen, `Choice` (`.segmented`) for a set of options,
+`.dropzone` with a `.leader` for a contents-page line,
 and the sheet pattern in `SettingsMenu` or `BookmarksPanel` for a pop-up.
 A new setting goes in one of the titled groups in `SettingsMenu` (`Group`), as a row
 like the others: a `Switch` for on/off, a `Choice` for options.
