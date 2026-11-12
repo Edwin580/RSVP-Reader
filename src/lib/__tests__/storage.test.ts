@@ -14,7 +14,7 @@ vi.mock('idb-keyval', () => ({
   setMany: async (writes: [string, unknown][]) => writes.forEach(([k, v]) => kv.set(k, v)),
 }))
 
-const { deleteBook, listBooks, saveBook, setRead } = await import('../storage')
+const { deleteBook, listBooks, loadBook, saveBook, setRead } = await import('../storage')
 
 const book = (id: string, cover?: string): Book => ({ id, title: id, words: ['one', 'two'], paragraphEnds: [], chapters: [], ...(cover && { cover }) })
 
@@ -41,5 +41,22 @@ describe('the library list', () => {
     expect(library.find((b) => b.id === 'a')).toMatchObject({ cover: 'cover-a', readAt: expect.any(Number) })
     await Promise.all([deleteBook('c'), setRead('a', false)])
     expect((await listBooks()).map((b) => [b.id, b.readAt]).sort()).toEqual([['a', undefined], ['b', undefined]])
+  })
+})
+
+describe('a book\'s pictures', () => {
+  const image = { src: 'data:image/jpeg;base64,AAAA', width: 300, height: 200 }
+
+  it('are kept beside the book, come back with it, and go when it does', async () => {
+    await saveBook({ ...book('a'), pictures: [{ at: 0, id: 0 }], images: [image] }, 'a.epub')
+    expect(kv.get('book:a')).not.toHaveProperty('images')
+    expect(await loadBook('a')).toMatchObject({ pictures: [{ at: 0, id: 0 }], images: [image] })
+    await deleteBook('a')
+    expect([...kv.keys()].filter((k) => k.includes(':a'))).toEqual([])
+  })
+
+  it('a book without pictures loads as it is', async () => {
+    await saveBook(book('b'), 'b.txt')
+    expect(await loadBook('b')).not.toHaveProperty('images')
   })
 })

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import JSZip from 'jszip'
+import { crc32, deflateSync } from 'node:zlib'
 import { mockCatalog, openBrowse } from './catalog.ts'
 import { upload } from './helpers.ts'
 
@@ -699,4 +700,87 @@ test('phone: with books in the library, the shelf starts in the top half of the 
   const add = (await page.getByRole('button', { name: /Add a book/ }).boundingBox())!
   const find = (await page.getByRole('button', { name: /Find a free book/ }).boundingBox())!
   expect(Math.abs(add.y - find.y)).toBeLessThan(2)
+})
+
+/** A plain grey PNG of this size, for a picture inside a book. */
+function png(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data])
+    const out = Buffer.alloc(body.length + 8)
+    out.writeUInt32BE(data.length, 0)
+    body.copy(out, 4)
+    out.writeUInt32BE(crc32(body), body.length + 4)
+    return out
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(width, 0)
+  header.writeUInt32BE(height, 4)
+  header.set([8, 0, 0, 0, 0], 8) // 8-bit greyscale
+  const rows = Buffer.alloc((width + 1) * height, 0x99)
+  for (let y = 0; y < height; y++) rows[y * (width + 1)] = 0
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', header), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))])
+}
+
+test('pictures inside a book are shown where they stand, in both modes, and are still there after a reload (#73)', async ({ page }) => {
+  // Reported as "images don't persist for books": an EPUB's illustrations
+  // were dropped when it was added, so the book was text only.
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'OEBPS/content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Island</dc:title></metadata><manifest><item id="c1" href="text/c1.xhtml" media-type="application/xhtml+xml"/><item id="map" href="images/map.png" media-type="image/png"/></manifest><spine><itemref idref="c1"/></spine></package>',
+  )
+  zip.file(
+    'OEBPS/text/c1.xhtml',
+    '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>One</h1><p>The captain unrolled the chart.</p><figure><img src="../images/map.png" alt="A map of the island"/></figure><p>Here, he said, is where we land.</p></body></html>',
+  )
+  zip.file('OEBPS/images/map.png', png(300, 200))
+  await page.goto('./')
+  await page
+    .locator('input[type=file]')
+    .first()
+    .setInputFiles({ name: 'island.epub', mimeType: 'application/epub+zip', buffer: await zip.generateAsync({ type: 'nodebuffer' }) })
+  await expect(page.locator('.reader')).toBeVisible()
+
+  // Word mode: reading stops at the picture and shows it; playing again carries on past it.
+  const picture = page.getByRole('img', { name: 'A map of the island' })
+  await expect(picture).toBeHidden()
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(picture).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  await expect(page.locator('.context .current')).toHaveText(/Here,/)
+  await expect(picture).toHaveJSProperty('naturalWidth', 300)
+  await page.getByRole('button', { name: 'Play', exact: true }).click()
+  await expect(picture).toBeHidden()
+  await page.getByRole('button', { name: 'Pause', exact: true }).click()
+
+  // Page mode: on the page, above the paragraph it comes before, and all of it in view.
+  await openSettings(page)
+  await page.getByRole('radio', { name: 'Page' }).click()
+  await closeSettings(page)
+  const onPage = page.locator('.page > .page-text').getByRole('img', { name: 'A map of the island' })
+  // (The page opens at the paragraph reading stopped in, with its picture above it.)
+  const between = async () => {
+    const box = (await onPage.boundingBox())!
+    const whole = (await page.locator('.page').boundingBox())!
+    const after = (await page.locator('.page > .page-text [data-i]', { hasText: 'Here,' }).boundingBox())!
+    expect(box.y).toBeGreaterThanOrEqual(whole.y - 1)
+    expect(box.y + box.height).toBeLessThanOrEqual(after.y + 1)
+    expect(box.x).toBeGreaterThanOrEqual(whole.x - 1)
+    expect(box.x + box.width).toBeLessThanOrEqual(whole.x + whole.width + 1)
+    expect(Math.round((box.width / box.height) * 10)).toBe(15) // 300 × 200, not squashed
+  }
+  await expect(onPage).toBeVisible()
+  await between()
+
+  // Kept with the book: there again after a reload.
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(onPage).toBeVisible()
+  await between()
 })

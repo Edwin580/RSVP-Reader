@@ -1,6 +1,6 @@
 import type { AssembleRequest } from '../assemble'
 import { assembleInBackground } from '../parseClient'
-import type { Book } from '../types'
+import type { Book, PictureImage } from '../types'
 
 export const ACCEPTED_EXTENSIONS = ['.epub', '.pdf', '.txt', '.md', '.markdown']
 
@@ -28,11 +28,13 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
   // heavy work of splitting it into words happens in a background worker.
   let request: AssembleRequest
   let cover: string | undefined
+  let images: PictureImage[] = []
   switch (ext) {
     case '.epub': {
       const { parseEpub } = await import('./epub')
       const parsed = await parseEpub(data)
       cover = parsed.cover
+      images = parsed.images
       request = { kind: 'sections', id, title: parsed.title || fallbackTitle, sections: parsed.sections }
       break
     }
@@ -54,5 +56,5 @@ export async function parseFile(file: File, onProgress?: (fraction: number) => v
 
   const book = await assembleInBackground(request)
   if (book.words.length === 0) throw new Error('There’s no readable text in it.')
-  return cover ? { ...book, cover } : book
+  return { ...book, ...(cover && { cover }), ...(images.length > 0 && { images }) }
 }

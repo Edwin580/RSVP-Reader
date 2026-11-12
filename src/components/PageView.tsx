@@ -1,9 +1,10 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useGuideLine } from '../hooks/useGuideLine'
 import { DOUBLE_TAP_MS, hasSelection, SELECT_HOLD_MS, wordAtPoint } from '../hooks/usePressGestures'
 import { draggedLine, groupLines, lineAt, lineOf, lineSpacing, type Line } from '../lib/guide'
-import { nextChapterStart, pageAnchor, pageBreak, paragraphsBetween } from '../lib/pages'
+import { nextChapterStart, pageAnchor, pageBreak } from '../lib/pages'
 import { isSentenceEnd } from '../lib/rsvp'
+import { pageText, type PicturesAt } from './PageText'
 
 interface Props {
   words: string[]
@@ -12,6 +13,8 @@ interface Props {
   chapterStarts: number[]
   /** Word ranges set as headings (chapter titles). */
   headings: { start: number; end: number }[]
+  /** The book's pictures, shown where they stand in the text. */
+  pictures?: PicturesAt
   index: number
   playing: boolean
   scale: number
@@ -85,6 +88,7 @@ export function PageView({
   paragraphEnds,
   chapterStarts,
   headings,
+  pictures,
   index,
   playing,
   scale,
@@ -351,20 +355,8 @@ export function PageView({
   // Set the page lower only when it opens with a title, like a chapter's first page.
   const opensChapter = headingStarts.has(page.start)
   const content = useMemo(
-    () =>
-      paragraphsBetween(ends, page.start, last).map((para) => {
-        const Tag = headingStarts.has(para[0]) ? 'h2' : 'p'
-        return (
-          <Tag key={para[0]} className={Tag === 'h2' ? 'page-heading' : undefined}>
-            {para.map((i) => (
-              <Fragment key={i}>
-                <span data-i={i}>{words[i]}</span>{' '}
-              </Fragment>
-            ))}
-          </Tag>
-        )
-      }),
-    [ends, headingStarts, page.start, last, words],
+    () => pageText(words, ends, headingStarts, page.start, last, pictures),
+    [ends, headingStarts, page.start, last, words, pictures],
   )
 
   // Move the highlight and the line along with the reading. Both cover the

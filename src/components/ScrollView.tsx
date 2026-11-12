@@ -1,8 +1,8 @@
-import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useGuideLine } from '../hooks/useGuideLine'
 import { DOUBLE_TAP_MS, hasSelection, SELECT_HOLD_MS, wordAtPoint } from '../hooks/usePressGestures'
 import { focusRange, groupLines, lineAt, lineOf, lineSpacing, windowAround, type Line } from '../lib/guide'
-import { paragraphsBetween } from '../lib/pages'
+import { pageText, type PicturesAt } from './PageText'
 import type { PageNav } from './PageView'
 
 interface Props {
@@ -10,6 +10,8 @@ interface Props {
   paragraphEnds: number[]
   /** Word ranges set as headings (chapter titles). */
   headings: { start: number; end: number }[]
+  /** The book's pictures, shown where they stand in the text. */
+  pictures?: PicturesAt
   index: number
   scale: number
   /** The reading font setting; lines are re-measured when it changes. */
@@ -53,7 +55,7 @@ const GLIDE_MS = 300
  * itself never scrolls (Safari's bars), and only a stretch of the book
  * around the reading position is laid out, moved along as reading nears its ends.
  */
-export function ScrollView({ words, paragraphEnds, headings, index, scale, font, focusLines, line = false, onSeek, onSelectWord, navRef }: Props) {
+export function ScrollView({ words, paragraphEnds, headings, pictures, index, scale, font, focusLines, line = false, onSeek, onSelectWord, navRef }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
   const guideLine = useRef<HTMLDivElement>(null)
@@ -72,20 +74,8 @@ export function ScrollView({ words, paragraphEnds, headings, index, scale, font,
   const selectionClick = useRef(false)
 
   const content = useMemo(
-    () =>
-      paragraphsBetween(ends, stretch.from, stretch.to).map((para) => {
-        const Tag = headingStarts.has(para[0]) ? 'h2' : 'p'
-        return (
-          <Tag key={para[0]} className={Tag === 'h2' ? 'page-heading' : undefined}>
-            {para.map((i) => (
-              <Fragment key={i}>
-                <span data-i={i}>{words[i]}</span>{' '}
-              </Fragment>
-            ))}
-          </Tag>
-        )
-      }),
-    [ends, headingStarts, stretch, words],
+    () => pageText(words, ends, headingStarts, stretch.from, stretch.to, pictures),
+    [ends, headingStarts, stretch, words, pictures],
   )
 
   const height = () => box.current?.clientHeight ?? 0

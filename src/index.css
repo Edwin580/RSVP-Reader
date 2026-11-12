@@ -1048,6 +1048,13 @@ h1, h2, p { margin: 0; }
   -webkit-tap-highlight-color: transparent;
 }
 .page-text p { margin: 0 0 0.9em; }
+/* A picture from the book, where it stands in the text: at most about half
+   the screen tall, so there's always room for words under it. On white, as
+   it was drawn for paper, in every theme. */
+.page-picture { --picture-max: min(45dvh, 30rem); display: flex; justify-content: center; margin: 0 0 0.9em; }
+.page-picture img { display: block; height: auto; border-radius: var(--radius-sm); }
+/* Word mode stops at a picture and shows it above the words around it. */
+.context .page-picture { --picture-max: min(30dvh, 20rem); animation: fade-in 0.3s ease; }
 .page-text { position: relative; } /* positioned so text paints above the marker */
 .page.is-measuring .page-text { visibility: hidden; }
 

@@ -16,6 +16,26 @@ export interface Book {
   headings?: { start: number; end: number }[]
   /** Cover thumbnail (data URL) found while parsing; saved with the library entry, not the book. */
   cover?: string
+  /** Where the book's pictures go. Absent in books without any, or saved before pictures were kept. */
+  pictures?: Picture[]
+  /** The pictures themselves, by `Picture.id`; saved beside the book, not in it, so the book stays light. */
+  images?: PictureImage[]
+}
+
+/** A picture in the text (an illustration, a map), shown before the paragraph that starts at word `at`. */
+export interface Picture {
+  /** The first word of the paragraph after it (the book's length for one at the very end). */
+  at: number
+  /** Its place in the book's `images`. */
+  id: number
+}
+
+export interface PictureImage {
+  /** A data URL, scaled down to suit a screen. */
+  src: string
+  width: number
+  height: number
+  alt?: string
 }
 
 export interface BookMeta {

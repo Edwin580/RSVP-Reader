@@ -37,45 +37,66 @@ export function coverPageImage(page: Document): string | undefined {
 }
 
 /** A small JPEG data URL of an image, or undefined if it can't be decoded. */
-export async function thumbnail(image: Blob): Promise<string | undefined> {
+export const thumbnail = async (image: Blob): Promise<string | undefined> => (await scaled(image, THUMB_WIDTH, MAX_ASPECT))?.src
+
+/** Width of a stored picture from inside a book: sharp across a phone, light enough to keep a book's worth. */
+const PICTURE_WIDTH = 900
+/** Smaller than this either way is a spacer or a bullet, not a picture. */
+const MIN_PICTURE = 24
+
+/** A picture from inside a book, scaled for the screen, or undefined if it's too small to be one or can't be decoded. */
+export async function picture(image: Blob): Promise<Scaled | undefined> {
+  const scaledDown = await scaled(image, PICTURE_WIDTH)
+  return scaledDown && Math.min(scaledDown.width, scaledDown.height) >= MIN_PICTURE ? scaledDown : undefined
+}
+
+interface Scaled {
+  src: string
+  width: number
+  height: number
+}
+
+/** An image as a JPEG data URL no wider than `maxWidth`, cropped from the top if taller than `maxAspect` (height / width). */
+async function scaled(image: Blob, maxWidth: number, maxAspect = Infinity): Promise<Scaled | undefined> {
+  const draw = (source: CanvasImageSource, width: number, height: number) => {
+    const canvas = drawScaled(source, width, height, maxWidth, maxAspect)
+    return canvas && { src: canvas.toDataURL('image/jpeg', 0.82), width: canvas.width, height: canvas.height }
+  }
   try {
     const bitmap = await createImageBitmap(image)
-    const canvas = drawScaled(bitmap, bitmap.width, bitmap.height)
+    const result = draw(bitmap, bitmap.width, bitmap.height)
     bitmap.close()
-    return canvas?.toDataURL('image/jpeg', 0.82)
+    return result
   } catch {
-    // Not every browser decodes every image this way (an SVG cover, an older
+    // Not every browser decodes every image this way (an SVG, an older
     // Safari): an <img> reads anything the browser can show.
-    return viaImage(image)
+    const url = URL.createObjectURL(image)
+    try {
+      const img = new Image()
+      img.src = url
+      await img.decode()
+      return draw(img, img.naturalWidth, img.naturalHeight)
+    } catch {
+      return undefined
+    } finally {
+      URL.revokeObjectURL(url)
+    }
   }
 }
 
-async function viaImage(image: Blob): Promise<string | undefined> {
-  const url = URL.createObjectURL(image)
-  try {
-    const img = new Image()
-    img.src = url
-    await img.decode()
-    return drawScaled(img, img.naturalWidth, img.naturalHeight)?.toDataURL('image/jpeg', 0.82)
-  } catch {
-    return undefined
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-}
-
-/** Draw `source` into a thumbnail-sized canvas (cropping very tall images from the top). */
-export function drawScaled(source: CanvasImageSource, width: number, height: number): HTMLCanvasElement | undefined {
+/** Draw `source` into a canvas no wider than `maxWidth` (cropping very tall images from the top), on white: a JPEG has no see-through. */
+export function drawScaled(source: CanvasImageSource, width: number, height: number, maxWidth = THUMB_WIDTH, maxAspect = MAX_ASPECT): HTMLCanvasElement | undefined {
   if (!width || !height) return undefined
-  const scale = Math.min(1, THUMB_WIDTH / width)
-  const w = Math.round(width * scale)
-  const h = Math.round(Math.min(height, width * MAX_ASPECT) * scale)
+  const scale = Math.min(1, maxWidth / width)
+  const kept = Math.min(height, width * maxAspect)
   const canvas = document.createElement('canvas')
-  canvas.width = w
-  canvas.height = h
+  canvas.width = Math.round(width * scale)
+  canvas.height = Math.round(kept * scale)
   const ctx = canvas.getContext('2d')
   if (!ctx) return undefined
-  ctx.drawImage(source, 0, 0, width, Math.min(height, width * MAX_ASPECT), 0, 0, w, h)
+  ctx.fillStyle = 'white' // ui-allow: the paper a picture with a clear background was drawn for
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.drawImage(source, 0, 0, width, kept, 0, 0, canvas.width, canvas.height)
   return canvas
 }
 

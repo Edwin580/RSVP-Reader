@@ -2,7 +2,7 @@ import { createStore, del, entries, get, set, setMany, update } from 'idb-keyval
 import { storageName } from './preview'
 import { WORD_TIMINGS, type WordTiming } from './rsvp'
 import { addReading, EMPTY_STATS, type ReadingStats } from './stats'
-import type { Book, BookMeta, Bookmark, Progress } from './types'
+import type { Book, BookMeta, Bookmark, PictureImage, Progress } from './types'
 
 /**
  * Local-first persistence in IndexedDB. Keeping all access behind these
@@ -15,6 +15,8 @@ const LIBRARY_KEY = 'library'
 const bookKey = (id: string) => `book:${id}`
 const progressKey = (id: string) => `progress:${id}`
 const bookmarksKey = (id: string) => `bookmarks:${id}`
+/** A book's pictures, beside the book: they're the bulk of it, and only the reader needs them. */
+const picturesKey = (id: string) => `pictures:${id}`
 
 export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
@@ -28,8 +30,9 @@ export async function listBooks(): Promise<BookMeta[]> {
 const changeLibrary = (change: (library: BookMeta[]) => BookMeta[]) =>
   update<BookMeta[]>(LIBRARY_KEY, (library) => change(library ?? []), store)
 
-export async function saveBook({ cover, ...book }: Book, fileName: string): Promise<BookMeta> {
+export async function saveBook({ cover, images, ...book }: Book, fileName: string): Promise<BookMeta> {
   await set(bookKey(book.id), book, store)
+  if (images) await set(picturesKey(book.id), images, store)
   let meta!: BookMeta
   await changeLibrary((library) => {
     const existing = library.find((b) => b.id === book.id)
@@ -61,8 +64,10 @@ export function setRead(id: string, read: boolean): Promise<void> {
   )
 }
 
-export function loadBook(id: string): Promise<Book | undefined> {
-  return get<Book>(bookKey(id), store)
+/** A book, with its pictures. */
+export async function loadBook(id: string): Promise<Book | undefined> {
+  const [book, images] = await Promise.all([get<Book>(bookKey(id), store), get<PictureImage[]>(picturesKey(id), store)])
+  return book && images ? { ...book, images } : book
 }
 
 export async function deleteBook(id: string): Promise<void> {
@@ -70,6 +75,7 @@ export async function deleteBook(id: string): Promise<void> {
   await del(bookKey(id), store)
   await del(progressKey(id), store)
   await del(bookmarksKey(id), store)
+  await del(picturesKey(id), store)
 }
 
 export function loadProgress(id: string): Promise<Progress | undefined> {

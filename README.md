@@ -36,6 +36,7 @@ Chapter (formerly RSVP Reader) is a simple speed-reading app that uses RSVP (Rap
 - **People and places so far**: open search before typing and Chapter lists the characters and places you've met, most mentioned first, with no spoilers: only names that have already appeared, counted up to where you are. Tap one to see where you first met them and their latest mention, and tap either to jump there. Handy when a name comes back after 200 pages.
 - **Search**: finds whole words (never fragments: *cat* doesn't match *education*), different forms of a word (*run* finds *running*), and hyphenated words both ways (*daisy chain* and *boathouse* find *daisy-chain* and *boat-house*); ignores case, punctuation and accents. Results are grouped into exact **matches** of your words in order and **related passages** where all the important words appear close together. The last word completes as you type (*rabb* → *rabbit*), misspellings fall back to the closest word in the book with a note (*wite rabit* → *white rabbit*), "quotes" restrict to the exact phrase, and a clear message appears when nothing matches. Indexing runs in a background Web Worker when a book opens; searches take a few milliseconds even on long books.
 - **Reading stats**: a quiet line under the library title ("12 min today · 4-day streak") opens a small card with the last year as a calendar of squares, like a GitHub contribution graph (a column per week, each day shaded by how long you read, in your focus colour; tap a day for its minutes and words), then time read this week, your real average speed and streak, and all the time and words you've read. Time counts while the words are moving, and in Guide and Free while you're moving on through the book yourself (not time away or flicking through); the demo isn't counted, and nothing shows until you've read in the last week, so it never nags.
+- **Pictures**: an EPUB's illustrations, maps and title-page art are kept with the book (scaled down to suit a screen, and included in backups) and shown where they stand in the text. In page mode, Guide and Free they're on the page, above the paragraph they come before, never taller than about half the screen; when the words are being paced, they wait a moment under a picture. In word mode reading stops at a picture and shows it under the word; play again to carry on. (Books added before this have no pictures: add the file again to pick them up. PDFs, text and Markdown files are still text only.)
 - **Book covers**: the library shows each EPUB's cover image and a PDF's first page as its cover; other books get a plain cloth cover with the title. An EPUB that names no cover image uses its first page when that's a picture. A cover is kept when the book is added again, and restoring a backup fills in covers missing on this device. (Books added before covers were supported get the plain cover; add the file again to pick up its cover.)
 - **Works offline**: after your first visit the whole app is cached on the device, so it opens and reads without a connection (handy once it's added to your Home Screen). When you're online, new versions load as soon as they're deployed.
 - **Local library and progress**: books and reading positions are saved in IndexedDB. Uploading the same file again finds your saved progress, because books are identified by a hash of their contents. When you reopen a book, reading resumes at the start of the sentence you were on. The app asks the browser to keep this data permanently (Safari otherwise clears site data that goes unused for about a week).
@@ -91,7 +92,7 @@ src/
     catalog.ts         free books from Standard Ebooks: reading its catalog pages, previews, downloads
     catalogStore.ts    keeps what's been looked at in the catalog (results, book pages, previews) in IndexedDB
     catalogIndex.ts    searching titles and authors on the device: as you type, forgiving slips
-    covers.ts          finding EPUB cover images and making cover thumbnails
+    covers.ts          finding EPUB cover images, making cover thumbnails and scaling a book's pictures
     analysis.ts        a book's names and smart-pacing extras (worked out in the search worker)
     names.ts           finding people and places in a book's text
     session.ts         planning timed sessions that end at a natural break
@@ -113,7 +114,7 @@ src/
     storage.ts         IndexedDB library + progress, localStorage settings
   hooks/useRsvp.ts     playback engine
   workers/             search.worker.ts, parse.worker.ts
-  components/          Library, Browse, ReadingStats, Reader, SessionMenu, BookmarksPanel, PageView, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
+  components/          Library, Browse, ReadingStats, Reader, SessionMenu, BookmarksPanel, PageView, PageText, SearchPanel, SettingsMenu, WordDisplay, Icon, Toast
 ```
 
 ## Roadmap

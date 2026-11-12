@@ -13,6 +13,7 @@ import { effectiveGuideMark, type Settings } from '../lib/storage'
 import type { Book, Bookmark } from '../lib/types'
 import { BookmarksPanel } from './BookmarksPanel'
 import { Icon } from './Icon'
+import { BookPicture, type PicturesAt } from './PageText'
 import { PageView, type PageNav } from './PageView'
 import { Scrubber } from './Scrubber'
 import { ScrollView } from './ScrollView'
@@ -45,6 +46,8 @@ const MAX_WPM = 1200
 const CONTEXT_WORDS = 40
 /** Controls fade out after this long without pointer or key activity while playing. */
 const IDLE_MS = 2000
+/** Page mode: how long the words wait under a picture, to look at it (ms). */
+const PICTURE_MS = 2500
 /** Extra time on the first word of a new page in page mode, covering the turn animation. */
 const PAGE_TURN_MS = 450
 /** Extra time on the first word of each line in page mode, as a fraction of a word. */
@@ -105,6 +108,15 @@ export function Reader({
     return set
   }, [headings])
   const chapterStarts = useMemo(() => chapters.map((c) => c.start), [chapters])
+  // The book's pictures, by the word each comes before.
+  const picturesAt = useMemo(() => {
+    const at: PicturesAt = new Map()
+    for (const p of book.pictures ?? []) {
+      const image = book.images?.[p.id]
+      if (image) at.set(p.at, [...(at.get(p.at) ?? []), image])
+    }
+    return at
+  }, [book.pictures, book.images])
   // Page mode gives the eye time to travel: the first word of a new page (the
   // word after the visible page's end) waits for the turn, and the first word
   // of each line gets a beat for the sweep back to the left margin.
@@ -113,10 +125,12 @@ export function Reader({
   const pageDelay = useCallback(
     (i: number) => {
       if (mode !== 'page') return 0
+      // A picture on the page: the words wait a moment below it.
+      if (picturesAt.has(i)) return PICTURE_MS
       if (i === pageEnd.current + 1) return PAGE_TURN_MS
       return lineStarts.current.has(i) ? LINE_RETURN * (60000 / wpm) : 0
     },
-    [mode, wpm],
+    [mode, wpm, picturesAt],
   )
   const onPage = useCallback((_start: number, end: number, lines: Set<number>) => {
     pageEnd.current = end
@@ -156,6 +170,17 @@ export function Reader({
     session?.end,
     finishSession,
   )
+
+  // Word mode has nowhere to put a picture while the words run, so reading
+  // stops at one and shows it; playing again carries on. One that's on
+  // screen already (paused there, or the book opened there) doesn't stop it.
+  const pictureSeen = useRef(-1)
+  useEffect(() => {
+    if (!picturesAt.has(index)) pictureSeen.current = -1
+    else if (!playing) pictureSeen.current = index
+    else if (mode === 'word' && pictureSeen.current !== index) pause()
+  }, [index, playing, mode, picturesAt, pause])
+  const picturesHere = mode === 'word' && !playing ? picturesAt.get(index) : undefined
 
   // Coming back after a while: a short "Previously…" of the last few
   // sentences, until reading carries on or it's dismissed.
@@ -689,6 +714,7 @@ export function Reader({
               words={words}
               paragraphEnds={book.paragraphEnds}
               headings={headings}
+              pictures={picturesAt}
               index={index}
               scale={textScale}
               font={font}
@@ -704,6 +730,7 @@ export function Reader({
               paragraphEnds={book.paragraphEnds}
               chapterStarts={chapterStarts}
               headings={headings}
+              pictures={picturesAt}
               index={index}
               playing={playing}
               scale={textScale}
@@ -742,8 +769,9 @@ export function Reader({
           {glancing && <Glance words={words} index={index} headings={headingWords} />}
           {showRecap && recapCard}
           {doneCard}
-          <div className="context" aria-hidden={playing}>
+          <div className={`context${picturesHere ? ' has-picture' : ''}`} aria-hidden={playing}>
             {/* A recap or session card takes this space; the text would show round its edges. */}
+            {!showRecap && !(sessionDone && !playing) && picturesHere?.map((image, k) => <BookPicture key={k} image={image} />)}
             {context && !showRecap && !(sessionDone && !playing) && (
               <p>
                 {context.map(({ w, i }, k) => (
