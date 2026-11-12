@@ -641,7 +641,7 @@ test('searching: the site failing to add to the matches found on the device show
   await expect(page.getByRole('status')).toHaveCount(0)
 })
 
-test('a book whose cover is only its first page gets that cover, and keeps it after a reload (#72)', async ({ page }) => {
+test('a book whose cover is only its first page gets that cover, and keeps it after a reload (#73)', async ({ page }) => {
   // Reported as "images don't persist for books". An EPUB that names no cover
   // image (many older ones don't) showed the plain cloth cover, though its
   // first page is the cover picture.
@@ -671,7 +671,7 @@ test('a book whose cover is only its first page gets that cover, and keeps it af
   await expect(cover).toHaveAttribute('src', /^data:image\/jpeg/)
 })
 
-test('phone: the time left sits to the left of the speed, each line unbroken (#72)', async ({ page }, testInfo) => {
+test('phone: the time left sits to the left of the speed, each line unbroken (#73)', async ({ page }, testInfo) => {
   // Under the play buttons the speed took the wide column and the time left
   // the narrow one, where it broke into three lines with its clock on a line
   // of its own.
@@ -686,7 +686,7 @@ test('phone: the time left sits to the left of the speed, each line unbroken (#7
   expect(lines).toBeLessThan(2.9)
 })
 
-test('phone: with books in the library, the shelf starts in the top half of the screen (#72)', async ({ page }, testInfo) => {
+test('phone: with books in the library, the shelf starts in the top half of the screen (#73)', async ({ page }, testInfo) => {
   // The two full-size "add" cards and the introduction pushed the books to
   // the bottom of a phone screen.
   test.skip(testInfo.project.name !== 'phone', 'The phone layout')
