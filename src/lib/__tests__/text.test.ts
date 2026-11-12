@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { buildBook, isChapterHeading, splitMarkdownChapters, splitParagraphs, splitTextChapters, splitWords, stripMarkdown } from '../text'
+import { buildBook, pictureMark, isChapterHeading, splitMarkdownChapters, splitParagraphs, splitTextChapters, splitWords, stripMarkdown } from '../text'
+import { removePageArtifacts } from '../pageArtifacts'
 
 describe('splitWords', () => {
   it('splits on whitespace and em dashes between words', () => {
@@ -81,5 +82,40 @@ describe('buildBook headings', () => {
   it('records heading word ranges', () => {
     const book = buildBook('id', 'T', [{ title: 'Ch 1', paragraphs: ['Chapter One', 'Hello there.'], headings: [0] }])
     expect(book.headings).toEqual([{ start: 0, end: 1 }])
+  })
+})
+
+describe('buildBook pictures', () => {
+  it('places a picture before the paragraph it stood before, and leaves its mark out of the words', () => {
+    const book = buildBook('id', 'T', [
+      { title: 'One', paragraphs: [pictureMark(0), 'The map of the island.', pictureMark(1), 'They set sail.', pictureMark(2)] },
+    ])
+    expect(book.words).toEqual(['The', 'map', 'of', 'the', 'island.', 'They', 'set', 'sail.'])
+    expect(book.paragraphEnds).toEqual([4, 7])
+    expect(book.pictures).toEqual([
+      { at: 0, id: 0 },
+      { at: 5, id: 1 },
+      { at: 8, id: 2 }, // after the last word
+    ])
+  })
+
+  it('moves a picture caught up inside a paragraph to after it', () => {
+    const book = buildBook('id', 'T', [{ paragraphs: [`The storm came ${pictureMark(3)} at dusk.`, 'Morning.'] }])
+    expect(book.words.join(' ')).toBe('The storm came at dusk. Morning.')
+    expect(book.pictures).toEqual([{ at: 5, id: 3 }])
+  })
+
+  it('keeps pictures through the clean-up of page numbers and broken paragraphs', () => {
+    const sections = removePageArtifacts([
+      { title: 'One', paragraphs: ['The ship left the harbour and', pictureMark(0), 'sailed west for a week.', pictureMark(1), 'Land.'] },
+    ])
+    const book = buildBook('id', 'T', sections)
+    expect(book.words.join(' ')).toBe('The ship left the harbour and sailed west for a week. Land.')
+    expect(book.pictures?.map((p) => p.id)).toEqual([0, 1])
+    for (const p of book.pictures!) expect([0, ...book.paragraphEnds.map((e) => e + 1)]).toContain(p.at)
+  })
+
+  it('has no pictures field for a book without any', () => {
+    expect(buildBook('id', 'T', [{ paragraphs: ['Words only.'] }]).pictures).toBeUndefined()
   })
 })

@@ -133,10 +133,21 @@ function Switch({ label, checked, onChange }: { label: string; checked: boolean;
   )
 }
 
+/** A titled set of settings, each on its own ruled row. */
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="settings-group" aria-label={title}>
+      <h2 className="settings-heading">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 /**
- * The Aa menu. Up front, what people change while reading: mode, how to read
- * (and the options that go with it), text size and theme. Everything else
- * waits behind "More settings".
+ * The Aa menu, in the order you'd reach for it: how you read, what marks your
+ * place on a page (only when something does), then how it looks. What's set
+ * once (font, colour, timing) waits behind "More settings", so the sheet
+ * stays short enough to see the page change behind it.
  */
 export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
@@ -196,54 +207,56 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
       <div className={`popover-backdrop is-clear${closing ? ' is-closing' : ''}`} aria-hidden="true" onClick={onClose} />
       <div ref={sheet} className={`popover settings-menu${closing ? ' is-closing' : ''}`} role="dialog" aria-label="Reading settings">
         <div className="sheet-handle" aria-hidden="true" />
-        <div className="setting">
-          <span className="setting-name">Mode</span>
-          <Choice label="Reading mode" options={MODES} value={settings.mode} onChange={(mode) => set({ mode })} />
-        </div>
-
-        <div className="setting setting-stack">
-          <span className="setting-name">Play with</span>
-          <Choice label="Play with" options={playOptions} value={playControl} onChange={(playControl) => set({ playControl })} />
-          <span className="hint">{playOptions.find((p) => p.value === playControl)?.hint}</span>
-        </div>
-
-        {settings.mode === 'page' && timed && (
-          <>
-            <Switch label="Highlight word" checked={highlight} onChange={(on) => setPageGuide(on, pacer)} />
-            <Switch label="Pacer line" checked={pacer} onChange={(on) => setPageGuide(highlight, on)} />
-          </>
-        )}
-
-        {guided && (
-          <Switch label="Continuous scroll" checked={!pages} onChange={(on) => set({ guideLayout: on ? 'scroll' : 'pages' })} />
-        )}
-
-        {settings.mode === 'page' && (timed || guided) && (
+        <Group title="Reading">
+          <div className="setting">
+            <span className="setting-name">Mode</span>
+            <Choice label="Reading mode" options={MODES} value={settings.mode} onChange={(mode) => set({ mode })} />
+          </div>
           <div className="setting setting-stack">
-            <span className="setting-name">Line focus</span>
-            <Choice label="Line focus" options={FOCUS_OPTIONS} value={lineFocus} onChange={setLineFocus} />
+            <span className="setting-name">Play with</span>
+            <Choice label="Play with" options={playOptions} value={playControl} onChange={(playControl) => set({ playControl })} />
+            <span className="hint">{playOptions.find((p) => p.value === playControl)?.hint}</span>
           </div>
+        </Group>
+
+        {/* What marks your place on a page; free reading marks nothing. */}
+        {settings.mode === 'page' && (timed || guided) && (
+          <Group title="On the page">
+            {timed && (
+              <>
+                <Switch label="Highlight word" checked={highlight} onChange={(on) => setPageGuide(on, pacer)} />
+                <Switch label="Pacer line" checked={pacer} onChange={(on) => setPageGuide(highlight, on)} />
+              </>
+            )}
+            {guided && (
+              <Switch label="Continuous scroll" checked={!pages} onChange={(on) => set({ guideLayout: on ? 'scroll' : 'pages' })} />
+            )}
+            <div className="setting setting-stack">
+              <span className="setting-name">Line focus</span>
+              <Choice label="Line focus" options={FOCUS_OPTIONS} value={lineFocus} onChange={setLineFocus} />
+            </div>
+            {guided && <Switch label="Line under" checked={under} onChange={(on) => setGuide(blackout || (!on && pages), on)} />}
+          </Group>
         )}
 
-        {guided && <Switch label="Line under" checked={under} onChange={(on) => setGuide(blackout || (!on && pages), on)} />}
-
-        <div className="setting">
-          <span className="setting-name">Text size</span>
-          <div className="stepper">
-            <button type="button" className="icon-button" onClick={() => setScale(settings.textScale - SCALE_STEP)} aria-label="Smaller text">
-              <span style={{ fontSize: '0.8em' }}>A</span>
-            </button>
-            <span className="stepper-value">{Math.round(settings.textScale * 100)}%</span>
-            <button type="button" className="icon-button" onClick={() => setScale(settings.textScale + SCALE_STEP)} aria-label="Larger text">
-              <span style={{ fontSize: '1.2em' }}>A</span>
-            </button>
+        <Group title="Appearance">
+          <div className="setting setting-stack">
+            <span className="setting-name">Theme</span>
+            <Choice label="Theme" options={THEME_OPTIONS} value={settings.theme} onChange={(theme) => set({ theme })} />
           </div>
-        </div>
-
-        <div className="setting setting-stack">
-          <span className="setting-name">Theme</span>
-          <Choice label="Theme" options={THEME_OPTIONS} value={settings.theme} onChange={(theme) => set({ theme })} />
-        </div>
+          <div className="setting">
+            <span className="setting-name">Text size</span>
+            <div className="stepper">
+              <button type="button" className="icon-button" onClick={() => setScale(settings.textScale - SCALE_STEP)} aria-label="Smaller text">
+                <span style={{ fontSize: '0.8em' }}>A</span>
+              </button>
+              <span className="stepper-value">{Math.round(settings.textScale * 100)}%</span>
+              <button type="button" className="icon-button" onClick={() => setScale(settings.textScale + SCALE_STEP)} aria-label="Larger text">
+                <span style={{ fontSize: '1.2em' }}>A</span>
+              </button>
+            </div>
+          </div>
+        </Group>
 
         <button type="button" className="more-toggle" aria-expanded={more} onClick={toggleMore}>
           More settings
@@ -252,59 +265,58 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
 
         {more && (
           <div className="more-settings">
-            <div className="setting setting-stack">
-              <span className="setting-name">Word timing</span>
-              <Choice label="Word timing" options={TIMINGS} value={settings.wordTiming} onChange={(wordTiming) => set({ wordTiming })} />
-              <span className="hint">{TIMINGS.find((t) => t.value === settings.wordTiming)?.hint}</span>
-            </div>
-
-            <Switch
-              label="Thin progress bar"
-              checked={settings.progressBar === 'thin'}
-              onChange={(on) => set({ progressBar: on ? 'thin' : 'slider' })}
-            />
-
-            <div className="setting">
-              <span className="setting-name">Font</span>
-              <Choice
-                label="Font"
-                options={FONT_OPTIONS.map((f) => ({ ...f, className: f.value === 'serif' ? 'serif' : 'sans' }))}
-                value={settings.font}
-                onChange={(font) => set({ font })}
-              />
-            </div>
-
-            <div className="setting">
-              <span className="setting-name">Focus color</span>
-              <div className="swatches" role="radiogroup" aria-label="Focus color">
-                {ACCENT_OPTIONS.map((a) => (
-                  <button
-                    key={a.value}
-                    type="button"
-                    role="radio"
-                    className="swatch"
-                    aria-checked={settings.accent === a.value}
-                    aria-label={a.label}
-                    title={a.label}
-                    style={{ '--swatch': a.color } as React.CSSProperties}
-                    onClick={() => set({ accent: a.value })}
-                  />
-                ))}
-                {/* Any colour: the system colour picker, behind a colour-wheel swatch. */}
-                <label
-                  className={`swatch swatch-custom${settings.accent === 'custom' ? ' is-checked' : ''}`}
-                  title="Custom color"
-                  style={settings.accent === 'custom' ? ({ '--swatch': settings.customColor } as React.CSSProperties) : undefined}
-                >
-                  <input
-                    type="color"
-                    aria-label="Custom color"
-                    value={settings.customColor}
-                    onClick={() => settings.accent !== 'custom' && set({ accent: 'custom' })}
-                    onChange={(e) => set({ accent: 'custom', customColor: e.target.value.toLowerCase() })}
-                  />
-                </label>
+            <div className="settings-group">
+              <div className="setting">
+                <span className="setting-name">Font</span>
+                <Choice
+                  label="Font"
+                  options={FONT_OPTIONS.map((f) => ({ ...f, className: f.value === 'serif' ? 'serif' : 'sans' }))}
+                  value={settings.font}
+                  onChange={(font) => set({ font })}
+                />
               </div>
+              <div className="setting">
+                <span className="setting-name">Focus color</span>
+                <div className="swatches" role="radiogroup" aria-label="Focus color">
+                  {ACCENT_OPTIONS.map((a) => (
+                    <button
+                      key={a.value}
+                      type="button"
+                      role="radio"
+                      className="swatch"
+                      aria-checked={settings.accent === a.value}
+                      aria-label={a.label}
+                      title={a.label}
+                      style={{ '--swatch': a.color } as React.CSSProperties}
+                      onClick={() => set({ accent: a.value })}
+                    />
+                  ))}
+                  {/* Any colour: the system colour picker, behind a colour-wheel swatch. */}
+                  <label
+                    className={`swatch swatch-custom${settings.accent === 'custom' ? ' is-checked' : ''}`}
+                    title="Custom color"
+                    style={settings.accent === 'custom' ? ({ '--swatch': settings.customColor } as React.CSSProperties) : undefined}
+                  >
+                    <input
+                      type="color"
+                      aria-label="Custom color"
+                      value={settings.customColor}
+                      onClick={() => settings.accent !== 'custom' && set({ accent: 'custom' })}
+                      onChange={(e) => set({ accent: 'custom', customColor: e.target.value.toLowerCase() })}
+                    />
+                  </label>
+                </div>
+              </div>
+              <div className="setting setting-stack">
+                <span className="setting-name">Word timing</span>
+                <Choice label="Word timing" options={TIMINGS} value={settings.wordTiming} onChange={(wordTiming) => set({ wordTiming })} />
+                <span className="hint">{TIMINGS.find((t) => t.value === settings.wordTiming)?.hint}</span>
+              </div>
+              <Switch
+                label="Thin progress bar"
+                checked={settings.progressBar === 'thin'}
+                onChange={(on) => set({ progressBar: on ? 'thin' : 'slider' })}
+              />
             </div>
 
             <dl className="shortcuts">

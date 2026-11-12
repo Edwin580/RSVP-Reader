@@ -39,8 +39,9 @@ const LIBRARY_KEY = 'library'
 /**
  * Work out what to write when restoring `backup` on top of what's stored.
  * Nothing on this device is lost: books missing here are added to the
- * library, the most recently updated reading position wins, and anything
- * else is only written where nothing is stored yet.
+ * library, a book here without a cover takes the backup's, the most recently
+ * updated reading position wins, and anything else is only written where
+ * nothing is stored yet.
  */
 export function mergeBackup(
   current: Map<string, unknown>,
@@ -58,7 +59,7 @@ export function mergeBackup(
       const ids = new Set(mine.map((b) => b.id))
       const merged = mine.map((b) => {
         const other = theirs.find((t) => t.id === b.id)
-        return other ? { ...b, addedAt: Math.min(b.addedAt, other.addedAt) } : b
+        return other ? { ...b, addedAt: Math.min(b.addedAt, other.addedAt), ...(!b.cover && other.cover && { cover: other.cover }) } : b
       })
       const fresh = theirs.filter((b) => !ids.has(b.id))
       added = fresh.length

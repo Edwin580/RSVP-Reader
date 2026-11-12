@@ -32,6 +32,7 @@ Run the first four before pushing, and the browser tests too for UI changes. CI 
 The interface follows the rules in `docs/ui-rules.md`. In short:
 
 - Colours, shadows and corners come from the tokens at the top of `src/index.css`: one shadow (`--shadow`) for everything that floats, a small set of corners, no raw colours.
+- It's set like a book, front matter included: everything in Newsreader (italic for the quiet lines), a choice is a word underlined on a rule rather than a boxed button, a field is a line to write on, and an empty screen's actions read like a contents page (rule 3a). No uppercase letterspaced labels, pills or icon cards.
 - Every pop-up closes with Escape, a tap outside, and on a phone by dragging it down: there it's a bottom sheet with a grab handle (`useSheetDrag`).
 - On a phone a sheet has no drop shadow and is itself `position: fixed` to the bottom of the screen; the page behind is dimmed by a `--scrim` backdrop that appears at once, over an undimmed page background. Safari colours its status bar and toolbar from these layers, so getting any of this wrong shows up as a mismatched grey bar (see rule 11).
 - On a phone nothing is wider than the screen (down to 320px), everything tappable is at least 44 × 44px, and text fields use 16px text or larger.

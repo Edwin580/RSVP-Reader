@@ -1,4 +1,4 @@
-import type { Book, Chapter } from './types'
+import type { Book, Chapter, Picture } from './types'
 
 /** A section of raw text, e.g. an EPUB chapter or a PDF page. */
 export interface Section {
@@ -40,17 +40,35 @@ export function stripMarkdown(md: string): string {
     .replace(/^[ \t]*([-*_][ \t]*){3,}$/gm, '')
 }
 
+/**
+ * A picture's place in a section's text: a word of its own, in a character
+ * no book uses, carrying the picture's number. It travels with the text
+ * through every clean-up, and `buildBook` turns it into a `Picture`.
+ */
+export const pictureMark = (id: number) => `\uE000${id}`
+const PICTURE_MARK = /^\uE000(\d+)$/
+
 export function buildBook(id: string, title: string, sections: Section[]): Book {
   const words: string[] = []
   const paragraphEnds: number[] = []
   const chapters: Chapter[] = []
   const headings: { start: number; end: number }[] = []
+  const pictures: Picture[] = []
 
   sections.forEach((section, i) => {
     const start = words.length
     const headingSet = new Set(section.headings)
     section.paragraphs.forEach((paragraph, p) => {
-      const parts = splitWords(paragraph)
+      const from = words.length
+      const parts: string[] = []
+      // A picture goes before the paragraph if none of it has come yet, otherwise after it.
+      const marks: { id: number; leads: boolean }[] = []
+      for (const word of splitWords(paragraph)) {
+        const mark = word.match(PICTURE_MARK)
+        if (mark) marks.push({ id: Number(mark[1]), leads: parts.length === 0 })
+        else parts.push(word)
+      }
+      for (const mark of marks) pictures.push({ at: mark.leads ? from : from + parts.length, id: mark.id })
       if (parts.length === 0) return
       if (headingSet.has(p)) headings.push({ start: words.length, end: words.length + parts.length - 1 })
       words.push(...parts)
@@ -61,7 +79,7 @@ export function buildBook(id: string, title: string, sections: Section[]): Book 
     }
   })
 
-  return { id, title, words, paragraphEnds, chapters, headings }
+  return { id, title, words, paragraphEnds, chapters, headings, ...(pictures.length > 0 && { pictures }) }
 }
 
 const NUMBER_WORD =

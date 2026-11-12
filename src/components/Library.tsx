@@ -34,7 +34,7 @@ interface Props {
   onRestore: (file: File) => void
 }
 
-const FORMATS = 'EPUB, PDF, TXT or Markdown'
+const FORMATS = 'EPUB, PDF, TXT, Markdown'
 const BACKUP_NUDGE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
 
 /** "today", "yesterday", or a short date like "Sep 12". */
@@ -126,28 +126,45 @@ export function Library({
           Chapter
         </p>
         <h1>Library</h1>
-        <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>
+        {/* The introduction is for a first visit; with books it only pushes them down. */}
+        {books.length === 0 && <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>}
         <ReadingStats stats={stats} />
       </header>
 
-      <button
-        type="button"
-        className={`dropzone${dragging ? ' dragging' : ''}`}
-        onClick={choose}
-        disabled={!!busy}
-      >
-        <Icon name="plus" size={24} />
-        <span className="dropzone-title">{busy ?? (dragging ? 'Drop to add it' : 'Add a book')}</span>
-        <span className="muted">
-          {FORMATS}
-          <span className="on-mouse"> · or drop a file here</span>
-        </span>
-      </button>
-      <button type="button" className="dropzone browse-entry" onClick={onBrowse} disabled={!!busy}>
-        <Icon name="search" size={24} />
-        <span className="dropzone-title">Find a free book</span>
-        <span className="muted">Classics from Standard Ebooks, with a preview</span>
-      </button>
+      {/* Set like a contents page: each thing you can do is a line, its name
+          joined to a note about it by a row of dots. With books on the shelf
+          the lines shrink to a pair of plain links, so the shelf comes first. */}
+      <div className={`add-actions${books.length > 0 && !busy ? ' is-compact' : ''}`}>
+        <button type="button" className={`dropzone${dragging ? ' dragging' : ''}`} onClick={choose} disabled={!!busy}>
+          <Icon name="plus" size={18} />
+          <span className="dropzone-title">{busy ?? (dragging ? 'Drop to add it' : 'Add a book')}</span>
+          <span className="leader" aria-hidden="true" />
+          <span className="muted">
+            {FORMATS}
+            <span className="on-mouse">, or drop a file</span>
+          </span>
+        </button>
+        <button type="button" className="dropzone browse-entry" onClick={onBrowse} disabled={!!busy}>
+          <Icon name="search" size={18} />
+          <span className="dropzone-title">Find a free book</span>
+          <span className="leader" aria-hidden="true" />
+          <span className="muted">Standard Ebooks</span>
+        </button>
+        {showDemo && (
+          <button type="button" className="dropzone" aria-label="Try the demo" onClick={onDemo}>
+            <Icon name="play" size={18} />
+            <span className="dropzone-title">Try the demo</span>
+            <span className="leader" aria-hidden="true" />
+            <span className="muted">A few minutes</span>
+          </button>
+        )}
+      </div>
+      {showDemo && (
+        <p className="library-note muted">
+          The demo is a short sample from <em>Alice’s Adventures in Wonderland</em>, to try both reading modes, chapters
+          and search. Nothing is added to your library.
+        </p>
+      )}
       <input
         ref={input}
         type="file"
@@ -164,22 +181,6 @@ export function Library({
         <p className="error" role="alert">
           {error}
         </p>
-      )}
-
-      {showDemo && (
-        <section className="demo">
-          <div>
-            <h2>No book handy?</h2>
-            <p className="muted">
-              Try a short sample from <em>Alice’s Adventures in Wonderland</em>. It takes a few minutes and shows both
-              reading modes, chapters and search. Nothing is added to your library.
-            </p>
-          </div>
-          <button type="button" className="demo-button" onClick={onDemo}>
-            <Icon name="play" size={18} />
-            Try the demo
-          </button>
-        </section>
       )}
 
       {sorted.length > 0 && (
@@ -209,7 +210,7 @@ export function Library({
               </p>
             ) : (
               <ul className="shelf">
-                {shown.map((book) => (
+                {shown.map((book, k) => (
                   <ShelfRow
                     key={book.id}
                     book={book}
@@ -217,6 +218,7 @@ export function Library({
                     wpm={wpm}
                     now={now}
                     read={tab === 'read'}
+                    current={tab === 'reading' && k === 0}
                     swiped={swiped === book.id}
                     onSwipe={(open) => setSwiped(open ? book.id : null)}
                     onOpen={() => onOpen(book.id)}
@@ -320,6 +322,8 @@ interface RowProps {
   now: number
   /** On the Read shelf (so its action is "Unread"). */
   read: boolean
+  /** The book read most recently: shown large at the top, as the one to carry on with. */
+  current: boolean
   /** Swiped open, showing its actions. */
   swiped: boolean
   onSwipe: (open: boolean) => void
@@ -333,7 +337,7 @@ interface RowProps {
  * on a touch screen they're behind it, and swiping the row left shows them,
  * like Mail (see the CSS). Swiping all the way marks the book.
  */
-function ShelfRow({ book, progress, wpm, now, read, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
+function ShelfRow({ book, progress, wpm, now, read, current, swiped, onSwipe, onOpen, onMarkRead, onDelete }: RowProps) {
   const item = useRef<HTMLLIElement>(null)
   const actions = useRef<HTMLDivElement>(null)
   const drag = useRef<{
@@ -444,7 +448,7 @@ function ShelfRow({ book, progress, wpm, now, read, swiped, onSwipe, onOpen, onM
   return (
     <li
       ref={item}
-      className={`shelf-item${swiped ? ' is-swiped' : ''}${dragging ? ' is-dragging' : ''}${full ? ' is-full' : ''}`}
+      className={`shelf-item${current ? ' is-current' : ''}${swiped ? ' is-swiped' : ''}${dragging ? ' is-dragging' : ''}${full ? ' is-full' : ''}`}
       data-book={book.id}
     >
       <div className="shelf-actions" ref={actions}>
@@ -491,6 +495,7 @@ function ShelfRow({ book, progress, wpm, now, read, swiped, onSwipe, onOpen, onM
         <button type="button" className="shelf-open" onClick={onOpen}>
           <Cover book={book} />
           <span className="shelf-text">
+            {current && <span className="shelf-eyebrow">{percent === 0 ? 'Up next' : 'Continue reading'}</span>}
             <span className="shelf-title">{book.title}</span>
             <span className="shelf-meta muted">
               {format} · {book.wordCount.toLocaleString()} words · {status}
