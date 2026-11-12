@@ -126,28 +126,33 @@ export function Library({
           Chapter
         </p>
         <h1>Library</h1>
-        <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>
+        {/* The introduction is for a first visit; with books it only pushes them down. */}
+        {books.length === 0 && <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>}
         <ReadingStats stats={stats} />
       </header>
 
-      <button
-        type="button"
-        className={`dropzone${dragging ? ' dragging' : ''}`}
-        onClick={choose}
-        disabled={!!busy}
-      >
-        <Icon name="plus" size={24} />
-        <span className="dropzone-title">{busy ?? (dragging ? 'Drop to add it' : 'Add a book')}</span>
-        <span className="muted">
-          {FORMATS}
-          <span className="on-mouse"> · or drop a file here</span>
-        </span>
-      </button>
-      <button type="button" className="dropzone browse-entry" onClick={onBrowse} disabled={!!busy}>
-        <Icon name="search" size={24} />
-        <span className="dropzone-title">Find a free book</span>
-        <span className="muted">Classics from Standard Ebooks, with a preview</span>
-      </button>
+      {/* With books on the shelf the two ways to add one share a row, so the
+          shelf starts near the top of a phone screen. */}
+      <div className={`add-actions${books.length > 0 && !busy ? ' is-compact' : ''}`}>
+        <button
+          type="button"
+          className={`dropzone${dragging ? ' dragging' : ''}`}
+          onClick={choose}
+          disabled={!!busy}
+        >
+          <Icon name="plus" size={24} />
+          <span className="dropzone-title">{busy ?? (dragging ? 'Drop to add it' : 'Add a book')}</span>
+          <span className="muted">
+            {FORMATS}
+            <span className="on-mouse"> · or drop a file here</span>
+          </span>
+        </button>
+        <button type="button" className="dropzone browse-entry" onClick={onBrowse} disabled={!!busy}>
+          <Icon name="search" size={24} />
+          <span className="dropzone-title">Find a free book</span>
+          <span className="muted">Classics from Standard Ebooks, with a preview</span>
+        </button>
+      </div>
       <input
         ref={input}
         type="file"

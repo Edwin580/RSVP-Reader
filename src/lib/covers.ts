@@ -24,6 +24,18 @@ export function pickCoverItem(items: ManifestItem[], metaCoverId?: string | null
   )
 }
 
+/**
+ * The image on a book's cover page, as its address in the page: for EPUBs
+ * that name no cover image, whose first page is the cover (an image and
+ * little or no text). Undefined for a page that reads like text.
+ */
+export function coverPageImage(page: Document): string | undefined {
+  const words = page.body?.textContent?.trim().split(/\s+/).filter(Boolean).length ?? 0
+  if (words > 20) return undefined
+  const image = page.querySelector('img[src], image')
+  return image?.getAttribute('src') ?? image?.getAttribute('xlink:href') ?? image?.getAttribute('href') ?? undefined
+}
+
 /** A small JPEG data URL of an image, or undefined if it can't be decoded. */
 export async function thumbnail(image: Blob): Promise<string | undefined> {
   try {
@@ -32,7 +44,23 @@ export async function thumbnail(image: Blob): Promise<string | undefined> {
     bitmap.close()
     return canvas?.toDataURL('image/jpeg', 0.82)
   } catch {
+    // Not every browser decodes every image this way (an SVG cover, an older
+    // Safari): an <img> reads anything the browser can show.
+    return viaImage(image)
+  }
+}
+
+async function viaImage(image: Blob): Promise<string | undefined> {
+  const url = URL.createObjectURL(image)
+  try {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    return drawScaled(img, img.naturalWidth, img.naturalHeight)?.toDataURL('image/jpeg', 0.82)
+  } catch {
     return undefined
+  } finally {
+    URL.revokeObjectURL(url)
   }
 }
 

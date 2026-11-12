@@ -20,32 +20,45 @@ export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
 }
 
+/**
+ * Change the library list in one step. Reading it and writing it back
+ * separately lets two changes at once (a book marked as read while another
+ * is added) drop one of them.
+ */
+const changeLibrary = (change: (library: BookMeta[]) => BookMeta[]) =>
+  update<BookMeta[]>(LIBRARY_KEY, (library) => change(library ?? []), store)
+
 export async function saveBook({ cover, ...book }: Book, fileName: string): Promise<BookMeta> {
-  const library = await listBooks()
-  const existing = library.find((b) => b.id === book.id)
-  const meta: BookMeta = {
-    id: book.id,
-    title: book.title,
-    fileName,
-    wordCount: book.words.length,
-    addedAt: existing?.addedAt ?? Date.now(),
-    ...(cover && { cover }),
-    ...(existing?.readAt && { readAt: existing.readAt }),
-  }
   await set(bookKey(book.id), book, store)
-  await set(LIBRARY_KEY, [meta, ...library.filter((b) => b.id !== book.id)], store)
+  let meta!: BookMeta
+  await changeLibrary((library) => {
+    const existing = library.find((b) => b.id === book.id)
+    // Adding a book again keeps the cover it had if none is found this time
+    // (the image couldn't be read), rather than losing it.
+    const kept = cover ?? existing?.cover
+    meta = {
+      id: book.id,
+      title: book.title,
+      fileName,
+      wordCount: book.words.length,
+      addedAt: existing?.addedAt ?? Date.now(),
+      ...(kept && { cover: kept }),
+      ...(existing?.readAt && { readAt: existing.readAt }),
+    }
+    return [meta, ...library.filter((b) => b.id !== book.id)]
+  })
   return meta
 }
 
 /** Mark a book as read (or not), keeping the reading position. */
-export async function setRead(id: string, read: boolean): Promise<void> {
-  const library = await listBooks()
-  const marked = library.map((book) => {
-    if (book.id !== id) return book
-    const { readAt: _, ...rest } = book
-    return read ? { ...rest, readAt: Date.now() } : rest
-  })
-  await set(LIBRARY_KEY, marked, store)
+export function setRead(id: string, read: boolean): Promise<void> {
+  return changeLibrary((library) =>
+    library.map((book) => {
+      if (book.id !== id) return book
+      const { readAt: _, ...rest } = book
+      return read ? { ...rest, readAt: Date.now() } : rest
+    }),
+  )
 }
 
 export function loadBook(id: string): Promise<Book | undefined> {
@@ -53,8 +66,7 @@ export function loadBook(id: string): Promise<Book | undefined> {
 }
 
 export async function deleteBook(id: string): Promise<void> {
-  const library = await listBooks()
-  await set(LIBRARY_KEY, library.filter((b) => b.id !== id), store)
+  await changeLibrary((library) => library.filter((b) => b.id !== id))
   await del(bookKey(id), store)
   await del(progressKey(id), store)
   await del(bookmarksKey(id), store)

@@ -330,7 +330,18 @@ h1, h2, p { margin: 0; }
   white-space: nowrap;
 }
 
-/* Adding a book: one clear row with a plus, the whole thing a drop target. */
+/* Adding a book: one clear row with a plus, the whole thing a drop target.
+   Once there are books, the two ways to add one sit side by side (and on a
+   phone lose their second line), so the shelf starts near the top. */
+.add-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+.add-actions.is-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+  .add-actions.is-compact { gap: 0.5rem; }
+  .add-actions.is-compact .dropzone { gap: 0 0.4rem; padding: 0.65rem; min-height: 52px; }
+  .add-actions.is-compact .dropzone .muted { display: none; }
+  .add-actions.is-compact .dropzone-title { font-size: 0.98rem; }
+  .add-actions.is-compact .dropzone svg { grid-row: auto; width: 20px; height: 20px; }
+}
 .dropzone {
   width: 100%;
   display: grid;
@@ -1142,6 +1153,12 @@ h1, h2, p { margin: 0; }
 }
 .popover-backdrop { position: fixed; inset: 0; z-index: 19; }
 .sheet-handle { display: none; }
+/* Settings come in titled groups, one ruled row each, so the sheet reads as
+   a list whatever mix of controls a row holds. */
+.settings-group { display: grid; grid-template-columns: minmax(0, 1fr); }
+.settings-heading { margin: 0 0 0.15rem; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-2); }
+.settings-group > .setting { min-height: 50px; padding-block: 0.55rem; border-top: 1px solid var(--separator); }
+.settings-group > .setting:first-child, .settings-heading + .setting { border-top: 0; }
 /* Rows wrap (the control under its name) rather than overflow a narrow sheet. */
 .setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
 .setting-stack { flex-direction: column; align-items: stretch; gap: 0.5rem; }
@@ -1158,7 +1175,7 @@ h1, h2, p { margin: 0; }
 /* A choice beside its label (Mode, Font) stays compact. */
 .setting:not(.setting-stack) > .segmented { flex: 0 1 11rem; }
 /* On/off: the whole row is the switch, its name on the left. */
-.switch-row { flex-wrap: nowrap; width: 100%; min-height: 44px; margin-block: -0.35rem; padding: 0; border: 0; background: none; color: var(--text); text-align: left; }
+.switch-row { flex-wrap: nowrap; width: 100%; padding-inline: 0; border: 0; background: none; color: var(--text); text-align: left; }
 .switch { flex: none; position: relative; width: 44px; height: 26px; border-radius: 999px; background: var(--separator); transition: background-color 0.15s ease; }
 .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-2); transition: transform 0.15s ease, background-color 0.15s ease; }
 .switch-row[aria-checked='true'] .switch { background: var(--text); }
@@ -1176,8 +1193,10 @@ h1, h2, p { margin: 0; }
   border-top: 1px solid var(--separator);
   background: none;
   color: var(--text-2);
+  font-size: 0.72rem;
   font-weight: 600;
-  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .more-toggle svg { transition: transform 0.2s ease; }
 .more-toggle[aria-expanded='true'] svg { transform: rotate(180deg); }
@@ -1207,6 +1226,7 @@ h1, h2, p { margin: 0; }
 .swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; opacity: 0; cursor: pointer; }
 .swatch-custom:has(input:focus-visible) { outline: 2px solid var(--text); outline-offset: 4px; }
 .shortcuts { display: grid; gap: 0.3rem; margin: 0; padding-top: 0.9rem; border-top: 1px solid var(--separator); }
+.more-settings > .settings-group > .setting:first-child { padding-top: 0; }
 .shortcuts div { display: flex; justify-content: space-between; align-items: center; }
 .shortcuts dd { margin: 0; font-size: 0.875rem; color: var(--text-2); }
 kbd {
@@ -1412,7 +1432,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
 .search-results mark { background: color-mix(in srgb, var(--accent) 14%, transparent); color: inherit; border-radius: var(--radius-sm); padding: 0 1px; }
 
 /* ——— Free books (Browse) ——— */
-.browse-entry { margin-top: 0.75rem; border-color: var(--separator); }
+.browse-entry { border-color: var(--separator); }
 .browse-header { position: relative; margin-bottom: 1.25rem; }
 .browse-header h1 { font-family: var(--serif); font-size: 2.6rem; font-weight: 400; line-height: 1.1; letter-spacing: -0.015em; }
 .browse-header p { margin-top: 0.5rem; max-width: 34rem; text-wrap: pretty; }
@@ -1556,8 +1576,13 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .nav-label { display: none; }
   .deck { grid-template-columns: 1fr auto; }
   .transport { grid-column: 1 / -1; grid-row: 1; justify-content: center; }
-  .deck-meta { grid-row: 2; }
-  .speed { grid-row: 2; }
+  /* Under the buttons: the time left on the left with the room it needs,
+     the speed on the right. (Placed by column too: left to find their own,
+     the speed took the wide one and squeezed the time left into three lines.) */
+  .deck-meta-wrap { grid-row: 2; grid-column: 1; }
+  .speed { grid-row: 2; grid-column: 2; }
+  .speed-value { min-width: 4.6rem; }
+  .session-open span { white-space: nowrap; }
   /* No speed (the guide, free reading): the time left sits centred under the buttons. */
   .deck.is-self-paced .speed { display: none; }
   .deck.is-self-paced .deck-meta-wrap { grid-column: 1 / -1; justify-self: center; }
@@ -1633,7 +1658,7 @@ html:has(.search-backdrop), html:has(.search-backdrop) body { overflow: hidden; 
   .reader-bottom { padding-bottom: 0.25rem; }
   .deck { grid-template-columns: 1fr auto 1fr; margin-top: 0; }
   .transport { grid-column: auto; grid-row: auto; }
-  .deck-meta, .speed { grid-row: auto; }
+  .deck-meta-wrap, .speed { grid-row: auto; grid-column: auto; }
   .play-button { width: 48px; height: 48px; }
   .hold-pad { height: 48px; }
 }

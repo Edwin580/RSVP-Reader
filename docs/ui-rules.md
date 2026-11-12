@@ -100,5 +100,7 @@ Use the existing pieces before making new ones: `.icon-button` for icon
 buttons, `.text-button` for quiet text actions, `.demo-button` for the one
 filled main action on a screen, `Choice` (`.segmented`) for a set of options,
 and the sheet pattern in `SettingsMenu` or `BookmarksPanel` for a pop-up.
+A new setting goes in one of the titled groups in `SettingsMenu` (`Group`), as a row
+like the others: a `Switch` for on/off, a `Choice` for options.
 A new pop-up gets an entry in the pop-up list at the top of
 `e2e/ui-rules.e2e.ts`, so the rules above are checked for it too.

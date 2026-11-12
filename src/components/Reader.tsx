@@ -602,7 +602,8 @@ export function Reader({
   return (
     <main className={`reader${playing ? ' is-playing' : ''}${idle ? ' is-idle' : ''}${holding && playing ? ' is-holding' : ''}${canSelect ? ' can-select' : ''}`}>
       <header className="reader-top chrome">
-        <button type="button" className="nav-button" onClick={onClose}>
+        {/* Named here: on a phone the word "Library" is hidden, leaving only the arrow. */}
+        <button type="button" className="nav-button" aria-label="Back to library" onClick={onClose}>
           <Icon name="chevronLeft" size={22} />
           <span className="nav-label">Library</span>
         </button>

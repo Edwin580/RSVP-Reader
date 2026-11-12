@@ -46,6 +46,13 @@ describe('mergeBackup', () => {
     expect(out.get('book:b')).toEqual({ id: 'b' })
   })
 
+  it('gives a book here the backup\'s cover when it has none, and keeps its own otherwise', () => {
+    const current = new Map<string, unknown>([['library', [meta('a'), { ...meta('b'), cover: 'mine' }]]])
+    const backup = createBackup([['library', [{ ...meta('a'), cover: 'theirs' }, { ...meta('b'), cover: 'theirs' }]]])
+    const library = new Map(mergeBackup(current, backup).writes).get('library') as { cover?: string }[]
+    expect(library.map((b) => b.cover)).toEqual(['theirs', 'mine'])
+  })
+
   it('keeps whichever reading position was updated last', () => {
     const current = new Map<string, unknown>([
       ['progress:a', { index: 100, updatedAt: 20 }],

@@ -640,3 +640,63 @@ test('searching: the site failing to add to the matches found on the device show
   await expect(page.getByRole('alert')).toHaveCount(0)
   await expect(page.getByRole('status')).toHaveCount(0)
 })
+
+test('a book whose cover is only its first page gets that cover, and keeps it after a reload (#72)', async ({ page }) => {
+  // Reported as "images don't persist for books". An EPUB that names no cover
+  // image (many older ones don't) showed the plain cloth cover, though its
+  // first page is the cover picture.
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'OEBPS/content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Lighthouse</dc:title></metadata><manifest><item id="front" href="text/front.xhtml" media-type="application/xhtml+xml"/><item id="c1" href="text/c1.xhtml" media-type="application/xhtml+xml"/><item id="img1" href="images/front.png" media-type="image/png"/></manifest><spine><itemref idref="front" linear="no"/><itemref idref="c1"/></spine></package>',
+  )
+  zip.file('OEBPS/text/front.xhtml', '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><div><img src="../images/front.png" alt=""/></div></body></html>')
+  zip.file('OEBPS/text/c1.xhtml', '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>One</h1><p>The lamp turned all night over the water.</p></body></html>')
+  zip.file('OEBPS/images/front.png', Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'))
+  await page.goto('./')
+  await page
+    .locator('input[type=file]')
+    .first()
+    .setInputFiles({ name: 'lighthouse.epub', mimeType: 'application/epub+zip', buffer: await zip.generateAsync({ type: 'nodebuffer' }) })
+  await expect(page.locator('.reader')).toBeVisible()
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  const cover = page.locator('.shelf img.cover')
+  await expect(cover).toHaveAttribute('src', /^data:image\/jpeg/)
+  await page.reload()
+  await expect(cover).toHaveAttribute('src', /^data:image\/jpeg/)
+})
+
+test('phone: the time left sits to the left of the speed, each line unbroken (#72)', async ({ page }, testInfo) => {
+  // Under the play buttons the speed took the wide column and the time left
+  // the narrow one, where it broke into three lines with its clock on a line
+  // of its own.
+  test.skip(testInfo.project.name !== 'phone', 'The phone layout')
+  await page.goto('./')
+  await upload(page)
+  const meta = (await page.locator('.session-open').boundingBox())!
+  const speed = (await page.locator('.speed').boundingBox())!
+  expect(meta.x + meta.width).toBeLessThanOrEqual(speed.x)
+  // Two lines of text (in chapter, in book), no more.
+  const lines = await page.evaluate<number>(`(() => { const el = document.querySelector('.session-open span'); return document.querySelector('.session-open').getBoundingClientRect().height / el.getBoundingClientRect().height })()`)
+  expect(lines).toBeLessThan(2.9)
+})
+
+test('phone: with books in the library, the shelf starts in the top half of the screen (#72)', async ({ page }, testInfo) => {
+  // The two full-size "add" cards and the introduction pushed the books to
+  // the bottom of a phone screen.
+  test.skip(testInfo.project.name !== 'phone', 'The phone layout')
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  const tabs = (await page.getByRole('tablist', { name: 'Shelves' }).boundingBox())!
+  expect(tabs.y).toBeLessThan(page.viewportSize()!.height / 2)
+  // Both ways to add a book are still there, side by side.
+  const add = (await page.getByRole('button', { name: /Add a book/ }).boundingBox())!
+  const find = (await page.getByRole('button', { name: /Find a free book/ }).boundingBox())!
+  expect(Math.abs(add.y - find.y)).toBeLessThan(2)
+})

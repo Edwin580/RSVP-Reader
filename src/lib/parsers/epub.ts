@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { pickCoverItem, thumbnail, type ManifestItem } from '../covers'
+import { coverPageImage, pickCoverItem, thumbnail, type ManifestItem } from '../covers'
 import { isChapterHeading, type Section } from '../text'
 
 const BLOCK_TAGS = new Set([
@@ -127,8 +127,20 @@ async function epubCover(zip: JSZip, opf: Document, opfPath: string, manifest: M
   const metaCover = Array.from(opf.getElementsByTagNameNS('*', 'meta'))
     .find((m) => m.getAttribute('name') === 'cover')
     ?.getAttribute('content')
-  const item = pickCoverItem([...manifest.values()], metaCover)
-  const file = item && zip.file(resolvePath(opfPath, item.href))
-  if (!item || !file) return undefined
-  return thumbnail(new Blob([await file.async('arraybuffer')], { type: item.type }))
+  const items = [...manifest.values()]
+  let path = pickCoverItem(items, metaCover)?.href
+  let base = opfPath
+  if (!path) {
+    // No cover named: the book's first page, if it's a picture (often left out of the reading order).
+    const first = manifest.get(opf.getElementsByTagNameNS('*', 'itemref')[0]?.getAttribute('idref') ?? '')
+    const page = first && /html|xml/.test(first.type) && zip.file(resolvePath(opfPath, first.href))
+    if (!first || !page) return undefined
+    base = resolvePath(opfPath, first.href)
+    path = coverPageImage(parseXml(await page.async('string'), 'application/xhtml+xml'))
+  }
+  const file = path && zip.file(resolvePath(base, path))
+  if (!file) return undefined
+  const full = resolvePath(base, path!)
+  const type = items.find((i) => resolvePath(opfPath, i.href) === full)?.type ?? ''
+  return thumbnail(new Blob([await file.async('arraybuffer')], { type }))
 }
