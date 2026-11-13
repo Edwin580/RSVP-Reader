@@ -816,7 +816,7 @@ h1, h2, p { margin: 0; }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
 
-.reader-bottom { width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
+.reader-bottom { position: relative; width: 100%; max-width: 48rem; margin: 0 auto; padding: 0 1rem 0.75rem; }
 
 /* The thin progress bar (Aa › More settings): a line under the controls that only shows how far you are. */
 .progress-line {
@@ -900,6 +900,18 @@ h1, h2, p { margin: 0; }
   animation: fade-in 0.2s ease;
 }
 .jump-back span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Save highlight floats over the foot of the text instead of taking a line of its own: making room for it would
+   move the text under a finger that is still on the words it selected (and, scrolling, off them). */
+.jump-back.is-floating {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  translate: -50% 0;
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  margin: 0 0 0.5rem;
+  box-shadow: var(--shadow);
+}
 
 .deck {
   display: grid;

@@ -250,7 +250,10 @@ export function Reader({
   useEffect(() => {
     const update = () => {
       setSelecting(hasSelection())
-      setPicked(selectedWords())
+      // The same words again (a selection changes many times as it's held) keep the same state, so nothing re-renders
+      // under a finger that is holding the selection.
+      const now = selectedWords()
+      setPicked((was) => (was?.start === now?.start && was?.end === now?.end ? was : now))
     }
     document.addEventListener('selectionchange', update)
     return () => document.removeEventListener('selectionchange', update)
@@ -830,7 +833,7 @@ export function Reader({
           // has no press.
           <button
             type="button"
-            className="jump-back"
+            className="jump-back is-floating"
             onPointerDown={(e) => {
               e.preventDefault()
               saveHighlight()
@@ -841,7 +844,7 @@ export function Reader({
             <span>Save highlight</span>
           </button>
         ) : saved ? (
-          <p className="jump-back" role="status">
+          <p className="jump-back is-floating" role="status">
             <Icon name="bookmarkFilled" size={16} />
             <span>Saved to bookmarks</span>
           </p>
