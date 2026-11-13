@@ -785,7 +785,7 @@ test('pictures inside a book are shown where they stand, in both modes, and are 
   await between()
 })
 
-test('the reading calendar is there with nothing read in the last week, and with nothing read yet (#73)', async ({ page }) => {
+test('the reading calendar is there with nothing read in the last week, and with nothing read yet (#74)', async ({ page }) => {
   // Reported as "removed the GitHub style progress meter?": it only showed
   // after reading in the last seven days, so after a week away, or on a new
   // device, it seemed to have gone.
