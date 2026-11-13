@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSheetDrag } from '../hooks/useSheetDrag'
 import { Icon } from './Icon'
+import { FOCUS_SHORTCUTS, hasShortcuts, shortcutUrl } from '../lib/focus'
 import type { WordTiming } from '../lib/rsvp'
 import { effectiveGuideMark, type Accent, type LineFocus, type PlayControl, type ReadingFont, type ReadingMode, type Settings, type Theme } from '../lib/storage'
 
@@ -56,6 +57,11 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Light' },
   { value: 'sepia', label: 'Sepia' },
   { value: 'dark', label: 'Dark' },
+]
+
+const ON_OFF: { value: 'off' | 'on'; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 'on', label: 'On' },
 ]
 
 const FONT_OPTIONS: { value: ReadingFont; label: string }[] = [
@@ -187,6 +193,21 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
     set({ pageGuide: highlight && pacer ? 'both' : highlight ? 'highlight' : pacer ? 'pacer' : 'none' })
   const setScale = (textScale: number) =>
     set({ textScale: Math.round(Math.max(MIN_SCALE, Math.min(MAX_SCALE, textScale)) * 10) / 10 })
+  // Turned on or off with a tap, so the reader may go full screen (useFocusMode) and the Shortcuts app may open.
+  const shortcuts = hasShortcuts(navigator)
+  // iPhone has no full screen for web pages; there Focus only keeps the screen on.
+  const canFill = !!document.documentElement.requestFullscreen
+  const runShortcut = (name: string) => {
+    window.location.href = shortcutUrl(name)
+  }
+  const setFocus = (focus: boolean) => {
+    set({ focus })
+    if (shortcuts && settings.focusShortcut) runShortcut(focus ? FOCUS_SHORTCUTS.on : FOCUS_SHORTCUTS.off)
+  }
+  const setFocusShortcut = (focusShortcut: boolean) => {
+    set({ focusShortcut })
+    runShortcut(focusShortcut ? FOCUS_SHORTCUTS.on : FOCUS_SHORTCUTS.off)
+  }
   const toggleMore = () => {
     setMore(!more)
     try {
@@ -257,6 +278,34 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
             </div>
           </div>
         </Group>
+
+        <div className="setting setting-stack">
+          <span className="setting-name">Focus</span>
+          <Choice label="Focus" options={ON_OFF} value={settings.focus ? 'on' : 'off'} onChange={(v) => setFocus(v === 'on')} />
+          <span className="hint">
+            {settings.focus
+              ? `The screen stays on${canFill ? ' and the book fills it' : ' while a book is open'}`
+              : `Keep the screen on${canFill ? ' and give the book the whole screen' : ' while you read'}`}
+            {!shortcuts && '. To silence notifications, turn on Do Not Disturb on your device too.'}
+          </span>
+        </div>
+
+        {settings.focus && shortcuts && (
+          <div className="setting setting-stack">
+            <span className="setting-name">Do Not Disturb</span>
+            <Choice
+              label="Do Not Disturb"
+              options={ON_OFF}
+              value={settings.focusShortcut ? 'on' : 'off'}
+              onChange={(v) => setFocusShortcut(v === 'on')}
+            />
+            <span className="hint">
+              {settings.focusShortcut
+                ? `Focus runs your “${FOCUS_SHORTCUTS.on}” shortcut as it starts and “${FOCUS_SHORTCUTS.off}” as it ends.`
+                : `Silences notifications with two shortcuts you make once in the Shortcuts app: “${FOCUS_SHORTCUTS.on}” and “${FOCUS_SHORTCUTS.off}”, each with the Set Focus action for Do Not Disturb.`}
+            </span>
+          </div>
+        )}
 
         <button type="button" className="more-toggle" aria-expanded={more} onClick={toggleMore}>
           More settings

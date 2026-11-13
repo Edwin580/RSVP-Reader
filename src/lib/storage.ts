@@ -195,6 +195,10 @@ export interface Settings {
   guideMark: GuideMark
   /** 'slider' is the full-size bar you can drag; 'thin' a small line along the bottom edge that only shows how far you are. */
   progressBar: ProgressBar
+  /** Focus: while a book is open, the screen stays on and the book fills it. */
+  focus: boolean
+  /** iPhone and iPad: Focus also runs the person's Shortcuts that turn Do Not Disturb on and off. */
+  focusShortcut: boolean
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -233,6 +237,8 @@ export const DEFAULT_SETTINGS: Settings = {
   guideLayout: 'pages',
   guideMark: 'focus',
   progressBar: 'slider',
+  focus: false,
+  focusShortcut: false,
 }
 
 /** The guide's mark as shown: nothing marked only scrolls (on a page you'd lose your place), so pages show the focus instead. */
@@ -265,6 +271,8 @@ export function loadSettings(): Settings {
       guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
       guideMark: oneOf(GUIDE_MARKS, saved.guideMark, DEFAULT_SETTINGS.guideMark),
       progressBar: oneOf(PROGRESS_BARS, saved.progressBar, DEFAULT_SETTINGS.progressBar),
+      focus: saved.focus === true,
+      focusShortcut: saved.focusShortcut === true,
     }
   } catch {
     return DEFAULT_SETTINGS

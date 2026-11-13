@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusMode } from '../hooks/useFocusMode'
 import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange, pausedRange } from '../lib/glance'
@@ -76,6 +77,7 @@ export function Reader({
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode, font } = settings
   const holdToRead = settings.playControl === 'hold'
+  useFocusMode(settings.focus)
   // Guide (page mode): no timer; the line focus follows the finger.
   const guided = mode === 'page' && settings.playControl === 'guide'
   // Free (page mode): no timer and no marker; you turn the pages yourself.
