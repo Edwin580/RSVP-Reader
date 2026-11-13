@@ -128,7 +128,7 @@ export function Library({
         <h1>Library</h1>
         {/* The introduction is for a first visit; with books it only pushes them down. */}
         {books.length === 0 && <p className="muted">Read faster, one word at a time. Your books stay on this device.</p>}
-        <ReadingStats stats={stats} />
+        <ReadingStats stats={stats} hasBooks={books.length > 0} />
       </header>
 
       {/* Set like a contents page: each thing you can do is a line, its name

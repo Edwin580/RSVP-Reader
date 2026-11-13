@@ -10,10 +10,12 @@ const WEEKS = 53
  * Reading stats kept out of the way: one quiet line under the library title
  * ("12 min today · 4-day streak") that opens a small card with the last year
  * as a calendar of squares, like a GitHub contribution graph, and the
- * numbers. Nothing shows until there's reading in the last week, and a
- * missed day never shows a zero or a broken streak, so it never nags.
+ * numbers. It's there whenever there's anything to show (a book on the
+ * shelf, or reading done), so the calendar is always a tap away; a quiet
+ * week shows the totals instead, never a zero or a broken streak, so it
+ * never nags.
  */
-export function ReadingStats({ stats }: { stats: Stats }) {
+export function ReadingStats({ stats, hasBooks }: { stats: Stats; hasBooks: boolean }) {
   const [open, setOpen] = useState(false)
   const [today] = useState(() => new Date())
   const summary = useMemo(() => summarize(stats, today), [stats, today])
@@ -27,9 +29,18 @@ export function ReadingStats({ stats }: { stats: Stats }) {
     if (el) el.scrollLeft = el.scrollWidth
   }, [open])
 
-  if (summary.weekMs === 0) return null
+  // A first visit, with no books and nothing read: nothing to show yet.
+  if (summary.totalMs === 0 && !hasBooks) return null
 
-  const parts = [summary.todayMs > 0 ? `${minutes(summary.todayMs)} today` : `${minutes(summary.weekMs)} this week`]
+  const parts = [
+    summary.todayMs > 0
+      ? `${minutes(summary.todayMs)} today`
+      : summary.weekMs > 0
+        ? `${minutes(summary.weekMs)} this week`
+        : summary.totalMs > 0
+          ? `${minutes(summary.totalMs)} read in all`
+          : 'Your reading, day by day',
+  ]
   if (summary.streak >= 2) parts.push(`${summary.streak}-day streak`)
   const shown = picked ?? weeks[weeks.length - 1].find((d) => d && sameDay(d.date, today)) ?? null
   // A month's name over the first week that starts in it, if there's room before the next.

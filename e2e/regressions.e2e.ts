@@ -784,3 +784,34 @@ test('pictures inside a book are shown where they stand, in both modes, and are 
   await expect(onPage).toBeVisible()
   await between()
 })
+
+test('the reading calendar is there with nothing read in the last week, and with nothing read yet (#73)', async ({ page }) => {
+  // Reported as "removed the GitHub style progress meter?": it only showed
+  // after reading in the last seven days, so after a week away, or on a new
+  // device, it seemed to have gone.
+  await page.goto('./')
+  // A first visit, with no books and nothing read: nothing to show yet.
+  await expect(page.locator('.stats-toggle')).toHaveCount(0)
+  await upload(page)
+  await page.getByRole('button', { name: 'Back to library' }).click()
+  await expect(page.locator('.stats-toggle')).toHaveText(/Your reading, day by day/)
+
+  // Twenty minutes read a month ago, none since.
+  await page.evaluate(`(async () => {
+    const then = new Date(Date.now() - 30 * 86400000)
+    const key = then.getFullYear() + '-' + String(then.getMonth() + 1).padStart(2, '0') + '-' + String(then.getDate()).padStart(2, '0')
+    const open = indexedDB.open('rsvp-reader')
+    const db = await new Promise((done) => (open.onsuccess = () => done(open.result)))
+    await new Promise((done) => {
+      const tx = db.transaction('kv', 'readwrite')
+      tx.objectStore('kv').put({ days: { [key]: { ms: 20 * 60000, words: 5000 } } }, 'stats')
+      tx.oncomplete = done
+    })
+  })()`)
+  await page.reload()
+  await expect(page.locator('.stats-toggle')).toHaveText(/20 min read in all/)
+  await page.locator('.stats-toggle').click()
+  await expect(page.getByRole('list', { name: 'Reading each day, the last year' })).toBeVisible()
+  // That day is shaded on the calendar.
+  await expect(page.locator('.stats-grid .stats-cell:not(.level-0)')).toHaveCount(1)
+})
