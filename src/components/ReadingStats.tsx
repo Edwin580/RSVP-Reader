@@ -118,7 +118,8 @@ export function ReadingStats({ stats, hasBooks }: { stats: Stats; hasBooks: bool
           <dl className="stats-figures">
             <div>
               <dt>Last 7 days</dt>
-              <dd>{minutes(summary.weekMs)}</dd>
+              {/* A quiet week is a dash, like the streak: never a zero. */}
+              <dd>{summary.weekMs > 0 ? minutes(summary.weekMs) : '—'}</dd>
             </div>
             <div>
               <dt>Average speed</dt>

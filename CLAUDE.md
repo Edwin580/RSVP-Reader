@@ -70,7 +70,7 @@ Then how a reviewer can try it on their own phone: numbered steps on the PR prev
 
 - Keep it short: a few plain sentences per section. Use lists, bold, tables and code formatting only where they make something clearer, not by default.
 - Write in a neutral voice ("Pages are numbered", "The test checks…"), not "I".
-- Screenshots are welcome when the change is visible, especially for UI changes.
+- Every PR that changes anything visible includes screenshots, at phone size first (desktop too when the layout differs there). Take them from the built app at 2× and commit them under `docs/screenshots/`, then show them in the description by their address at that commit.
 - End "How it's tested" with "Try it on your phone": a few numbered steps a reviewer can follow on the preview link (where to tap, what should happen), then the local alternative: `git checkout <branch>`, `npm install && npm run dev -- --host`, and open the printed Network address on a phone on the same Wi-Fi.
 - Do not include a Claude session link (`claude.ai/code/session_…`) in PR titles or descriptions.
 - Keep titles short and descriptive.

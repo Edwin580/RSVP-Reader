@@ -812,6 +812,7 @@ test('the reading calendar is there with nothing read in the last week, and with
   await expect(page.locator('.stats-toggle')).toHaveText(/20 min read in all/)
   await page.locator('.stats-toggle').click()
   await expect(page.getByRole('list', { name: 'Reading each day, the last year' })).toBeVisible()
-  // That day is shaded on the calendar.
+  // That day is shaded on the calendar, and the quiet week is a dash, not a zero.
   await expect(page.locator('.stats-grid .stats-cell:not(.level-0)')).toHaveCount(1)
+  await expect(page.locator('.stats-figures div', { hasText: 'Last 7 days' }).locator('dd')).toHaveText('—')
 })
