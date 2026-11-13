@@ -1,4 +1,5 @@
-import type { BookMeta, Progress } from './types'
+import type { ReadingStats } from './stats'
+import type { BookMeta, Bookmark, Progress } from './types'
 
 /**
  * A backup is every stored entry (library list, books, progress, …) as
@@ -35,13 +36,17 @@ export function parseBackup(text: string): Backup {
 }
 
 const LIBRARY_KEY = 'library'
+const STATS_KEY = 'stats'
+const isStats = (value: unknown): value is ReadingStats =>
+  typeof value === 'object' && value !== null && typeof (value as ReadingStats).days === 'object' && (value as ReadingStats).days !== null
 
 /**
  * Work out what to write when restoring `backup` on top of what's stored.
  * Nothing on this device is lost: books missing here are added to the
  * library, a book here without a cover takes the backup's, the most recently
- * updated reading position wins, and anything else is only written where
- * nothing is stored yet.
+ * updated reading position wins, bookmarks and reading statistics from both
+ * are kept, and anything else is only written where nothing is stored yet.
+ * Restoring the same backup twice changes nothing the second time.
  */
 export function mergeBackup(
   current: Map<string, unknown>,
@@ -59,7 +64,15 @@ export function mergeBackup(
       const ids = new Set(mine.map((b) => b.id))
       const merged = mine.map((b) => {
         const other = theirs.find((t) => t.id === b.id)
-        return other ? { ...b, addedAt: Math.min(b.addedAt, other.addedAt), ...(!b.cover && other.cover && { cover: other.cover }) } : b
+        if (!other) return b
+        // Marked as read on either device is read.
+        const readAt = b.readAt ?? other.readAt
+        return {
+          ...b,
+          addedAt: Math.min(b.addedAt, other.addedAt),
+          ...(!b.cover && other.cover && { cover: other.cover }),
+          ...(readAt !== undefined && { readAt }),
+        }
       })
       const fresh = theirs.filter((b) => !ids.has(b.id))
       added = fresh.length
@@ -71,6 +84,24 @@ export function mergeBackup(
         writes.push([key, value])
         if (mine) updated++
       }
+    } else if (key.startsWith('bookmarks:') && Array.isArray(existing) && Array.isArray(value)) {
+      const mine = existing as Bookmark[]
+      const spots = new Set(mine.map((b) => b.index))
+      const fresh = (value as Bookmark[]).filter((b) => typeof b?.index === 'number' && !spots.has(b.index))
+      if (fresh.length) writes.push([key, [...mine, ...fresh].sort((a, b) => a.index - b.index)])
+    } else if (key === STATS_KEY && isStats(existing) && isStats(value)) {
+      // The same day on both is the same reading (a backup of this device)
+      // or another device's; the longer one is kept, never the sum, so
+      // restoring twice doesn't count anything twice.
+      const days = { ...existing.days }
+      let changed = false
+      for (const [day, theirs] of Object.entries(value.days)) {
+        if ((theirs?.ms ?? 0) > (days[day]?.ms ?? 0)) {
+          days[day] = theirs
+          changed = true
+        }
+      }
+      if (changed) writes.push([key, { ...existing, days }])
     } else if (existing === undefined) {
       writes.push([key, value])
     }

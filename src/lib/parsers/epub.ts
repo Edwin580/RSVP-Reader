@@ -22,7 +22,13 @@ function parseXml(source: string, type: DOMParserSupportedType): Document {
 
 function resolvePath(base: string, href: string): string {
   const parts = base.split('/').slice(0, -1)
-  for (const seg of decodeURIComponent(href.split('#')[0]).split('/')) {
+  let path = href.split('#')[0]
+  try {
+    path = decodeURIComponent(path)
+  } catch {
+    // A stray "%" in a file name: use it as written.
+  }
+  for (const seg of path.split('/')) {
     if (seg === '..') parts.pop()
     else if (seg !== '.' && seg !== '') parts.push(seg)
   }
