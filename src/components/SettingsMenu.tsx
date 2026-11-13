@@ -8,6 +8,8 @@ import { effectiveGuideMark, type Accent, type LineFocus, type PlayControl, type
 interface Props {
   settings: Settings
   onSettings: (settings: Settings) => void
+  /** Save this book as an EPUB, for an e-reader. */
+  onDownload?: () => void
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
   onClose: () => void
@@ -155,7 +157,7 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
  * once (font, colour, timing) waits behind "More settings", so the sheet
  * stays short enough to see the page change behind it.
  */
-export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) {
+export function SettingsMenu({ settings, onSettings, onDownload, closing, onClose }: Props) {
   const [more, setMore] = useState(loadMore)
   const sheet = useRef<HTMLDivElement>(null)
   useSheetDrag(sheet, onClose)
@@ -367,6 +369,16 @@ export function SettingsMenu({ settings, onSettings, closing, onClose }: Props) 
                 onChange={(on) => set({ progressBar: on ? 'thin' : 'slider' })}
               />
             </div>
+
+            {onDownload && (
+              <div className="setting setting-stack">
+                <span className="setting-name">Download to device</span>
+                <button type="button" className="bookmark-here" onClick={onDownload}>
+                  Download EPUB
+                </button>
+                <span className="hint">This book as an EPUB, for an e-reader such as an Xteink: send it over Wi‑Fi or copy it to the SD card</span>
+              </div>
+            )}
 
             <dl className="shortcuts">
               {SHORTCUTS.map(([key, action]) => (
