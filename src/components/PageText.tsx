@@ -39,6 +39,8 @@ export function pageText(
   from: number,
   to: number,
   pictures?: PicturesAt,
+  /** Whether word i is in a saved highlight, shown underlined in the focus colour. */
+  highlighted?: (i: number) => boolean,
 ) {
   const figures = (at: number) => pictures?.get(at)?.map((image, k) => <BookPicture key={`picture-${at}-${k}`} image={image} />)
   return [
@@ -50,7 +52,11 @@ export function pageText(
           <Tag className={Tag === 'h2' ? 'page-heading' : undefined}>
             {para.map((i) => (
               <Fragment key={i}>
-                <span data-i={i}>{words[i]}</span>{' '}
+                <span data-i={i} className={highlighted?.(i) ? 'is-highlighted' : undefined}>
+                  {words[i]}
+                </span>
+                {/* The space inside a highlight is highlighted too, so it reads as one stroke. */}
+                {highlighted?.(i) && highlighted(i + 1) ? <span className="is-highlighted"> </span> : ' '}
               </Fragment>
             ))}
           </Tag>
