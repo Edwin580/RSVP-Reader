@@ -816,3 +816,57 @@ test('the reading calendar is there with nothing read in the last week, and with
   await expect(page.locator('.stats-grid .stats-cell:not(.level-0)')).toHaveCount(1)
   await expect(page.locator('.stats-figures div', { hasText: 'Last 7 days' }).locator('dd')).toHaveText('—')
 })
+
+test('a session that reaches the end of the book finishes, with its summary (#72)', async ({ page }) => {
+  // Found in review: a session planned "to the end of the book" (or to the
+  // end of the last chapter) stopped on the last word but never finished:
+  // "left in session" stayed up and no summary came.
+  await page.goto('./')
+  await upload(page)
+  await page.locator('.chapter-select').selectOption({ index: 1 })
+  await page.locator('.session-open').click()
+  await expect(page.locator('.session-lands')).toContainText('To the end of the book')
+  await page.getByRole('button', { name: 'Start reading' }).click()
+  await expect(page.getByLabel('Session done')).toContainText('finished the book', { timeout: 15000 })
+  await expect(page.locator('.session-active')).toHaveCount(0)
+})
+
+test('the browser’s own shortcuts (Ctrl+B, Ctrl+K) aren’t taken as the reader’s (#72)', async ({ page }) => {
+  // Found in review: Ctrl+B added a bookmark and Ctrl+K started reading.
+  await page.goto('./')
+  await upload(page)
+  await page.keyboard.press('Control+b')
+  await page.keyboard.press('Control+k')
+  await page.waitForTimeout(200)
+  await expect(page.locator('.icon-button.is-marked')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible()
+  // On their own the keys still work, and so does Shift+arrow for a sentence.
+  await page.keyboard.press('b')
+  await expect(page.locator('.icon-button.is-marked')).toHaveCount(1)
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect(page.locator('.word')).toHaveText('Alice')
+})
+
+test('the share sheet gets just the file, so Save to Files saves one file (#67)', async ({ page }) => {
+  // Reported: "Why does it save two files? The epub and a text file with
+  // just the name." The share also carried a title, which an iPhone's Save
+  // to Files saves as a text file of its own. A stand-in share sheet records
+  // what it's given.
+  await page.addInitScript(`
+    window.__shared = []
+    navigator.canShare = () => true
+    navigator.share = (data) => { window.__shared.push(Object.keys(data).sort().join(',')); return Promise.resolve() }
+  `)
+  await page.goto('./')
+  await upload(page)
+  await openSettings(page)
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  await page.getByRole('button', { name: 'Download EPUB' }).click()
+  await expect.poll(() => page.evaluate('window.__shared')).toEqual(['files'])
+  // A backup too.
+  await page.keyboard.press('Escape')
+  await page.locator('.nav-button').click()
+  await page.getByRole('button', { name: /^Back up/ }).click()
+  await expect.poll(() => page.evaluate('window.__shared')).toEqual(['files', 'files'])
+})

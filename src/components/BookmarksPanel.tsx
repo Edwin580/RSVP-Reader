@@ -13,13 +13,13 @@ interface Props {
   /** Animating out; the reader unmounts it shortly after. */
   closing?: boolean
   onSelect: (index: number) => void
-  onRemove: (index: number) => void
+  onRemove: (bookmark: Bookmark) => void
   onClose: () => void
 }
 
 const SNIPPET_WORDS = 18
 
-/** Saved spots in the book: add one where you are, jump to or remove the others. */
+/** Saved spots and highlights in the book: add a spot where you are, jump to or remove the others. */
 export function BookmarksPanel({
   bookmarks,
   words,
@@ -80,21 +80,24 @@ export function BookmarksPanel({
           {bookmarks.length === 0 ? (
             <p className="search-hint">
               Bookmarks save the sentence you’re on so you can come back to it.
-              <span className="on-mouse"> Press <kbd>B</kbd> to add one while reading.</span>
+              <span className="on-mouse"> Press <kbd>B</kbd> to add one while reading.</span> To save a passage, select it
+              while paused and choose <em>Save highlight</em>.
             </p>
           ) : (
             <ol className="search-results">
               {bookmarks.map((b) => {
                 const where = chapterTitle(b.index)
-                const end = Math.min(words.length, b.index + SNIPPET_WORDS)
+                // A highlight shows the words picked out; a spot, its opening words.
+                const end = b.end !== undefined ? b.end + 1 : Math.min(words.length, b.index + SNIPPET_WORDS)
                 return (
-                  <li key={b.index} className="bookmark-item">
+                  <li key={`${b.index}-${b.end ?? ''}`} className="bookmark-item">
                     <button type="button" onClick={() => onSelect(b.index)}>
-                      <span className="search-snippet">
+                      <span className={`search-snippet${b.end !== undefined ? ' is-highlight' : ''}`}>
                         {words.slice(b.index, end).join(' ')}
-                        {end < words.length && ' …'}
+                        {b.end === undefined && end < words.length && ' …'}
                       </span>
                       <span className="muted small">
+                        {b.end !== undefined && 'Highlight · '}
                         {where && `${where} · `}
                         {Math.round((b.index / Math.max(words.length - 1, 1)) * 100)}% ·{' '}
                         {new Date(b.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
@@ -103,8 +106,8 @@ export function BookmarksPanel({
                     <button
                       type="button"
                       className="icon-button bookmark-remove"
-                      onClick={() => onRemove(b.index)}
-                      aria-label="Remove bookmark"
+                      onClick={() => onRemove(b)}
+                      aria-label={b.end !== undefined ? 'Remove highlight' : 'Remove bookmark'}
                       title="Remove"
                     >
                       <Icon name="trash" size={18} />

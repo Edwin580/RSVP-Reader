@@ -25,7 +25,8 @@ export function shouldRecap(lastReadAt: number | undefined, index: number, now: 
 /** "3 hours ago", "yesterday", "5 days ago", "3 weeks ago", "2 months ago". */
 export function timeAgo(then: number, now: number): string {
   const hours = Math.max(0, (now - then) / 3_600_000)
-  if (hours < 24) return `${Math.max(1, Math.round(hours))} ${Math.round(hours) === 1 ? 'hour' : 'hours'} ago`
+  // Rounded first, so 23.6 hours is "yesterday", not "24 hours ago".
+  if (Math.round(hours) < 24) return `${Math.max(1, Math.round(hours))} ${Math.round(hours) <= 1 ? 'hour' : 'hours'} ago`
   const days = Math.round(hours / 24)
   if (days === 1) return 'yesterday'
   if (days < 14) return `${days} days ago`

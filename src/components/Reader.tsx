@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusMode } from '../hooks/useFocusMode'
 import { hasSelection, usePressGestures } from '../hooks/usePressGestures'
 import { useRsvp } from '../hooks/useRsvp'
 import { glanceRange, pausedRange } from '../lib/glance'
@@ -6,7 +7,7 @@ import { guideReading } from '../lib/guide'
 import { recapRange, shouldRecap, timeAgo } from '../lib/recap'
 import { chapterTargets, planSession, type Landing } from '../lib/session'
 import type { BookAnalysis } from '../lib/analysis'
-import { isBookmarked, toggleBookmark } from '../lib/bookmarks'
+import { addHighlight, isBookmarked, isHighlighted, toggleBookmark } from '../lib/bookmarks'
 import { buildTimeline, formatMinutes, minutesBetween, nextSentence, previousSentence } from '../lib/rsvp'
 import { BookSearch } from '../lib/searchClient'
 import { effectiveGuideMark, type Settings } from '../lib/storage'
@@ -37,6 +38,8 @@ interface Props {
   onReadingTime: (ms: number, words: number) => void
   /** Reading starts (playback, not browsing), for a finished book to go back on the Reading shelf. */
   onPlay?: () => void
+  /** Save the book as an EPUB for an e-reader (Aa › More settings). */
+  onDownload?: () => void
   onClose: () => void
 }
 
@@ -71,11 +74,13 @@ export function Reader({
   onBookmarks,
   onReadingTime,
   onPlay,
+  onDownload,
   onClose,
 }: Props) {
   const { words, chapters } = book
   const { wpm, textScale, wordTiming, mode, font } = settings
   const holdToRead = settings.playControl === 'hold'
+  useFocusMode(settings.focus)
   // Guide (page mode): no timer; the line focus follows the finger.
   const guided = mode === 'page' && settings.playControl === 'guide'
   // Free (page mode): no timer and no marker; you turn the pages yourself.
@@ -240,8 +245,16 @@ export function Reader({
     window.getSelection()?.removeAllRanges()
     window.getSelection()?.addRange(range)
   })
+  // The words picked out by the selection, offered as a highlight to save.
+  const [picked, setPicked] = useState<{ start: number; end: number } | null>(null)
   useEffect(() => {
-    const update = () => setSelecting(hasSelection())
+    const update = () => {
+      setSelecting(hasSelection())
+      // The same words again (a selection changes many times as it's held) keep the same state, so nothing re-renders
+      // under a finger that is holding the selection.
+      const now = selectedWords()
+      setPicked((was) => (was?.start === now?.start && was?.end === now?.end ? was : now))
+    }
     document.addEventListener('selectionchange', update)
     return () => document.removeEventListener('selectionchange', update)
   }, [])
@@ -380,6 +393,19 @@ export function Reader({
   const idle = useIdle(playing && !panel, IDLE_MS)
   const marked = isBookmarked(bookmarks, words, index)
   const toggleMark = () => onBookmarks(toggleBookmark(bookmarks, words, index))
+  const [saved, setSaved] = useState(false)
+  const saveHighlight = () => {
+    if (!picked) return
+    onBookmarks(addHighlight(bookmarks, picked.start, picked.end))
+    window.getSelection()?.removeAllRanges()
+    setSaved(true)
+  }
+  useEffect(() => {
+    if (!saved) return
+    const timer = window.setTimeout(() => setSaved(false), SAVED_MS)
+    return () => window.clearTimeout(timer)
+  }, [saved])
+  const highlighted = useCallback((i: number) => isHighlighted(bookmarks, i), [bookmarks])
 
   const closePanel = useCallback(() => {
     window.clearTimeout(closeTimer.current)
@@ -476,6 +502,9 @@ export function Reader({
       openPanel('search')
       return
     }
+    // Letters and Space with Ctrl, Cmd or Alt are the browser's own shortcuts
+    // (Ctrl+B, Cmd+K); the arrows use those keys to step by sentence.
+    if ((e.ctrlKey || e.metaKey || e.altKey) && !e.key.startsWith('Arrow')) return
     const t = e.target
     if (t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && e.key.startsWith('Arrow'))) return
     switch (e.key) {
@@ -682,7 +711,7 @@ export function Reader({
             Aa
           </button>
           {panel === 'settings' && (
-            <SettingsMenu settings={settings} onSettings={onSettings} closing={closing} onClose={closePanel} />
+            <SettingsMenu settings={settings} onSettings={onSettings} onDownload={onDownload} closing={closing} onClose={closePanel} />
           )}
         </div>
       </header>
@@ -746,6 +775,7 @@ export function Reader({
               guide={guided}
               line={guideLine}
               turnOnTap={free}
+              highlighted={highlighted}
               onPage={onPage}
               navRef={pageNav}
             />
@@ -779,7 +809,11 @@ export function Reader({
                     {k > 0 && headingWords.has(i) && !headingWords.has(i - 1) && <br />}
                     <span
                       data-i={i}
-                      className={[i === index && 'current', headingWords.has(i) && 'is-heading'].filter(Boolean).join(' ') || undefined}
+                      className={
+                        [i === index && 'current', headingWords.has(i) && 'is-heading', highlighted(i) && 'is-highlighted']
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
                     >
                       {w}{' '}
                     </span>
@@ -793,7 +827,29 @@ export function Reader({
       )}
 
       <footer className="reader-bottom chrome">
-        {jumpedFrom !== null && (
+        {picked && !playing ? (
+          // Saved on the press, before a tap elsewhere (or the press itself,
+          // on some phones) clears the selection; a click from the keyboard
+          // has no press.
+          <button
+            type="button"
+            className="jump-back is-floating"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              saveHighlight()
+            }}
+            onClick={(e) => e.detail === 0 && saveHighlight()}
+          >
+            <Icon name="bookmark" size={16} />
+            <span>Save highlight</span>
+          </button>
+        ) : saved ? (
+          <p className="jump-back is-floating" role="status">
+            <Icon name="bookmarkFilled" size={16} />
+            <span>Saved to bookmarks</span>
+          </p>
+        ) : null}
+        {jumpedFrom !== null && !picked && !saved && (
           <button
             type="button"
             className="jump-back"
@@ -967,7 +1023,7 @@ export function Reader({
             jumpTo(i)
             closePanel()
           }}
-          onRemove={(i) => onBookmarks(bookmarks.filter((b) => b.index !== i))}
+          onRemove={(removed) => onBookmarks(bookmarks.filter((b) => b !== removed))}
           onClose={closePanel}
         />
       )}
@@ -1068,6 +1124,33 @@ function Glance({ words, index, headings }: { words: string[]; index: number; he
 }
 
 const noop = () => {}
+
+/** How long "Saved to bookmarks" shows after saving a highlight. */
+const SAVED_MS = 2000
+
+/**
+ * The words the selection covers, in the paused text or on the page (not
+ * the old page sliding away), or null with none. A word counts once any of
+ * its letters are selected.
+ */
+function selectedWords(): { start: number; end: number } | null {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  let start = Infinity
+  let end = -1
+  for (const span of document.querySelectorAll<HTMLElement>('.page > .page-text [data-i], .context [data-i]')) {
+    const text = span.firstChild
+    if (!text || !range.intersectsNode(text)) continue
+    // Touching only its edge (the selection ends just before it, or starts just after) isn't selecting it.
+    if (range.endContainer === text && range.endOffset === 0) continue
+    if (range.startContainer === text && range.startOffset >= (text.textContent?.trimEnd().length ?? 0)) continue
+    const i = Number(span.dataset.i)
+    start = Math.min(start, i)
+    end = Math.max(end, i)
+  }
+  return end >= 0 ? { start, end } : null
+}
 
 /** Report reading while playing: every 30s, on pause, and when the reader closes. */
 const STATS_FLUSH_MS = 30_000

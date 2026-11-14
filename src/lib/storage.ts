@@ -17,6 +17,8 @@ const progressKey = (id: string) => `progress:${id}`
 const bookmarksKey = (id: string) => `bookmarks:${id}`
 /** A book's pictures, beside the book: they're the bulk of it, and only the reader needs them. */
 const picturesKey = (id: string) => `pictures:${id}`
+/** The file a book was added from (EPUBs only), for downloading it to an e-reader. */
+const originalKey = (id: string) => `original:${id}`
 
 export async function listBooks(): Promise<BookMeta[]> {
   return (await get<BookMeta[]>(LIBRARY_KEY, store)) ?? []
@@ -76,6 +78,15 @@ export async function deleteBook(id: string): Promise<void> {
   await del(progressKey(id), store)
   await del(bookmarksKey(id), store)
   await del(picturesKey(id), store)
+  await del(originalKey(id), store)
+}
+
+export function saveOriginal(id: string, data: ArrayBuffer): Promise<void> {
+  return set(originalKey(id), data, store)
+}
+
+export function loadOriginal(id: string): Promise<ArrayBuffer | undefined> {
+  return get<ArrayBuffer>(originalKey(id), store)
 }
 
 export function loadProgress(id: string): Promise<Progress | undefined> {
@@ -95,9 +106,10 @@ export function saveBookmarks(id: string, bookmarks: Bookmark[]): Promise<void> 
 }
 
 /** Every stored entry, for backups. */
+/** Everything a backup holds: all but the original files, which a JSON backup can't carry (and which can be added again). */
 export async function allEntries(): Promise<[string, unknown][]> {
   const all = await entries<IDBValidKey, unknown>(store)
-  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string')
+  return all.filter((e): e is [string, unknown] => typeof e[0] === 'string' && !e[0].startsWith('original:'))
 }
 
 export function writeEntries(writes: [string, unknown][]): Promise<void> {
@@ -195,6 +207,10 @@ export interface Settings {
   guideMark: GuideMark
   /** 'slider' is the full-size bar you can drag; 'thin' a small line along the bottom edge that only shows how far you are. */
   progressBar: ProgressBar
+  /** Focus: while a book is open, the screen stays on and the book fills it. */
+  focus: boolean
+  /** iPhone and iPad: Focus also runs the person's Shortcuts that turn Do Not Disturb on and off. */
+  focusShortcut: boolean
 }
 
 export type ReadingMode = 'word' | 'page'
@@ -233,6 +249,8 @@ export const DEFAULT_SETTINGS: Settings = {
   guideLayout: 'pages',
   guideMark: 'focus',
   progressBar: 'slider',
+  focus: false,
+  focusShortcut: false,
 }
 
 /** The guide's mark as shown: nothing marked only scrolls (on a page you'd lose your place), so pages show the focus instead. */
@@ -265,6 +283,8 @@ export function loadSettings(): Settings {
       guideLayout: oneOf(GUIDE_LAYOUTS, saved.guideLayout, DEFAULT_SETTINGS.guideLayout),
       guideMark: oneOf(GUIDE_MARKS, saved.guideMark, DEFAULT_SETTINGS.guideMark),
       progressBar: oneOf(PROGRESS_BARS, saved.progressBar, DEFAULT_SETTINGS.progressBar),
+      focus: saved.focus === true,
+      focusShortcut: saved.focusShortcut === true,
     }
   } catch {
     return DEFAULT_SETTINGS

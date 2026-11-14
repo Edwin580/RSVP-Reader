@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import JSZip from 'jszip'
 import { expect, test, type Page } from '@playwright/test'
 import { STORY, upload } from './helpers.ts'
 
@@ -1398,3 +1400,157 @@ for (const layout of ['pages', 'scroll'] as const) {
     await expect(guideLine).toHaveCount(0)
   })
 }
+
+/** Records what Focus asks of the browser: screen wake locks held, and full screen. */
+const watchFocus = (page: Page) =>
+  page.addInitScript(`
+    window.focusLog = []
+    Object.defineProperty(navigator, 'wakeLock', {
+      value: {
+        request: async () => {
+          window.focusLog.push('lock')
+          return { release: async () => window.focusLog.push('release') }
+        },
+      },
+    })
+    Element.prototype.requestFullscreen = async function () { window.focusLog.push('fullscreen') }
+  `)
+const focusLog = (page: Page) => page.evaluate('window.focusLog') as Promise<string[]>
+
+test('focus keeps the screen on and fills it while a book is open, and is remembered', async ({ page }) => {
+  await watchFocus(page)
+  await page.goto('./')
+  await upload(page)
+  expect(await focusLog(page)).toEqual([])
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radiogroup', { name: 'Focus' }).getByRole('radio', { name: 'On' }).click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock'])
+  await expect(page.getByText('The screen stays on and the book fills it')).toBeVisible()
+  // Only iPhone and iPad can run Shortcuts.
+  await expect(page.getByRole('radiogroup', { name: 'Do Not Disturb' })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+
+  // Back in the library, the screen may sleep again.
+  await page.locator('.nav-button').click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock', 'release'])
+  // Still on for the next book.
+  await page.locator('.shelf-title', { hasText: 'story' }).click()
+  await expect.poll(() => focusLog(page)).toEqual(['fullscreen', 'lock', 'release', 'fullscreen', 'lock'])
+})
+
+test('on iPhone, focus runs the Do Not Disturb shortcuts as it starts and ends', async ({ page: first, context }) => {
+  await context.addInitScript(`Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' })`)
+  // The Shortcuts app can't open here, but the browser tells what a page asked to open.
+  const opened: string[] = []
+  const settings = async (page: Page) => {
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('Page.enable')
+    cdp.on('Page.frameRequestedNavigation', ({ url }) => url.startsWith('shortcuts:') && opened.push(decodeURIComponent(url)))
+    await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+    return { focus: page.getByRole('radiogroup', { name: 'Focus' }), dnd: page.getByRole('radiogroup', { name: 'Do Not Disturb' }) }
+  }
+  await first.goto('./')
+  await upload(first)
+  let { focus, dnd } = await settings(first)
+  await focus.getByRole('radio', { name: 'On' }).click()
+  await expect(first.getByText(/make once in the Shortcuts app: “Reading Focus On” and “Reading Focus Off”/)).toBeVisible()
+  // Nothing runs until asked for.
+  expect(opened).toEqual([])
+  await dnd.getByRole('radio', { name: 'On' }).click()
+  await expect.poll(() => opened).toEqual(['shortcuts://run-shortcut?name=Reading Focus On'])
+
+  // Later, in a new tab: a headless browser stops taking taps in one that tried to open an app it doesn't have.
+  const page = await context.newPage()
+  await page.goto('./')
+  await page.locator('.shelf-title', { hasText: 'story' }).click()
+  ;({ focus, dnd } = await settings(page))
+  await focus.getByRole('radio', { name: 'Off' }).click()
+  await expect.poll(() => opened).toEqual(['shortcuts://run-shortcut?name=Reading Focus On', 'shortcuts://run-shortcut?name=Reading Focus Off'])
+  await expect(dnd).toHaveCount(0)
+})
+
+test('Download to device saves the book as an EPUB that reads back the same', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download EPUB' }).click()])
+  expect(download.suggestedFilename()).toBe('story.epub')
+  const epub = await download.path()
+
+  // Added back, it's the same book: same chapters, same text.
+  await page.keyboard.press('Escape')
+  await page.locator('.nav-button').click()
+  const buffer = await readFile(epub!)
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'story.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  await expect(page.locator('.chapter-select option')).toHaveText(['Chapter 1', 'Chapter 2'])
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.page > .page-text')).toContainText('The rabbit ran across the field. Alice followed it to a hole under the hedge.')
+})
+
+test('Download to device gives back an added EPUB as it came, author and all', async ({ page }) => {
+  const zip = new JSZip()
+  zip.file('mimetype', 'application/epub+zip')
+  zip.file(
+    'META-INF/container.xml',
+    '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+  )
+  zip.file(
+    'content.opf',
+    '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>The Pier</dc:title><dc:creator>Ann Author</dc:creator></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c1"/></spine></package>',
+  )
+  zip.file('c1.xhtml', '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><body><h1>One</h1><p>The pier ran out to sea.</p></body></html>')
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' })
+  await page.goto('./')
+  await page.locator('input[type=file]').first().setInputFiles({ name: 'ann-author_the-pier.epub', mimeType: 'application/epub+zip', buffer })
+  await expect(page.locator('.reader')).toBeVisible()
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  const more = page.getByRole('button', { name: 'More settings' })
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click()
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download EPUB' }).click()])
+  expect(download.suggestedFilename()).toBe('ann-author_the-pier.epub')
+  expect((await readFile((await download.path())!)).equals(buffer)).toBe(true)
+})
+
+test('selected text can be saved as a highlight, shown on the page and listed with bookmarks', async ({ page }) => {
+  await page.goto('./')
+  await upload(page)
+  await page.getByRole('button', { name: 'Reading settings', exact: true }).click()
+  await page.getByRole('radio', { name: 'Page', exact: true }).click()
+  await page.locator('.popover-backdrop').click({ position: { x: 5, y: 5 } })
+  await expect(page.locator('.popover')).toBeHidden()
+  await expect(page.getByRole('button', { name: 'Save highlight' })).toHaveCount(0)
+
+  // Select "rabbit ran across", from inside the first word to inside the last.
+  await page.evaluate(`(() => {
+    const word = (w) => [...document.querySelectorAll('.page > .page-text [data-i]')].find((s) => s.textContent === w).firstChild
+    const range = document.createRange()
+    range.setStart(word('rabbit'), 2)
+    range.setEnd(word('across'), 3)
+    getSelection().removeAllRanges()
+    getSelection().addRange(range)
+  })()`)
+  await page.getByRole('button', { name: 'Save highlight' }).click()
+  await expect(page.getByRole('status')).toHaveText('Saved to bookmarks')
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveText(['rabbit', 'ran', 'across'])
+
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  const item = page.locator('.bookmark-item')
+  await expect(item).toHaveCount(1)
+  await expect(item.locator('.search-snippet')).toHaveText('rabbit ran across')
+  await expect(item).toContainText('Highlight')
+  // It's kept with the book, apart from the sentence bookmark.
+  await page.reload()
+  await page.locator('.shelf-open').click()
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveCount(3)
+  await page.getByRole('button', { name: 'Bookmarks', exact: true }).click()
+  await page.getByRole('button', { name: 'Bookmark this spot' }).click()
+  await expect(item).toHaveCount(2)
+  await page.getByRole('button', { name: 'Remove highlight' }).click()
+  await expect(item).toHaveCount(1)
+  await expect(page.locator('.page > .page-text [data-i].is-highlighted')).toHaveCount(0)
+})

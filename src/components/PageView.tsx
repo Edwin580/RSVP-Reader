@@ -48,6 +48,8 @@ interface Props {
   line?: boolean
   /** Free reading: a tap turns the page, back on the left third and on everywhere else, like an e-reader. */
   turnOnTap?: boolean
+  /** Whether word i is in a saved highlight, shown underlined in the focus colour. */
+  highlighted?: (i: number) => boolean
 }
 
 export interface PageNav {
@@ -104,6 +106,7 @@ export function PageView({
   guide = false,
   line = false,
   turnOnTap = false,
+  highlighted = never,
 }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const text = useRef<HTMLDivElement>(null)
@@ -355,8 +358,8 @@ export function PageView({
   // Set the page lower only when it opens with a title, like a chapter's first page.
   const opensChapter = headingStarts.has(page.start)
   const content = useMemo(
-    () => pageText(words, ends, headingStarts, page.start, last, pictures),
-    [ends, headingStarts, page.start, last, words, pictures],
+    () => pageText(words, ends, headingStarts, page.start, last, pictures, highlighted),
+    [ends, headingStarts, page.start, last, words, pictures, highlighted],
   )
 
   // Move the highlight and the line along with the reading. Both cover the
@@ -570,6 +573,8 @@ export function PageView({
 function chapterLimit(chapterStarts: number[], start: number, length: number): number {
   return Math.min(nextChapterStart(chapterStarts, start, length) - 1, length - 1)
 }
+
+const never = () => false
 
 function clearGhost(g: HTMLElement) {
   g.replaceChildren()
